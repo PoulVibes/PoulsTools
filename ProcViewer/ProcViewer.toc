@@ -1,0 +1,7 @@
+## Interface: 120001
+## Title: ProcViewer
+## Notes: Centered HUD proc icons with spell activation glow.
+## Author: Poul
+## Version: 0.1.7
+
+ProcViewer.lua

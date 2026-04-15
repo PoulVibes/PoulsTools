@@ -1,0 +1,7 @@
+## Interface: 120001
+## Title: WDPWatcher
+## Notes: Alerts when Whirling Dragon Punch becomes usable
+## Author: You
+## Version: 1.0
+
+WDPWatcher.lua

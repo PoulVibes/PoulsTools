@@ -1,0 +1,7 @@
+## Interface: 120001
+## Title: MacroHighlight
+## Notes: Draws a light blue outline around action buttons that contain macros.
+## Author: Poul
+## Version: 0.0.1
+
+MacroHighlight.lua

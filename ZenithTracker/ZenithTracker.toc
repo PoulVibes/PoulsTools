@@ -1,0 +1,7 @@
+## Interface: 120001
+## Title: Zenith Tracker
+## Notes: Tracks Zenith with 15/20s duration and audio alert.
+## Author: Poul
+## Version: 1.0
+
+ZenithTracker.lua

@@ -1,0 +1,9 @@
+## Interface: 120001
+## Title: TrinketTracker
+## Notes: Tracks equipment slot cooldowns with icon, cooldown sweep, and ready glow.
+## Version: 2.0.0
+## Author: You
+## SavedVariablesPerCharacter: TrinketTrackerDB
+## Dependencies: shmIcons
+
+TrinketTracker.lua

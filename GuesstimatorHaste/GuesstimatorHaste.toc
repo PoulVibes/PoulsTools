@@ -1,0 +1,8 @@
+## Interface: 120001
+## Title: GuesstimatorHaste
+## Notes: Compares GetHaste() vs whitelisted GCD Dummy (61304).
+## Author: YourName
+## Version: 1.0.4
+## SavedVariables: GuesstimatorHasteDB
+
+GuesstimatorHaste.lua
