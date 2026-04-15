@@ -2,6 +2,8 @@
 ## Title: ProcViewer
 ## Notes: Centered HUD proc icons with spell activation glow.
 ## Author: Poul
-## Version: 0.1.7
+## Version: 0.1.8
+## Dependencies: shmIcons
+## SavedVariablesPerCharacter: ProcViewerDB
 
 ProcViewer.lua
