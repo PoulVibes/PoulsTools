@@ -201,6 +201,7 @@ local function ApplyLockState(icon)
         frame:RegisterForDrag("LeftButton", "RightButton")
         frame:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8" })
         frame:SetBackdropColor(0, 0, 0, 0.5)
+		frame:Show()
         icon.resizeHandle:Show()
     end
 end
