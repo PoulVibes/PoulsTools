@@ -1,0 +1,9 @@
+## Interface: 120001
+## Title: CooldownTracker
+## Notes: Tracks any ability cooldown by name with icon, cooldown sweep, and ready glow.
+## Version: 2.0.0
+## Author: You
+## SavedVariablesPerCharacter: CooldownTrackerDB
+## Dependencies: shmIcons
+
+CooldownTracker.lua

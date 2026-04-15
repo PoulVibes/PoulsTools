@@ -250,6 +250,8 @@ local function BuildIconFrame(globalID, db)
     stackLabel:SetTextColor(STACK_TEXT_R, STACK_TEXT_G, STACK_TEXT_B, 1)
     stackLabel:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
     stackLabel:SetJustifyH("RIGHT")
+    -- Draw above the cooldown sweep (cd is at frameLevel+2, cd2 at +3)
+    stackLabel:SetDrawLayer("OVERLAY", 7)
     stackLabel:Hide()
 
     local glow = BuildGlow(frame, db.size)

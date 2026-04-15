@@ -1,0 +1,9 @@
+## Interface: 120001
+## Title: ItemTracker
+## Notes: Tracks inventory items by name — shows cooldown, stack count, and ready glow.
+## Version: 1.0.0
+## Author: You
+## SavedVariablesPerCharacter: ItemTrackerDB
+## Dependencies: shmIcons
+
+ItemTracker.lua
