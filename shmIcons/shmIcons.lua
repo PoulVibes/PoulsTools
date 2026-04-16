@@ -345,8 +345,9 @@ local function BuildIconFrame(globalID, db)
     --   - vertical snaps:   top/bottom edges flush, X axis free
     -- Then we combine the nearest X-axis snap and nearest Y-axis snap
     -- to allow corner multi-snapping when two icons are nearby on both axes.
+    -- When shift is held and sizes match, prioritize diagonal corner-to-corner snaps.
     -- Returns a candidate table or nil.
-    local function FindSnapCandidate(myCX, myCY, mySize, isCtrl)
+    local function FindSnapCandidate(myCX, myCY, mySize, isShift, isCtrl)
         local uiCX, uiCY = UIParent:GetCenter()
         local myHalf = mySize * 0.5
 
@@ -384,6 +385,41 @@ local function BuildIconFrame(globalID, db)
                 end
             end
             return best
+        end
+
+        -- Check for diagonal corner-to-corner snaps when shift is held and sizes match
+        if isShift then
+            local bestDiagonalDist = math.huge
+            local bestDiagonal = nil
+            for otherID, other in pairs(icons) do
+                if otherID ~= globalID and other.frame:IsShown() and other.frame:GetHeight() == mySize then
+                    local oCX, oCY = other.frame:GetCenter()
+                    local oHalf = mySize * 0.5
+                    -- 4 diagonal positions relative to the target icon
+                    local diagonals = {
+                        { cx = oCX + 2*oHalf, cy = oCY + 2*oHalf }, -- top-right
+                        { cx = oCX - 2*oHalf, cy = oCY + 2*oHalf }, -- top-left
+                        { cx = oCX + 2*oHalf, cy = oCY - 2*oHalf }, -- bottom-right
+                        { cx = oCX - 2*oHalf, cy = oCY - 2*oHalf }, -- bottom-left
+                    }
+                    for _, d in ipairs(diagonals) do
+                        local dist = math.sqrt((myCX - d.cx)^2 + (myCY - d.cy)^2)
+                        if dist < SNAP_THRESHOLD and dist < bestDiagonalDist then
+                            bestDiagonalDist = dist
+                            bestDiagonal = {
+                                cx         = d.cx - uiCX,
+                                cy         = d.cy - uiCY,
+                                targetID   = otherID,
+                                snapIDs    = {otherID},
+                                targetSize = mySize,
+                            }
+                        end
+                    end
+                end
+            end
+            if bestDiagonal then
+                return bestDiagonal
+            end
         end
 
         -- Normal / shift mode: independent axis snapping.
@@ -482,7 +518,7 @@ local function BuildIconFrame(globalID, db)
                 local isShift    = IsShiftKeyDown()
                 local isCtrl     = IsControlKeyDown()
 
-                local candidate = FindSnapCandidate(myCX, myCY, mySize, isCtrl)
+                local candidate = FindSnapCandidate(myCX, myCY, mySize, isShift, isCtrl)
 
                 if candidate then
                     if dragState.currentSnapID ~= candidate.targetID then
