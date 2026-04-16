@@ -126,16 +126,33 @@ local function UpdateItem(key)
 
     -- Stack count — plain integer, safe to compare in combat
     -- false, false = bags only (no bank, no equipped)
-    local count = GetItemCount(itemID, false, false) or 0
+
+    
+    local count = GetItemCount(itemID, false, true) or 0
+    
     shmIcons:SetStacks(ADDON_NAME, key, count)
 
     -- Cooldown — only meaningful if we have at least one
     if count > 0 then
         local start, duration, enable = GetItemCooldown(itemID)
         local onCooldown = start and duration and duration > 1.5
-        shmIcons:SetCooldownRaw(ADDON_NAME, key, start, duration)
-        shmIcons:SetGlow(ADDON_NAME, key, not onCooldown)
-        shmIcons:SetUsable(ADDON_NAME, key, true)
+        
+        if itemID == 5512 then --Healthstone
+           local durationObject = C_Spell.GetSpellCooldownDuration(5512)
+           if(durationObject) then
+            shmIcons:SetCooldown(ADDON_NAME, key, durationObject)
+           end
+           if(enable) then
+            shmIcons:SetUsable(ADDON_NAME, key, true)
+            else
+            shmIcons:SetUsable(ADDON_NAME, key, false)            
+           end
+        else
+            local onCooldown = start and duration and duration > 1.5
+            shmIcons:SetCooldownRaw(ADDON_NAME, key, start, duration)
+            shmIcons:SetGlow(ADDON_NAME, key, not onCooldown)
+            shmIcons:SetUsable(ADDON_NAME, key, true)
+        end
     else
         -- Item not in inventory: clear cooldown, no glow, gray out
         shmIcons:SetCooldownRaw(ADDON_NAME, key, nil, nil)
