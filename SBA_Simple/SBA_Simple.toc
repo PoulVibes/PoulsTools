@@ -1,0 +1,11 @@
+## Interface: 120001
+## Title: SBA Simple
+## Notes: Displays the next suggested cast from C_AssistedCombat using shmIcons.
+## Author: You
+## Version: 1.0.0
+
+## Dependencies: shmIcons
+
+## SavedVariablesPerCharacter: SBA_SimpleDB
+
+SBA_Simple.lua
