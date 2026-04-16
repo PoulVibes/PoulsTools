@@ -137,54 +137,171 @@ end)
 
 -- ── Dev Override Frame ────────────────────────────────────────────────────
 local function CreateOverrideFrame()
-    local f = CreateFrame("Frame", "SBAS_OverrideFrame", UIParent, "BackdropTemplate")
+    local f = CreateFrame("Frame", "SBAS_OverrideFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate")
     f:SetSize(520, 420)
     f:SetPoint("CENTER")
-    f:SetMovable(true)
     f:EnableMouse(true)
-    f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", f.StartMoving)
-    f:SetScript("OnDragStop",  f.StopMovingOrSizing)
+    f:SetMovable(true)
+    f:SetResizable(true)
+    f:SetClampedToScreen(true)
+    f:SetToplevel(true)
     f:SetFrameStrata("DIALOG")
+    f:SetHitRectInsets(-8, -8, -8, -8)
     f:Hide()
 
     f:SetBackdrop({
-        bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile     = true, tileSize = 32, edgeSize = 32,
-        insets   = { left=11, right=12, top=12, bottom=11 },
+        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 16,
+        insets = { left = 4, right = 4, top = 4, bottom = 4 },
     })
+    f:SetBackdropBorderColor(0.5, 0.5, 0.5)
 
     local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOP", f, "TOP", 0, -16)
     title:SetText("SBA Simple — Override Logic")
 
     local closeBtn = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-    closeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -4, -4)
+    closeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -6, -6)
     closeBtn:SetScript("OnClick", function() f:Hide() end)
+
+    -- Save / restore position
+    function f:SavePosition()
+        local db = GetDB()
+        local left = self:GetLeft()
+        local bottom = self:GetBottom()
+        if left and bottom then
+            db.x = left
+            db.y = bottom
+        end
+        db.width = self:GetWidth()
+        db.height = self:GetHeight()
+    end
+
+    -- dragging to move
+    f:SetScript("OnMouseDown", function(self, button)
+        self:StartMoving()
+        self.isMoving = true
+    end)
+    f:SetScript("OnMouseUp", function(self, button)
+        if self.isMoving then
+            self:StopMovingOrSizing()
+            self:SavePosition()
+            self.isMoving = false
+        end
+    end)
+
+    -- resize grip
+    local resizeGrip = CreateFrame("Button", nil, f)
+    resizeGrip:SetSize(16, 16)
+    resizeGrip:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -4, 4)
+    resizeGrip:SetHitRectInsets(-2, -8, -2, -8)
+    resizeGrip:SetFrameStrata("HIGH")
+    resizeGrip:SetScript("OnMouseDown", function(self)
+        self:GetParent():StartSizing("BOTTOMRIGHT")
+        self:GetParent().isSizing = true
+    end)
+    resizeGrip:SetScript("OnMouseUp", function(self)
+        local p = self:GetParent()
+        if p.isSizing then
+            p:StopMovingOrSizing()
+            p:SavePosition()
+            p.isSizing = false
+        end
+    end)
+
+    -- make ESC close this panel via UISpecialFrames
+    table.insert(UISpecialFrames, "SBAS_OverrideFrame")
 
     local scroll = CreateFrame("ScrollFrame", "SBAS_OverrideScroll", f, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT",     f, "TOPLEFT",  16, -44)
     scroll:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -32, 48)
 
     local editBox = CreateFrame("EditBox", "SBAS_OverrideEditBox", scroll)
-    editBox:SetSize(scroll:GetWidth(), 1)
     editBox:SetMultiLine(true)
     editBox:SetAutoFocus(false)
-    editBox:SetFontObject("ChatFontNormal")
+    editBox:SetFontObject("GameFontHighlight")
     editBox:SetMaxLetters(0)
     editBox:SetTextInsets(6, 6, 4, 4)
+    editBox:EnableMouse(true)
+    editBox:SetCountInvisibleLetters(false)
+    editBox:SetIgnoreParentAlpha(true)
+    editBox:SetHyperlinksEnabled(true)
     editBox:SetScript("OnEscapePressed", function() editBox:ClearFocus() end)
     editBox:SetScript("OnTextChanged", function(self)
         local needed = self:GetNumLines() * 14 + 16
         self:SetHeight(math.max(needed, scroll:GetHeight()))
     end)
 
+    -- Make the editbox fill the scroll area so it receives mouse/cursor events
+    editBox:SetAllPoints()
+    -- Keep the editbox width in sync when the scroll frame is resized
+    scroll:SetScript("OnSizeChanged", function(_, w, h) editBox:SetWidth(w) end)
+    -- Clicking the scroll area focuses the editbox and places the caret at end
+    scroll:SetScript("OnMouseDown", function() editBox:SetFocus() end)
+    scroll:SetScript("OnMouseUp", function()
+        editBox:SetFocus()
+        editBox:SetCursorPosition(editBox:GetNumLetters())
+    end)
+
+    -- Keep the caret visible when it moves by adjusting vertical scroll
+    scroll:HookScript("OnVerticalScroll", function(self, offset)
+        local editH = editBox:GetHeight()
+        editBox:SetHitRectInsets(0, 0, offset, editH - offset - self:GetHeight())
+    end)
+
+    scroll:HookScript("OnScrollRangeChanged", function(self, xrange, yrange)
+        if yrange == 0 then
+            editBox:SetHitRectInsets(0, 0, 0, 0)
+        else
+            local offset = self:GetVerticalScroll()
+            local editH = editBox:GetHeight()
+            editBox:SetHitRectInsets(0, 0, offset, editH - offset - self:GetHeight())
+        end
+    end)
+
+    -- Support dragging spells/items into the editbox (inserts name at caret)
+    local function OnReceiveDrag()
+        local ctype, id, info, extra = GetCursorInfo()
+        if ctype == "spell" then
+            if C_Spell and C_Spell.GetSpellName then
+                info = C_Spell.GetSpellName(extra)
+            else
+                info = GetSpellInfo(id, info)
+            end
+        elseif ctype ~= "item" then
+            return
+        end
+        ClearCursor()
+        if not editBox:HasFocus() then
+            editBox:SetFocus()
+            editBox:SetCursorPosition(editBox:GetNumLetters())
+        end
+        editBox:Insert(info)
+    end
+
+    editBox:SetScript("OnReceiveDrag", OnReceiveDrag)
+    scroll:SetScript("OnReceiveDrag", OnReceiveDrag)
+
+    editBox:SetScript("OnEditFocusLost", function(self) self:HighlightText(0, 0) end)
+
     scroll:SetScrollChild(editBox)
 
-    -- Populate editbox with any previously saved code on show, then focus it
+    -- Populate editbox with any previously saved code on show, restore position/size, then focus it
     f:SetScript("OnShow", function()
         local db = GetDB()
+        -- restore saved position/size if present
+        if db.x and db.y then
+            f:ClearAllPoints()
+            f:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", db.x, db.y)
+        elseif db.point then
+            f:ClearAllPoints()
+            f:SetPoint(db.point)
+        end
+        if db.width and db.height then
+            f:SetSize(db.width, db.height)
+        end
+
         editBox:SetText(db.overrideCode or "")
         editBox:SetFocus()
     end)
@@ -210,8 +327,17 @@ local function CreateOverrideFrame()
         cursorLabel:SetText("Ln " .. line .. ", Col " .. col)
     end
 
-    editBox:HookScript("OnCursorChanged", function() UpdateCursorPos() end)
-    editBox:HookScript("OnTextChanged",   function() UpdateCursorPos() end)
+    editBox:SetScript("OnCursorChanged", function(self, x, y, w, h)
+        self.cursorOffset = y
+        self.cursorHeight = h
+        self.handleCursorChange = true
+        self:SetScript("OnUpdate", function(frame, elapsed)
+            frame:SetScript("OnUpdate", nil)
+            ScrollingEdit_OnUpdate(frame, elapsed, scroll)
+            UpdateCursorPos()
+        end)
+    end)
+    editBox:SetScript("OnTextChanged", function() UpdateCursorPos() end)
 
     local btn = CreateFrame("Button", nil, f, "GameMenuButtonTemplate")
     btn:SetSize(140, 28)
