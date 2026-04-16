@@ -308,7 +308,7 @@ local function BuildIconFrame(globalID, db)
     local function ApplySnap(candidate, isShift, isCtrl)
         if isCtrl then
             -- Corner-attach: 20% size, raised strata, corner-to-corner
-            local cornerSize = math.max(MIN_SIZE, math.floor(candidate.targetSize * 0.2))
+            local cornerSize = math.max(MIN_SIZE, math.floor(candidate.targetSize * 0.3))
             frame:SetSize(cornerSize, cornerSize)
             ScaleText(cd, stackLabel, cornerSize)
             ResizeGlow(icon.glow, frame, cornerSize)
@@ -361,7 +361,7 @@ local function BuildIconFrame(globalID, db)
                     local oH   = other.frame:GetHeight()
                     local oCX, oCY = other.frame:GetCenter()
                     local oHalf = oH * 0.5
-                    local cornerSize = math.max(MIN_SIZE, math.floor(oH * 0.2))
+                    local cornerSize = math.max(MIN_SIZE, math.floor(oH * 0.3))
                     local cHalf = cornerSize * 0.5
 
                     local corners = {
@@ -614,7 +614,7 @@ local function BuildIconFrame(globalID, db)
 
             local finalSize
             if isCtrl then
-                finalSize = math.max(MIN_SIZE, math.floor(snap.targetSize * 0.2))
+                finalSize = math.max(MIN_SIZE, math.floor(snap.targetSize * 0.3))
             elseif isShift then
                 finalSize = snap.targetSize
             else
