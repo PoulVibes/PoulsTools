@@ -10,7 +10,7 @@ local SCK_ID             = 101546  -- Spinning Crane Kick
 
 -- Talent Abilities
 local WDP_ID             = 152175  -- Whirling Dragon Punch
-local SW_ID   			 = 1217413 -- Surgind Winds
+local SW_ID                = 1217413 -- Surgind Winds
 local RWK_ID             = 1250566 -- Rushing Wind Kick
 local SOTW_ID            = 392983  -- Strike of the Windlord
 
@@ -28,9 +28,19 @@ if C_Spell.IsSpellUsable(TOD_ID) and not C_Spell.GetSpellCooldown(TOD_ID) then r
 --2.) WDP
 if (IsPlayerSpell(WDP_ID) and not C_Spell.GetSpellCooldown(WDP_ID).isActive and C_Spell.IsSpellUsable(WDP_ID)) or spellID == WDP_ID then return WDP_ID end
 
+--2.5) WDP
+if C_Spell.GetSpellCooldown(WDP_ID).isEnabled and C_Spell.GetSpellCooldown(FOF_ID).isActive and  C_Spell.GetSpellCooldown(RSK_ID).isActive and
+C_Spell.IsSpellUsable(WDP_ID) and not
+C_Spell.GetSpellCooldown(WDP_ID).isActive
+ then
+spellID = WDP_ID
+print("WDP!!!!")
+return WDP_ID
+end
+
 --3.) TP to not cap energy
 if (not ZenithActiveTracker or (ZenithActiveTracker and not IsPlayerSpell(1249832))) and chi < 4 and not bok_proc_active and (spellID == TP_ID or currentEnergy > 85) and LastComboStrikeSpellID ~= TP_ID then 
-	return TP_ID end
+    return TP_ID end
 
 --4.) SOTW
 if (IsPlayerSpell(SOTW_ID) and not C_Spell.GetSpellCooldown(SOTW_ID).isActive and C_Spell.IsSpellUsable(SOTW_ID)) or spellID == SOTW_ID then return SOTW_ID end
@@ -53,7 +63,7 @@ if (not C_Spell.GetSpellCooldown(RSK_ID).isActive and C_Spell.IsSpellUsable(RSK_
 
 --9.) TP to use high ability
 if not (C_Spell.GetSpellCooldown(RSK_ID).isActive or (IsPlayerSpell(RWK_ID) and not C_Spell.GetSpellCooldown(RWK_ID).isActive) or not C_Spell.GetSpellCooldown(FOF_ID).isActive or (IsPlayerSpell(SOTW_ID) and not C_Spell.GetSpellCooldown(SOTW_ID).isActive)) and chi < 3 and LastComboStrikeSpellID ~= TP_ID then
-	return TP_ID
+    return TP_ID
 end
 
 --10.) BOK with Proc or Zenith

@@ -126,16 +126,6 @@ local function UpdateTracker(key)
         shmIcons:SetRange(ADDON_NAME, key, nil)
     end
     shmIcons:SetUsable(ADDON_NAME, key, C_Spell.IsSpellUsable(entry.spellID))
-
-    
-
-    if UnitExists("target") then
-        shmIcons:SetRange(ADDON_NAME, key, C_Spell.IsSpellInRange(entry.spellID, "target"))
-    else
-        shmIcons:SetRange(ADDON_NAME, key, nil)
-    end
-
-    shmIcons:SetUsable(ADDON_NAME, key, C_Spell.IsSpellUsable(entry.spellID))
 end
 
 local function UpdateAllTrackers()

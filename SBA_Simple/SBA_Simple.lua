@@ -126,26 +126,34 @@ ticker:SetScript("OnUpdate", function()
         local cdInfo         = C_Spell.GetSpellCooldown(spellID)
         local durationObject = C_Spell.GetSpellCooldownDuration(spellID)
         local chargeInfo     = C_Spell.GetSpellCharges(spellID)
+        local isChargeSpell  = chargeInfo and chargeInfo.maxCharges and chargeInfo.maxCharges > 1
+        local chargeDuration = C_Spell.GetSpellChargeDuration(spellID)
 
-        if chargeInfo and chargeInfo.maxCharges > 1 then
-            if durationObject and cdInfo and cdInfo.isActive then
-                shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, durationObject)
-                shmIcons:SetChargeCooldown(ADDON_NAME, ICON_KEY, nil)
+       if isChargeSpell then
+            if chargeDuration then
+                shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, chargeDuration)
+                shmIcons:SetGlow(ADDON_NAME, ICON_KEY, false)
             elseif durationObject then
-                shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, nil)
-                shmIcons:SetChargeCooldown(ADDON_NAME, ICON_KEY, durationObject)
+                shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, durationObject)
+                if cdInfo.isActive then
+                    shmIcons:SetGlow(ADDON_NAME, ICON_KEY, true)
+                else
+                    shmIcons:SetGlow(ADDON_NAME, ICON_KEY, false)
+                end
             else
                 shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, nil)
-                shmIcons:SetChargeCooldown(ADDON_NAME, ICON_KEY, nil)
+                shmIcons:SetGlow(ADDON_NAME, ICON_KEY, true)
             end
             shmIcons:SetStacks(ADDON_NAME, ICON_KEY, chargeInfo.currentCharges)
         else
+            shmIcons:SetChargeCooldown(ADDON_NAME, ICON_KEY, nil)
             if durationObject and cdInfo and cdInfo.isActive then
                 shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, durationObject)
+                shmIcons:SetGlow(ADDON_NAME, ICON_KEY, false)
             else
                 shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, nil)
+                shmIcons:SetGlow(ADDON_NAME, ICON_KEY, true)
             end
-            shmIcons:SetChargeCooldown(ADDON_NAME, ICON_KEY, nil)
             shmIcons:SetStacks(ADDON_NAME, ICON_KEY, 0)
         end
 
