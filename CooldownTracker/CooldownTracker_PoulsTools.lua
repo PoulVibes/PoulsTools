@@ -77,7 +77,24 @@ local function OnBuildUI(parent)
         local specID = 0
         if specIndex then specID = select(1, GetSpecializationInfo(specIndex)) end
 
-        local spells = (CooldownTrackerDB and CooldownTrackerDB.specs and CooldownTrackerDB.specs[specID] and CooldownTrackerDB.specs[specID].spells) or {}
+        -- Prefer the public API when available; it returns an array of entries.
+        local spells = nil
+        local trackedList = nil
+        if type(CooldownTracker_GetTrackedSpells) == "function" then
+            trackedList = CooldownTracker_GetTrackedSpells(specID)
+        end
+        if trackedList and #trackedList > 0 then
+            spells = {}
+            for _, entry in ipairs(trackedList) do
+                if entry and entry.key and entry.db then
+                    spells[entry.key] = entry.db
+                    spells[entry.key].spellName = spells[entry.key].spellName or entry.spellName
+                    spells[entry.key].spellID   = spells[entry.key].spellID   or entry.spellID
+                end
+            end
+        else
+            spells = (CooldownTrackerDB and CooldownTrackerDB.specs and CooldownTrackerDB.specs[specID] and CooldownTrackerDB.specs[specID].spells) or {}
+        end
 
         local count = 0
         local used = {}
@@ -103,6 +120,18 @@ local function OnBuildUI(parent)
                     row.name = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
                     row.name:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
                     row.name:SetTextColor(unpack(W.colors.text))
+
+                    -- per-row Remove button (right side)
+                    row.remove = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                    row.remove:SetSize(80, 20)
+                    -- align the remove column closer to the abilities (fixed column)
+                    row.remove:SetPoint("RIGHT", row, "RIGHT", -120, 0)
+                    row.remove:SetText("Remove")
+                    row.remove:SetScript("OnClick", function(self)
+                        local spell = row.spellName
+                        if not spell or spell:trim() == "" then return end
+                        if type(CooldownTracker_Remove) == "function" then CooldownTracker_Remove(spell) end
+                    end)
                 end
 
                 -- update values

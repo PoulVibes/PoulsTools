@@ -188,6 +188,8 @@ local function UnloadSpec()
         shmIcons:Unregister(ADDON_NAME, key)
     end
     tracked = {}
+    -- notify UI listeners that the tracked list changed (cleared)
+    NotifyChangeListeners()
 end
 
 -- Load all enabled spells for the given specID.
@@ -202,6 +204,8 @@ local function LoadSpec(specID)
     end
     shmIcons:RestoreSnapGroups()
     UpdateAllTrackers()
+    -- Notify listeners so UI (PoulsTools) can refresh when specialization changes
+    NotifyChangeListeners()
 end
 
 -- ============================================================
