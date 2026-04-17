@@ -138,7 +138,12 @@ end)
 -- ── Dev Override Frame ────────────────────────────────────────────────────
 local function CreateOverrideFrame()
     local f = CreateFrame("Frame", "SBAS_OverrideFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate")
-    f:SetSize(520, 420)
+    -- default size: 30% of screen width, 80% of screen height (unless saved)
+    local db = GetDB()
+    local uiw, uih = UIParent:GetWidth() or 1024, UIParent:GetHeight() or 768
+    local defaultW = math.max(320, math.floor(uiw * 0.30))
+    local defaultH = math.max(120, math.floor(uih * 0.80))
+    f:SetSize(db.width or defaultW, db.height or defaultH)
     f:SetPoint("CENTER")
     f:EnableMouse(true)
     f:SetMovable(true)
@@ -375,6 +380,15 @@ SlashCmdList["SBASIMPLE"] = function(msg)
     if cmd == "lock" then
         local locked = shmIcons:ToggleLock()
         print("shmIcons: All icons " .. (locked and "Locked." or "Unlocked."))
+    elseif cmd == "reset" then
+        local db = GetDB()
+        db.x = 0
+        db.y = 0
+        db.point = "CENTER"
+        db.size = 64
+        if shmIcons and shmIcons.Unregister then shmIcons:Unregister(ADDON_NAME, ICON_KEY) end
+        RegisterIcon()
+        print("|cff00ff99SBA_Simple:|r Icon position and size reset.")
     elseif cmd == "override" then
         if overrideFrame:IsShown() then
             overrideFrame:Hide()
