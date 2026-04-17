@@ -4,8 +4,8 @@
 ## Author: You
 ## Version: 1.0.0
 
-## Dependencies: shmIcons
+## Dependencies: shmIcons, PoulsTools
 
 ## SavedVariablesPerCharacter: SBA_SimpleDB
-
 SBA_Simple.lua
+SBA_Simple_PoulsTools.lua
