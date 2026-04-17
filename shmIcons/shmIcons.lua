@@ -194,13 +194,18 @@ local function BuildIconFrame(globalID, db)
     cd2:SetDrawBling(false)
     cd2:SetHideCountdownNumbers(true)  -- cd handles numbers; cd2 is visual only
 
-    local stackLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    -- Create a small overlay frame for the stack label and put it at a
+    -- frame level above the cooldown frames (use cd2's level + 1 so the
+    -- label is visible above the swipe and cooldown timer).
+    local labelFrame = CreateFrame("Frame", nil, frame)
+    labelFrame:SetAllPoints(frame)
+    labelFrame:SetFrameLevel(cd2:GetFrameLevel() + 1)
+
+    local stackLabel = labelFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     stackLabel:SetFont(FONT_PATH, math.max(FONT_MIN_PT, math.floor(db.size * FONT_RATIO)), FONT_FLAGS)
     stackLabel:SetTextColor(STACK_TEXT_R, STACK_TEXT_G, STACK_TEXT_B, 1)
     stackLabel:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
     stackLabel:SetJustifyH("RIGHT")
-    -- Draw above the cooldown sweep (cd is at frameLevel+2, cd2 at +3)
-    stackLabel:SetDrawLayer("OVERLAY", 7)
     stackLabel:Hide()
 
     local glow = BuildGlow(frame, db.size)
