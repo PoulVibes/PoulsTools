@@ -51,80 +51,26 @@ local CORNER_COORDS = {
 -- ============================================================
 
 local icons          = {}  -- icons[globalID] = icon object
-local snapNeighbours = {}  -- snapNeighbours[globalID] = { [otherGlobalID]=true }
+local snapNeighbours = {}  -- (unused) kept for API compatibility
 local isLocked       = true
 
 -- ============================================================
 -- Snap DB helpers
 -- ============================================================
 
--- Return the snap group storage table, creating it if needed.
+-- Snap groups have been removed. Keep API stubs for compatibility.
 local function GetSnapDB()
-    shmIconsDB = shmIconsDB or {}
-    shmIconsDB.snapGroups = shmIconsDB.snapGroups or {}
-    return shmIconsDB.snapGroups
+    return {}
 end
-
--- Persist the current in-memory snap graph to shmIconsDB.
-local function SaveSnapGroups()
-    local db = GetSnapDB()
-    -- Wipe and reserialize the whole graph.
-    for k in pairs(db) do db[k] = nil end
-    for id, neighbours in pairs(snapNeighbours) do
-        local list = {}
-        for nb in pairs(neighbours) do
-            table.insert(list, nb)
-        end
-        if #list > 0 then
-            db[id] = list
-        end
-    end
-end
+local function SaveSnapGroups() end
 
 -- ============================================================
 -- Snap helpers
 -- ============================================================
 
-local function LinkSnap(a, b)
-    snapNeighbours[a] = snapNeighbours[a] or {}
-    snapNeighbours[b] = snapNeighbours[b] or {}
-    snapNeighbours[a][b] = true
-    snapNeighbours[b][a] = true
-    SaveSnapGroups()
-end
-
-local function UnlinkSnap(id)
-    if snapNeighbours[id] then
-        for other in pairs(snapNeighbours[id]) do
-            if snapNeighbours[other] then
-                snapNeighbours[other][id] = nil
-            end
-        end
-        snapNeighbours[id] = nil
-        SaveSnapGroups()
-    end
-end
-
-local function GetSnapGroup(startID)
-    local group   = {}
-    local visited = {}
-    local queue   = { startID }
-    while #queue > 0 do
-        local id = table.remove(queue)
-        if not visited[id] then
-            visited[id] = true
-            table.insert(group, id)
-            if snapNeighbours[id] then
-                for nb in pairs(snapNeighbours[id]) do
-                    if not visited[nb] then
-                        table.insert(queue, nb)
-                    end
-                end
-            end
-        end
-    end
-    return group
-end
+local function LinkSnap(a, b) end
+local function UnlinkSnap(id) end
+local function GetSnapGroup(startID) return { startID } end
 
 -- ============================================================
 -- Internal UI helpers
@@ -188,6 +134,7 @@ local function SaveIconPos(icon)
     icon.db.point = point
     icon.db.x     = x
     icon.db.y     = y
+    icon.db.strata = icon.frame:GetFrameStrata()
 end
 
 local function ApplyLockState(icon)
@@ -218,6 +165,7 @@ local function BuildIconFrame(globalID, db)
     frame:SetClampedToScreen(true)
     frame:SetSize(db.size, db.size)
     frame:SetPoint(db.point, UIParent, db.point, db.x, db.y)
+    frame:SetFrameStrata(db.strata or "MEDIUM")
 
     local iconTex = frame:CreateTexture(nil, "ARTWORK")
     iconTex:SetAllPoints(frame)
@@ -313,19 +261,22 @@ local function BuildIconFrame(globalID, db)
             ScaleText(cd, stackLabel, cornerSize)
             ResizeGlow(icon.glow, frame, cornerSize)
             frame:SetFrameStrata("HIGH")
+            -- Position the small corner-size icon at the candidate location
+            frame:ClearAllPoints()
+            frame:SetPoint("CENTER", UIParent, "CENTER", candidate.cx, candidate.cy)
         elseif isShift then
-            -- Resize to match target
+            -- Resize to match target only; do not move while shift is held
             local sz = candidate.targetSize
             frame:SetSize(sz, sz)
             ScaleText(cd, stackLabel, sz)
             ResizeGlow(icon.glow, frame, sz)
             frame:SetFrameStrata("MEDIUM")
         else
-            -- Default: no resize
+            -- Default: position to candidate (no live resize)
             frame:SetFrameStrata("MEDIUM")
+            frame:ClearAllPoints()
+            frame:SetPoint("CENTER", UIParent, "CENTER", candidate.cx, candidate.cy)
         end
-        frame:ClearAllPoints()
-        frame:SetPoint("CENTER", UIParent, "CENTER", candidate.cx, candidate.cy)
     end
 
     -- Revert any live snap changes made during dragging (size/strata)
@@ -339,26 +290,22 @@ local function BuildIconFrame(globalID, db)
         frame:SetFrameStrata("MEDIUM")
     end
 
-    -- Find snap candidates by checking each axis independently.
-    -- For each other icon we compute:
-    --   - horizontal snaps: left/right edges flush, Y axis free
-    --   - vertical snaps:   top/bottom edges flush, X axis free
-    -- Then we combine the nearest X-axis snap and nearest Y-axis snap
-    -- to allow corner multi-snapping when two icons are nearby on both axes.
-    -- When shift is held and sizes match, prioritize diagonal corner-to-corner snaps.
-    -- Returns a candidate table or nil.
+    -- Find snap candidates implementing new rules:
+    --  - Ctrl: corner-attach to nearest icon corner (small corner size)
+    --  - Shift: only resize to match the nearest icon's size (no movement)
+    --  - Default: snap evenly to nearest icon of the same size. Candidate
+    --             positions are at offsets of {-size,0,size} from the other
+    --             icon's center (so centers line up that produce edge-to-edge)
     local function FindSnapCandidate(myCX, myCY, mySize, isShift, isCtrl)
         local uiCX, uiCY = UIParent:GetCenter()
-        local myHalf = mySize * 0.5
 
         if isCtrl then
             -- Corner-attach mode: single nearest corner across all icons
             local bestDist = math.huge
-            local best     = nil
-
+            local best = nil
             for otherID, other in pairs(icons) do
                 if otherID ~= globalID and other.frame:IsShown() then
-                    local oH   = other.frame:GetHeight()
+                    local oH = other.frame:GetHeight()
                     local oCX, oCY = other.frame:GetCenter()
                     local oHalf = oH * 0.5
                     local cornerSize = math.max(MIN_SIZE, math.floor(oH * 0.3))
@@ -375,9 +322,9 @@ local function BuildIconFrame(globalID, db)
                         if dist < SNAP_THRESHOLD and dist < bestDist then
                             bestDist = dist
                             best = {
-                                cx         = c.cx - uiCX,
-                                cy         = c.cy - uiCY,
-                                targetID   = otherID,
+                                cx = c.cx - uiCX,
+                                cy = c.cy - uiCY,
+                                targetID = otherID,
                                 targetSize = oH,
                             }
                         end
@@ -387,120 +334,60 @@ local function BuildIconFrame(globalID, db)
             return best
         end
 
-        -- Check for diagonal corner-to-corner snaps when shift is held and sizes match
         if isShift then
-            local bestDiagonalDist = math.huge
-            local bestDiagonal = nil
+            -- Shift: find nearest icon by center and only match its size.
+            local bestDist = math.huge
+            local best = nil
             for otherID, other in pairs(icons) do
-                if otherID ~= globalID and other.frame:IsShown() and other.frame:GetHeight() == mySize then
+                if otherID ~= globalID and other.frame:IsShown() then
                     local oCX, oCY = other.frame:GetCenter()
-                    local oHalf = mySize * 0.5
-                    -- 4 diagonal positions relative to the target icon
-                    local diagonals = {
-                        { cx = oCX + 2*oHalf, cy = oCY + 2*oHalf }, -- top-right
-                        { cx = oCX - 2*oHalf, cy = oCY + 2*oHalf }, -- top-left
-                        { cx = oCX + 2*oHalf, cy = oCY - 2*oHalf }, -- bottom-right
-                        { cx = oCX - 2*oHalf, cy = oCY - 2*oHalf }, -- bottom-left
-                    }
-                    for _, d in ipairs(diagonals) do
-                        local dist = math.sqrt((myCX - d.cx)^2 + (myCY - d.cy)^2)
-                        if dist < SNAP_THRESHOLD and dist < bestDiagonalDist then
-                            bestDiagonalDist = dist
-                            bestDiagonal = {
-                                cx         = d.cx - uiCX,
-                                cy         = d.cy - uiCY,
-                                targetID   = otherID,
-                                snapIDs    = {otherID},
+                    local dist = math.sqrt((myCX - oCX)^2 + (myCY - oCY)^2)
+                    if dist < bestDist then
+                        bestDist = dist
+                        best = {
+                            targetID = otherID,
+                            targetSize = other.frame:GetHeight(),
+                            cx = myCX - uiCX,
+                            cy = myCY - uiCY,
+                        }
+                    end
+                end
+            end
+            if best and bestDist < SNAP_THRESHOLD then
+                return best
+            end
+            return nil
+        end
+
+        -- Default: snap to positions relative to nearest icon of same size.
+        local bestDist = math.huge
+        local best = nil
+        for otherID, other in pairs(icons) do
+            if otherID ~= globalID and other.frame:IsShown() and other.frame:GetHeight() == mySize then
+                local oCX, oCY = other.frame:GetCenter()
+                for dx = -1, 1 do
+                    for dy = -1, 1 do
+                        local posX = oCX + dx * mySize
+                        local posY = oCY + dy * mySize
+                        local dist = math.sqrt((myCX - posX)^2 + (myCY - posY)^2)
+                        if dist < SNAP_THRESHOLD and dist < bestDist then
+                            bestDist = dist
+                            best = {
+                                cx = posX - uiCX,
+                                cy = posY - uiCY,
+                                targetID = otherID,
                                 targetSize = mySize,
                             }
                         end
                     end
                 end
             end
-            if bestDiagonal then
-                return bestDiagonal
-            end
         end
-
-        -- Normal / shift mode: independent axis snapping.
-        -- For each icon find the closest flush edge on X and Y separately.
-        local bestX, bestXDist, bestXTargetID = nil, math.huge, nil
-        local bestY, bestYDist, bestYTargetID = nil, math.huge, nil
-
-        for otherID, other in pairs(icons) do
-            if otherID ~= globalID and other.frame:IsShown() then
-                local oH   = other.frame:GetHeight()
-                local oCX, oCY = other.frame:GetCenter()
-                local oHalf = oH * 0.5
-
-                -- X-axis snap candidates: right edge of other / left edge of other
-                -- The dragged icon's left edge meets other's right edge, and vice versa.
-                -- Y position: align the dragged icon's center to the other's center
-                -- only if they are already roughly vertically aligned; otherwise
-                -- allow the Y to be free (handled by Y snap below).
-                local xRight = oCX + oHalf + myHalf  -- dragged left edge meets other right edge
-                local xLeft  = oCX - oHalf - myHalf  -- dragged right edge meets other left edge
-
-                local dxRight = math.abs(myCX - xRight)
-                local dxLeft  = math.abs(myCX - xLeft)
-
-                if dxRight < SNAP_THRESHOLD and dxRight < bestXDist then
-                    bestXDist     = dxRight
-                    bestX         = xRight
-                    bestXTargetID = otherID
-                end
-                if dxLeft < SNAP_THRESHOLD and dxLeft < bestXDist then
-                    bestXDist     = dxLeft
-                    bestX         = xLeft
-                    bestXTargetID = otherID
-                end
-
-                -- Y-axis snap candidates: top edge / bottom edge
-                local yTop    = oCY + oHalf + myHalf
-                local yBottom = oCY - oHalf - myHalf
-
-                local dyTop    = math.abs(myCY - yTop)
-                local dyBottom = math.abs(myCY - yBottom)
-
-                if dyTop < SNAP_THRESHOLD and dyTop < bestYDist then
-                    bestYDist     = dyTop
-                    bestY         = yTop
-                    bestYTargetID = otherID
-                end
-                if dyBottom < SNAP_THRESHOLD and dyBottom < bestYDist then
-                    bestYDist     = dyBottom
-                    bestY         = yBottom
-                    bestYTargetID = otherID
-                end
-            end
-        end
-
-        -- No snap on either axis
-        if not bestX and not bestY then return nil end
-
-        -- Use snapped axis values, free axis stays at current position
-        local snapCX = bestX or myCX
-        local snapCY = bestY or myCY
-
-        -- Primary target is whichever axis snapped closer (or X if tied)
-        local primaryTargetID = bestX and bestXTargetID or bestYTargetID
-
-        return {
-            cx         = snapCX - uiCX,
-            cy         = snapCY - uiCY,
-            targetID   = primaryTargetID,
-            -- Pass all snapped IDs so we can LinkSnap to all of them
-            snapIDs    = {
-                bestXTargetID ~= nil and bestXTargetID or nil,
-                bestYTargetID ~= nil and bestYTargetID or nil,
-            },
-            targetSize = icons[primaryTargetID] and icons[primaryTargetID].frame:GetHeight() or mySize,
-        }
+        return best
     end
 
     frame:SetScript("OnDragStart", function(self, button)
-        if button == "LeftButton" then
-            UnlinkSnap(globalID)
+        if button == "LeftButton" or button == "RightButton" then
             -- Record starting state so we can revert live snaps on move-away
             dragState = {
                 originalSize    = frame:GetWidth(),
@@ -521,8 +408,10 @@ local function BuildIconFrame(globalID, db)
                 local candidate = FindSnapCandidate(myCX, myCY, mySize, isShift, isCtrl)
 
                 if candidate then
-                    if dragState.currentSnapID ~= candidate.targetID then
-                        -- New snap target — apply live
+                    if dragState.currentSnapID ~= candidate.targetID
+                       or dragState.pendingShift ~= isShift
+                       or dragState.pendingCtrl ~= isCtrl then
+                        -- New snap target or modifier change — apply live
                         dragState.currentSnapID = candidate.targetID
                         dragState.pendingSnap   = candidate
                         dragState.pendingShift  = isShift
@@ -541,42 +430,6 @@ local function BuildIconFrame(globalID, db)
                     end
                 end
             end)
-
-        elseif button == "RightButton" then
-            -- Group drag: move all snapped icons together
-            local group = GetSnapGroup(globalID)
-            local smX, smY = GetCursorPosition()
-            local scale = UIParent:GetEffectiveScale()
-
-            local groupStart = {}
-            for _, gID in ipairs(group) do
-                local ic = icons[gID]
-                if ic then
-                    local cx, cy = ic.frame:GetCenter()
-                    groupStart[gID] = { cx = cx, cy = cy }
-                end
-            end
-
-            local dragFrame = CreateFrame("Frame")
-            icon.groupDragFrame = dragFrame
-
-            dragFrame:SetScript("OnUpdate", function()
-                local curX, curY = GetCursorPosition()
-                local dx = (curX - smX) / scale
-                local dy = (curY - smY) / scale
-                local uiCX, uiCY = UIParent:GetCenter()
-
-                for _, gID in ipairs(group) do
-                    local ic = icons[gID]
-                    local gs = groupStart[gID]
-                    if ic and gs then
-                        ic.frame:ClearAllPoints()
-                        ic.frame:SetPoint("CENTER", UIParent, "CENTER",
-                            gs.cx + dx - uiCX,
-                            gs.cy + dy - uiCY)
-                    end
-                end
-            end)
         end
     end)
 
@@ -586,28 +439,10 @@ local function BuildIconFrame(globalID, db)
             icon.groupDragFrame:SetScript("OnUpdate", nil)
             icon.groupDragFrame = nil
         end
-
-        if button == "RightButton" then
-            -- Group drag: save positions of all group members
-            local group = GetSnapGroup(globalID)
-            for _, gID in ipairs(group) do
-                local ic = icons[gID]
-                if ic then
-                    SaveIconPos(ic)
-                    if ic.onMove then ic.onMove(ic.db) end
-                end
-            end
-            SaveIconPos(icon)
-            if icon.onMove then icon.onMove(icon.db) end
-            dragState = nil
-            return
-        end
-
-        -- Left-button drop: finalise whatever the live preview landed on
+        -- Treat both left and right as solo-drag; commit any pending snap
         self:StopMovingOrSizing()
 
         if dragState and dragState.pendingSnap then
-            -- A snap was active at release — commit it
             local snap    = dragState.pendingSnap
             local isShift = dragState.pendingShift
             local isCtrl  = dragState.pendingCtrl
@@ -618,7 +453,7 @@ local function BuildIconFrame(globalID, db)
             elseif isShift then
                 finalSize = snap.targetSize
             else
-                finalSize = frame:GetWidth()  -- unchanged
+                finalSize = frame:GetWidth()
             end
 
             frame:SetSize(finalSize, finalSize)
@@ -627,22 +462,21 @@ local function BuildIconFrame(globalID, db)
             db.size = finalSize
             if icon.onResize then icon.onResize(finalSize) end
 
-            frame:ClearAllPoints()
-            frame:SetPoint("CENTER", UIParent, "CENTER", snap.cx, snap.cy)
-            db.point = "CENTER"
-            db.x     = snap.cx
-            db.y     = snap.cy
-            if icon.onMove then icon.onMove(db) end
-
-            LinkSnap(globalID, snap.targetID)
-            -- Also link to any additional icons snapped on the other axis
-            if snap.snapIDs then
-                for _, sid in ipairs(snap.snapIDs) do
-                    if sid and sid ~= snap.targetID then
-                        LinkSnap(globalID, sid)
-                    end
-                end
+            if not isShift then
+                frame:ClearAllPoints()
+                frame:SetPoint("CENTER", UIParent, "CENTER", snap.cx, snap.cy)
+                db.point = "CENTER"
+                db.x     = snap.cx
+                db.y     = snap.cy
+                db.strata = frame:GetFrameStrata()
+                if icon.onMove then icon.onMove(db) end
+            else
+                -- Shift: only resized, keep position unchanged
+                SaveIconPos(icon)
+                if icon.onMove then icon.onMove(icon.db) end
             end
+
+            -- No group linking performed when snapping
         else
             -- No snap — just save the free position
             SaveIconPos(icon)
@@ -702,32 +536,13 @@ end
 -- Only links pairs where BOTH icons are currently registered — stale entries
 -- for icons that belong to a different spec are silently ignored.
 function shmIcons:RestoreSnapGroups()
-    -- Clear the in-memory graph first so we start clean.
-    for k in pairs(snapNeighbours) do snapNeighbours[k] = nil end
-
-    local db = GetSnapDB()
-    for id, neighbours in pairs(db) do
-        if icons[id] then
-            for _, nb in ipairs(neighbours) do
-                if icons[nb] then
-                    -- Use raw table writes to avoid triggering SaveSnapGroups
-                    -- on every pair during the restore loop.
-                    snapNeighbours[id] = snapNeighbours[id] or {}
-                    snapNeighbours[nb] = snapNeighbours[nb] or {}
-                    snapNeighbours[id][nb] = true
-                    snapNeighbours[nb][id] = true
-                end
-            end
-        end
-    end
+    -- Snap groups disabled; nothing to restore.
 end
 
 function shmIcons:Unregister(addonName, id)
     local globalID = addonName .. ":" .. tostring(id)
     local icon = icons[globalID]
     if not icon then return end
-
-    UnlinkSnap(globalID)
     icon.frame:Hide()
     icon.frame:SetScript("OnSizeChanged", nil)
     icon.frame:SetScript("OnDragStart",   nil)
@@ -850,14 +665,15 @@ function shmIcons:ResetIcon(addonName, id, defaultSize)
     local icon = icons[addonName .. ":" .. tostring(id)]
     if not icon then return end
     local sz = defaultSize or 64
-    UnlinkSnap(addonName .. ":" .. tostring(id))
     icon.db.x     = 0
     icon.db.y     = 0
     icon.db.point = "CENTER"
     icon.db.size  = sz
+    icon.db.strata = icon.db.strata or "MEDIUM"
     icon.frame:SetSize(sz, sz)
     icon.frame:ClearAllPoints()
     icon.frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    icon.frame:SetFrameStrata(icon.db.strata)
 end
 
 function shmIcons:ToggleLock()
@@ -882,7 +698,7 @@ SlashCmdList["SHMICONS"] = function(msg)
         local locked = shmIcons:ToggleLock()
         local state = locked
             and "|cFF00FF00Locked.|r"
-            or  "|cFFFFFF00Unlocked. Left-drag: move solo. Right-drag: move group.|r"
+            or  "|cFFFFFF00Unlocked. Left/Right-drag: move solo.|r"
         print("shmIcons: All icons " .. state)
     end
 end
