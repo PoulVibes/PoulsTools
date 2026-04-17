@@ -93,18 +93,28 @@ local function OnBuildUI(parent)
                 for si = 1, num do
                     local specID, specName = GetSpecializationInfoForClassID(si, classID)
                     if specID and specName then
-                        local lbl = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-                        lbl:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 12, y)
+                        -- Row container to keep label and button aligned
+                        local row = CreateFrame("Frame", nil, parent)
+                        row:SetSize(540, 22)
+                        row:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 12, y)
+
+                        local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+                        lbl:SetPoint("LEFT", row, "LEFT", 0, 0)
                         lbl:SetText(specName)
                         lbl:SetTextColor(unpack(PoulsTools.Widgets.colors.text))
 
-                        W:Button(parent, lbl, -2, "Edit", function()
+                        local btn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                        btn:SetSize(72, 20)
+                        btn:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+                        btn:SetText("Edit")
+                        btn:SetScript("OnClick", function()
                             if SBA_Simple_ShowOverrideForSpec then
                                 SBA_Simple_ShowOverrideForSpec(specID, cname .. " — " .. specName)
                             else
                                 print("|cFFFF4444SBA_Simple:|r Override editor not available.")
                             end
                         end)
+
                         y = y - 26
                     end
                 end
