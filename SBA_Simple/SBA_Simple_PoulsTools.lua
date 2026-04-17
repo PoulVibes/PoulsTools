@@ -10,6 +10,26 @@ local function OnBuildUI(parent)
     local anchor = parent
     local y = 0
 
+    -- Static class/spec mapping (authoritative names + IDs from
+    -- skills/WoW_Detailed_Reference_Skill.md). Using IDs avoids
+    -- localization/name mismatches and lets us detect specs that
+    -- aren't present on this client/build.
+    local staticClassSpecs = {
+        ["Warrior"] = { {name = "Arms", id = 71}, {name = "Fury", id = 72}, {name = "Protection", id = 73} },
+        ["Paladin"] = { {name = "Holy", id = 65}, {name = "Protection", id = 66}, {name = "Retribution", id = 70} },
+        ["Hunter"] = { {name = "Beast Mastery", id = 253}, {name = "Marksmanship", id = 254}, {name = "Survival", id = 255} },
+        ["Rogue"] = { {name = "Assassination", id = 259}, {name = "Outlaw", id = 260}, {name = "Subtlety", id = 261} },
+        ["Priest"] = { {name = "Discipline", id = 256}, {name = "Holy", id = 257}, {name = "Shadow", id = 258} },
+        ["Shaman"] = { {name = "Elemental", id = 262}, {name = "Enhancement", id = 263}, {name = "Restoration", id = 264} },
+        ["Mage"] = { {name = "Arcane", id = 62}, {name = "Fire", id = 63}, {name = "Frost", id = 64} },
+        ["Warlock"] = { {name = "Affliction", id = 265}, {name = "Demonology", id = 266}, {name = "Destruction", id = 267} },
+        ["Monk"] = { {name = "Brewmaster", id = 268}, {name = "Mistweaver", id = 270}, {name = "Windwalker", id = 269} },
+        ["Druid"] = { {name = "Balance", id = 102}, {name = "Feral", id = 103}, {name = "Guardian", id = 104}, {name = "Restoration", id = 105} },
+        ["Demon Hunter"] = { {name = "Havoc", id = 577}, {name = "Vengeance", id = 581}, {name = "Devourer", id = 1480} },
+        ["Death Knight"] = { {name = "Blood", id = 250}, {name = "Frost", id = 251}, {name = "Unholy", id = 252} },
+        ["Evoker"] = { {name = "Devastation", id = 1467}, {name = "Preservation", id = 1468}, {name = "Augmentation", id = 1473} },
+    }
+
     local header, dy = W:SectionHeader(parent, anchor, y, "SBA Simple")
     anchor = header
     y = dy
@@ -56,7 +76,7 @@ local function OnBuildUI(parent)
     )
     y = -6
 
-    W:Button(parent, anchor, y, "Edit Override Logic", function()
+    anchor = W:Button(parent, anchor, y, "Edit Override Logic", function()
         if SBA_Simple_ShowOverrideForSpec then
             SBA_Simple_ShowOverrideForSpec(nil)
         else
@@ -65,16 +85,23 @@ local function OnBuildUI(parent)
     end)
     y = -8
 
-    W:Button(parent, anchor, y, "Reset Position", function()
-        SBA_SimpleDB = SBA_SimpleDB or {}
-        SBA_SimpleDB.x = 0
-        SBA_SimpleDB.y = 0
-        SBA_SimpleDB.point = "CENTER"
-        print("|cFF00CCFFSBA_Simple|r position reset to defaults.")
+    anchor = W:Button(parent, anchor, y, "Reset Position", function()
+        if SlashCmdList and SlashCmdList["SBASIMPLE"] then
+            SlashCmdList["SBASIMPLE"]("reset")
+        else
+            -- Fallback: perform a minimal reset if slash handler isn't available
+            SBA_SimpleDB = SBA_SimpleDB or {}
+            SBA_SimpleDB.x = 0
+            SBA_SimpleDB.y = 0
+            SBA_SimpleDB.point = "CENTER"
+            SBA_SimpleDB.size = 64
+            print("|cff00ff99SBA_Simple:|r position reset to defaults (partial).")
+        end
     end)
+    y = -8
 
     y = -8
-    local hdr, dy2 = W:SectionHeader(parent, anchor, y, "Overrides by Class/Spec")
+    local hdr, dy2 = W:SectionHeader(parent, anchor, y, "Single-Button Suggestion Overrides (by Class / Spec)")
     local listAnchor = hdr
     y = dy2
 
@@ -90,32 +117,92 @@ local function OnBuildUI(parent)
                 y = y - 18
 
                 local num = GetNumSpecializationsForClassID(classID) or 0
+                -- Build mappings: specID -> name and name(lower) -> specID (fallback)
+                local apiSpecByID = {}
+                local apiSpecNameByID = {}
+                local apiSpecByNameLower = {}
                 for si = 1, num do
                     local specID, specName = GetSpecializationInfoForClassID(si, classID)
                     if specID and specName then
-                        -- Row container to keep label and button aligned
-                        local row = CreateFrame("Frame", nil, parent)
-                        row:SetSize(540, 22)
-                        row:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 12, y)
+                        apiSpecByID[specID] = true
+                        apiSpecNameByID[specID] = specName
+                        apiSpecByNameLower[specName:lower()] = specID
+                    end
+                end
 
-                        local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-                        lbl:SetPoint("LEFT", row, "LEFT", 0, 0)
-                        lbl:SetText(specName)
-                        lbl:SetTextColor(unpack(PoulsTools.Widgets.colors.text))
+                -- Prefer authoritative static list from the detailed reference when available
+                local expected = staticClassSpecs[cname]
+                if expected and type(expected) == "table" then
+                        for _, expectedSpec in ipairs(expected) do
+                            local expectedName = (type(expectedSpec) == "table" and expectedSpec.name) or expectedSpec
+                            local expectedID = (type(expectedSpec) == "table" and expectedSpec.id) or nil
+                            local matchingID = nil
 
-                        local btn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-                        btn:SetSize(72, 20)
-                        btn:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-                        btn:SetText("Edit")
-                        btn:SetScript("OnClick", function()
-                            if SBA_Simple_ShowOverrideForSpec then
-                                SBA_Simple_ShowOverrideForSpec(specID, cname .. " — " .. specName)
+                            -- Prefer authoritative ID matching (avoids localization issues)
+                            if expectedID and apiSpecByID[expectedID] then
+                                matchingID = expectedID
                             else
-                                print("|cFFFF4444SBA_Simple:|r Override editor not available.")
+                                -- Fallback to name (case-insensitive)
+                                if expectedName and apiSpecByNameLower[expectedName:lower()] then
+                                    matchingID = apiSpecByNameLower[expectedName:lower()]
+                                end
                             end
-                        end)
 
-                        y = y - 26
+                            -- Always enable button: choose target ID (prefer matching, else expected)
+                            local targetID = matchingID or expectedID
+                            local displayName = (targetID and apiSpecNameByID[targetID]) or expectedName
+
+                            local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+                            btn:SetSize(520, 22)
+                            btn:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 12, y)
+                            btn:SetText(displayName)
+                            local f = btn:GetFontString()
+                            if f then
+                                f:SetJustifyH("LEFT")
+                                f:ClearAllPoints()
+                                f:SetPoint("LEFT", btn, "LEFT", 8, 0)
+                                f:SetWidth(480)
+                            end
+
+                            -- Clicking will open the override editor for targetID (creates DB entry if missing)
+                            btn:SetScript("OnClick", function()
+                                SBA_Simple_ShowOverrideForSpec(targetID, cname .. " — " .. displayName)
+                            end)
+
+                            -- If the client API doesn't report this spec ID, show an explanatory tooltip
+                            if targetID and not apiSpecByID[targetID] then
+                                btn:SetScript("OnEnter", function(self)
+                                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                                    local tip = "Spec not reported by this client API; clicking will create per-spec data for id: " .. tostring(targetID)
+                                    GameTooltip:SetText(tip, 1,1,1)
+                                    GameTooltip:Show()
+                                end)
+                                btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                            end
+
+                            y = y - 26
+                        end
+                else
+                    -- Fallback: enumerate API-provided specs if no static list
+                    for si = 1, num do
+                        local specID, specName = GetSpecializationInfoForClassID(si, classID)
+                        if specName then
+                            local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+                            btn:SetSize(520, 22)
+                            btn:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 12, y)
+                            btn:SetText(specName)
+                            local f = btn:GetFontString()
+                            if f then
+                                f:SetJustifyH("LEFT")
+                                f:ClearAllPoints()
+                                f:SetPoint("LEFT", btn, "LEFT", 8, 0)
+                                f:SetWidth(480)
+                            end
+                            btn:SetScript("OnClick", function()
+                                SBA_Simple_ShowOverrideForSpec(specID, cname .. " — " .. specName)
+                            end)
+                            y = y - 26
+                        end
                     end
                 end
             end
