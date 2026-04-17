@@ -322,12 +322,19 @@ function Menu:CreateSubPanel(info)
         descText:SetTextColor(0.75, 0.85, 0.95, 1.0)
     end
 
-    -- Content area — let the addon draw its own UI
-    local contentFrame = CreateFrame("Frame", nil, frame)
-    contentFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -120)
-    contentFrame:SetSize(580, 460)
+    -- Content area — create a scrollframe so addon content is clipped
+    local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -120)
+    scroll:SetSize(580, 460)
+    scroll:SetClipsChildren(true)
 
-    -- Call the addon's UI builder
+    local contentFrame = CreateFrame("Frame", nil, scroll)
+    -- width slightly smaller than scroll to account for the scrollbar
+    contentFrame:SetSize(560, 1000)
+    contentFrame:SetPoint("TOPLEFT", scroll, "TOPLEFT", 0, 0)
+    scroll:SetScrollChild(contentFrame)
+
+    -- Call the addon's UI builder inside the scroll child
     if info.OnBuildUI then
         local ok, err = pcall(info.OnBuildUI, contentFrame)
         if not ok then

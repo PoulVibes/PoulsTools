@@ -9,6 +9,7 @@ SBA_SimpleDB = SBA_SimpleDB or {}
 -- ── Default DB schema (shmIcons will write x/y/size back on move/resize) ──
 local function GetDB()
     local db = SBA_SimpleDB
+    db.specs = db.specs or {}
     if db.x            == nil then db.x             = 0        end
     if db.y            == nil then db.y             = 0        end
     if db.point        == nil then db.point         = "CENTER" end
@@ -19,6 +20,27 @@ local function GetDB()
     return db
 end
 
+-- Return the current specialization ID (0 when not set)
+local function GetCurrentSpecID()
+    local specIndex = GetSpecialization()
+    if not specIndex then return 0 end
+    local specID = select(1, GetSpecializationInfo(specIndex))
+    return specID or 0
+end
+
+-- Return the per-spec sub-table for specials; creates and seeds from
+-- the global overrideCode when first created for backward compatibility.
+local function GetSpecDB(specID)
+    specID = specID or GetCurrentSpecID()
+    local db = GetDB()
+    db.specs = db.specs or {}
+    db.specs[specID] = db.specs[specID] or {}
+    if db.specs[specID].overrideCode == nil then
+        db.specs[specID].overrideCode = db.overrideCode or ""
+    end
+    return db.specs[specID]
+end
+
 -- ── Override logic ────────────────────────────────────────────────────────
 -- Compiles and runs saved override code. The code is expected to return a
 -- spellID (number) or nil. If it returns a valid number that overrides the
@@ -26,6 +48,10 @@ end
 -- avoid chat spam; compile errors are caught once at save time instead.
 
 local overrideChunk = nil  -- compiled function, rebuilt when code is saved
+
+-- target spec we're editing via the override editor (nil -> current spec)
+local overrideEditorTargetSpec = nil
+local overrideEditorTargetName = nil
 
 local function CompileOverride(code)
     if not code or code:match("^%s*$") then
@@ -127,10 +153,13 @@ events:SetScript("OnEvent", function(_, event)
     if event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_SPECIALIZATION_CHANGED" then
         shmIcons:Unregister(ADDON_NAME, ICON_KEY)
         RegisterIcon()
-        -- Re-compile any saved override code on load/spec change
-        local db = GetDB()
-        if db.overrideCode and not db.overrideCode:match("^%s*$") then
-            CompileOverride(db.overrideCode)
+        -- Re-compile any saved override code on load/spec change (per-spec)
+        local specDB = GetSpecDB()
+        local code = specDB.overrideCode or GetDB().overrideCode
+        if code and not code:match("^%s*$") then
+            CompileOverride(code)
+        else
+            CompileOverride(nil)
         end
     end
 end)
@@ -309,8 +338,15 @@ local function CreateOverrideFrame()
             f:SetSize(db.width, db.height)
         end
 
-        editBox:SetText(db.overrideCode or "")
+        local specID = overrideEditorTargetSpec or GetCurrentSpecID()
+        local specDB = GetSpecDB(specID)
+        editBox:SetText(specDB.overrideCode or "")
         editBox:SetFocus()
+        if overrideEditorTargetName then
+            title:SetText("SBA Simple — Override Logic: " .. overrideEditorTargetName)
+        else
+            title:SetText("SBA Simple — Override Logic")
+        end
     end)
 
     -- Cursor position display (Line X, Col Y)
@@ -352,28 +388,42 @@ local function CreateOverrideFrame()
     btn:SetText("Override Logic")
     btn:SetScript("OnClick", function()
         local code = editBox:GetText()
-        local db   = GetDB()
+        local specID = overrideEditorTargetSpec or GetCurrentSpecID()
+        local specDB = GetSpecDB(specID)
+        specDB.overrideCode = code
+        -- mirror to top-level for legacy compatibility
+        GetDB().overrideCode = code
 
-        -- Save code to DB regardless of whether it compiles
-        db.overrideCode = code
-
-        -- Attempt compile; report errors but keep the save
-        local ok, err = CompileOverride(code)
-        if not ok then
+        -- quick compile check; only make live if editing current spec
+        local chunk, err = loadstring(code)
+        if not chunk then
             print("|cffff4444SBAS compile error:|r " .. tostring(err))
         else
+            if specID == GetCurrentSpecID() then
+                overrideChunk = chunk
+            end
             if code:match("^%s*$") then
-                print("|cff00ff99SBA_Simple:|r Override cleared.")
+                print("|cff00ff99SBA_Simple:|r Override cleared for spec " .. tostring(specID))
             else
-                print("|cff00ff99SBA_Simple:|r Override logic saved and active.")
+                print("|cff00ff99SBA_Simple:|r Override logic saved for spec " .. tostring(specID))
             end
         end
+        overrideEditorTargetSpec = nil
+        overrideEditorTargetName = nil
+        f:Hide()
     end)
 
     return f
 end
 
 local overrideFrame = CreateOverrideFrame()
+
+-- Open the override editor targeting a specific specID (and optional display name)
+function SBA_Simple_ShowOverrideForSpec(specID, displayName)
+    overrideEditorTargetSpec = specID
+    overrideEditorTargetName = displayName
+    if overrideFrame then overrideFrame:Show() end
+end
 
 -- ── Slash command ─────────────────────────────────────────────────────────
 SLASH_SBASIMPLE1 = "/SBAS"
@@ -395,7 +445,8 @@ SlashCmdList["SBASIMPLE"] = function(msg)
         if overrideFrame:IsShown() then
             overrideFrame:Hide()
         else
-            overrideFrame:Show()
+            -- always open editor for the current specialization
+            SBA_Simple_ShowOverrideForSpec(nil)
         end
     else
         print("|cff00ccffSBA_Simple|r commands:")

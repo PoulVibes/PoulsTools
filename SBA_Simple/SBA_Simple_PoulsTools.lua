@@ -57,8 +57,8 @@ local function OnBuildUI(parent)
     y = -6
 
     W:Button(parent, anchor, y, "Edit Override Logic", function()
-        if overrideFrame then
-            overrideFrame:Show()
+        if SBA_Simple_ShowOverrideForSpec then
+            SBA_Simple_ShowOverrideForSpec(nil)
         else
             print("|cFFFF4444SBA_Simple:|r Override editor not available.")
         end
@@ -72,6 +72,51 @@ local function OnBuildUI(parent)
         SBA_SimpleDB.point = "CENTER"
         print("|cFF00CCFFSBA_Simple|r position reset to defaults.")
     end)
+
+    y = -8
+    local hdr, dy2 = W:SectionHeader(parent, anchor, y, "Overrides by Class/Spec")
+    local listAnchor = hdr
+    y = dy2
+
+    -- Try preferred API: GetNumSpecializationsForClassID / GetSpecializationInfoForClassID
+    if type(GetNumSpecializationsForClassID) == "function" and type(GetSpecializationInfoForClassID) == "function" and type(GetClassInfo) == "function" then
+        for classID = 1, 13 do
+            local cname = select(1, GetClassInfo(classID))
+            if cname then
+                local classLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+                classLabel:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 0, y)
+                classLabel:SetText(cname .. ":")
+                classLabel:SetTextColor(unpack(PoulsTools.Widgets.colors.text))
+                y = y - 18
+
+                local num = GetNumSpecializationsForClassID(classID) or 0
+                for si = 1, num do
+                    local specID, specName = GetSpecializationInfoForClassID(si, classID)
+                    if specID and specName then
+                        local lbl = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+                        lbl:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 12, y)
+                        lbl:SetText(specName)
+                        lbl:SetTextColor(unpack(PoulsTools.Widgets.colors.text))
+
+                        W:Button(parent, lbl, -2, "Edit", function()
+                            if SBA_Simple_ShowOverrideForSpec then
+                                SBA_Simple_ShowOverrideForSpec(specID, cname .. " — " .. specName)
+                            else
+                                print("|cFFFF4444SBA_Simple:|r Override editor not available.")
+                            end
+                        end)
+                        y = y - 26
+                    end
+                end
+            end
+        end
+    else
+        local lbl = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        lbl:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 0, y)
+        lbl:SetText("Class/spec enumeration not available on this client.")
+        lbl:SetTextColor(unpack(PoulsTools.Widgets.colors.text))
+        y = y - 18
+    end
 end
 
 PoulsTools.Menu:RegisterAddon({

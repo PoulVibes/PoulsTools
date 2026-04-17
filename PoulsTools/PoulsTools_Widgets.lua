@@ -29,7 +29,10 @@ W.colors = {
 -- ============================================================
 function W:SectionHeader(parent, anchor, yOffset, text)
     local label = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    label:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, yOffset - 12)
+    -- If the anchor is the parent (first element), anchor to the parent's TOPLEFT;
+    -- otherwise anchor below the previous element's bottom-left.
+    local anchorPoint = (anchor == parent) and "TOPLEFT" or "BOTTOMLEFT"
+    label:SetPoint("TOPLEFT", anchor, anchorPoint, 0, yOffset - 12)
     label:SetText(text:upper())
     label:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
     label:SetTextColor(0.4, 0.6, 0.8, 1.0)
