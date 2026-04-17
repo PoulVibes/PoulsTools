@@ -34,6 +34,10 @@ local function OnBuildUI(parent)
     anchor = header
     y = dy
 
+    -- track all spec buttons so we can enable/disable and refresh their colors
+    local specButtons = {}
+    local BUTTON_WIDTH = 520 / 4
+
     anchor = W:Checkbox(parent, anchor, y,
         "Enabled",
         "Enable the SBA Simple icon.",
@@ -61,14 +65,7 @@ local function OnBuildUI(parent)
     )
     y = -6
 
-    anchor = W:Button(parent, anchor, y, "Edit Override Logic", function()
-        if SBA_Simple_ShowOverrideForSpec then
-            SBA_Simple_ShowOverrideForSpec(nil)
-        else
-            print("|cFFFF4444SBA_Simple:|r Override editor not available.")
-        end
-    end)
-    y = -8
+    -- Edit Override Logic button removed; per-spec buttons provide editors now
 
     anchor = W:Button(parent, anchor, y, "Reset Position", function()
         if SlashCmdList and SlashCmdList["SBASIMPLE"] then
@@ -168,7 +165,7 @@ local function OnBuildUI(parent)
                             local displayName = (targetID and apiSpecNameByID[targetID]) or expectedName
 
                             local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-                            btn:SetSize(130, 22)
+                            btn:SetSize(BUTTON_WIDTH, 22)
                             btn:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 12, y)
                             btn:SetText(displayName)
                             local f = btn:GetFontString()
@@ -176,11 +173,25 @@ local function OnBuildUI(parent)
                                 f:SetJustifyH("LEFT")
                                 f:ClearAllPoints()
                                 f:SetPoint("LEFT", btn, "LEFT", 8, 0)
-                                f:SetWidth(480)
+                                f:SetWidth(BUTTON_WIDTH - 40)
                             end
+
+                            -- determine initial color (gray if no per-spec entry or empty override)
+                            local db = SBA_SimpleDB or {}
+                            local hasText = false
+                            if targetID and db.specs and db.specs[targetID] and db.specs[targetID].overrideCode and not db.specs[targetID].overrideCode:match("^%s*$") then
+                                hasText = true
+                            end
+                            if f then
+                                if hasText then f:SetTextColor(unpack(W.colors.warning)) else f:SetTextColor(unpack(W.colors.textMuted)) end
+                            end
+
+                            -- store for later enable/disable and refresh
+                            table.insert(specButtons, { btn = btn, id = targetID })
 
                             -- Clicking will open the override editor for targetID (creates DB entry if missing)
                             btn:SetScript("OnClick", function()
+                                for _, e in ipairs(specButtons) do e.btn:Disable() end
                                 SBA_Simple_ShowOverrideForSpec(targetID, cname .. " — " .. displayName)
                             end)
 
@@ -203,7 +214,7 @@ local function OnBuildUI(parent)
                         local specID, specName = GetSpecializationInfoForClassID(si, classID)
                         if specName then
                             local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-                            btn:SetSize(520, 22)
+                            btn:SetSize(BUTTON_WIDTH, 22)
                             btn:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 12, y)
                             btn:SetText(specName)
                             local f = btn:GetFontString()
@@ -211,9 +222,23 @@ local function OnBuildUI(parent)
                                 f:SetJustifyH("LEFT")
                                 f:ClearAllPoints()
                                 f:SetPoint("LEFT", btn, "LEFT", 8, 0)
-                                f:SetWidth(480)
+                                f:SetWidth(BUTTON_WIDTH - 40)
                             end
+
+                            -- determine initial color based on saved DB
+                            local db = SBA_SimpleDB or {}
+                            local hasText = false
+                            if specID and db.specs and db.specs[specID] and db.specs[specID].overrideCode and not db.specs[specID].overrideCode:match("^%s*$") then
+                                hasText = true
+                            end
+                            if f then
+                                if hasText then f:SetTextColor(unpack(W.colors.warning)) else f:SetTextColor(unpack(W.colors.textMuted)) end
+                            end
+
+                            table.insert(specButtons, { btn = btn, id = specID })
+
                             btn:SetScript("OnClick", function()
+                                for _, e in ipairs(specButtons) do e.btn:Disable() end
                                 SBA_Simple_ShowOverrideForSpec(specID, cname .. " — " .. specName)
                             end)
                             y = y - 26
@@ -229,6 +254,48 @@ local function OnBuildUI(parent)
         lbl:SetTextColor(unpack(PoulsTools.Widgets.colors.text))
         y = y - 18
     end
+
+    -- Manage spec buttons: re-enable and refresh colors when override frame closes
+    local function refreshSpecButtonColors()
+        local db = SBA_SimpleDB or {}
+        for _, e in ipairs(specButtons) do
+            local f = e.btn:GetFontString()
+            local id = e.id
+            local hasText = false
+            if id and db.specs and db.specs[id] and db.specs[id].overrideCode and not db.specs[id].overrideCode:match("^%s*$") then
+                hasText = true
+            end
+            if f then
+                if hasText then f:SetTextColor(unpack(W.colors.text)) else f:SetTextColor(unpack(W.colors.textMuted)) end
+            end
+        end
+    end
+
+    local function setSpecButtonsEnabled(enabled)
+        for _, e in ipairs(specButtons) do
+            if enabled then e.btn:Enable() else e.btn:Disable() end
+        end
+    end
+
+    local overrideFrame = _G and _G["SBAS_OverrideFrame"]
+    if overrideFrame then
+        overrideFrame:HookScript("OnShow", function() setSpecButtonsEnabled(false) end)
+        overrideFrame:HookScript("OnHide", function() setSpecButtonsEnabled(true); refreshSpecButtonColors() end)
+    else
+        if type(SBA_Simple_ShowOverrideForSpec) == "function" then
+            local origShow = SBA_Simple_ShowOverrideForSpec
+            SBA_Simple_ShowOverrideForSpec = function(specID, displayName)
+                setSpecButtonsEnabled(false)
+                origShow(specID, displayName)
+                local f = _G and _G["SBAS_OverrideFrame"]
+                if f then
+                    f:HookScript("OnShow", function() setSpecButtonsEnabled(false) end)
+                    f:HookScript("OnHide", function() setSpecButtonsEnabled(true); refreshSpecButtonColors() end)
+                end
+            end
+        end
+    end
+
 end
 
 PoulsTools.Menu:RegisterAddon({
