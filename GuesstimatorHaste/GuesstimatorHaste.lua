@@ -15,6 +15,62 @@ local lastChangeTime = 0
 local combatStartTime = 0
 local logLines = {}
 
+-- Single-spec gating (Monk - Windwalker)
+local REQUIRED_CLASS = "MONK"
+local REQUIRED_SPEC_ID = 269
+local addonEnabled = false
+
+local function IsPlayerClass(token)
+    local _, classToken = UnitClass("player")
+    return classToken == token
+end
+
+local function IsPlayerSpec(specID)
+    local specIndex = GetSpecialization()
+    if not specIndex then return false end
+    local id = select(1, GetSpecializationInfo(specIndex))
+    return id == specID
+end
+
+local function EnableAddon()
+    if addonEnabled then return end
+    addonEnabled = true
+    frame:RegisterEvent("PLAYER_REGEN_DISABLED")
+    if not GuesstimatorHasteDB or GuesstimatorHasteDB.isVisible == nil or GuesstimatorHasteDB.isVisible then
+        frame:Hide()
+        logFrame:Hide()
+    end
+    print("[GuesstimatorHaste] enabled for required spec")
+end
+
+local function DisableAddon()
+    if not addonEnabled then return end
+    addonEnabled = false
+    frame:UnregisterEvent("PLAYER_REGEN_DISABLED")
+    frame:Hide()
+    logFrame:Hide()
+    print("[GuesstimatorHaste] disabled (not required spec)")
+end
+
+local function UpdateEnabledState()
+    if not IsPlayerClass(REQUIRED_CLASS) then
+        print("[GuesstimatorHaste] abort: wrong class")
+        frame:UnregisterAllEvents()
+        frame:SetScript("OnUpdate", nil)
+        frame:Hide()
+        logFrame:Hide()
+        print("Not a Monk please disable GuesstimatorHaste")
+        return
+    end
+    if IsPlayerSpec(REQUIRED_SPEC_ID) then
+        print("I am the required class and spec.")
+        EnableAddon()
+    else
+        print("Not a windwalker GuesstimatedHaste will be disabled")
+        DisableAddon()
+    end
+end
+
 -- 1. UI Appearance Setup
 local function SetupFrame(f, w, h)
     f:SetSize(w, h)
@@ -61,6 +117,14 @@ end
 -- 3. Slash Command & Visibility
 SLASH_GUESSHASTE1 = "/gh"
 SlashCmdList["GUESSHASTE"] = function()
+    if not IsPlayerClass(REQUIRED_CLASS) then
+        print("[GuesstimatorHaste] only available for Monks")
+        return
+    end
+    if not IsPlayerSpec(REQUIRED_SPEC_ID) then
+        print("[GuesstimatorHaste] only active for Windwalker")
+        return
+    end
     local show = not frame:IsShown()
     GuesstimatorHasteDB = GuesstimatorHasteDB or {}
     GuesstimatorHasteDB.isVisible = show
@@ -69,7 +133,9 @@ end
 
 -- 4. Event Handler
 frame:RegisterEvent("ADDON_LOADED")
-frame:RegisterEvent("PLAYER_REGEN_DISABLED")
+frame:RegisterEvent("PLAYER_LOGIN")
+frame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+frame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == "GuesstimatorHaste" then
@@ -84,7 +150,19 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         else logFrame:SetPoint("CENTER", 0, -100) end
         if not GuesstimatorHasteDB.isVisible then frame:Hide() logFrame:Hide() end
         UpdateLogUI()
+
+    elseif event == "PLAYER_LOGIN" then
+        UpdateEnabledState()
+        UpdateLogUI()
+
+    elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
+        if arg1 == "player" then UpdateEnabledState() end
+
+    elseif event == "ACTIVE_TALENT_GROUP_CHANGED" then
+        UpdateEnabledState()
+
     elseif event == "PLAYER_REGEN_DISABLED" then
+        if not addonEnabled then return end
         logLines = {} 
         combatStartTime = GetTime()
         lastLoggedDummyValue = -99 
@@ -93,20 +171,18 @@ frame:SetScript("OnEvent", function(self, event, arg1)
 end)
 
 -- 5. The OnUpdate Loop
-frame:SetScript("OnUpdate", function(self, elapsed)
-    if not self:IsShown() then return end
+frame:SetScript("OnUpdate", function(self, elapsed)   
+    if not addonEnabled or not self:IsShown() then print("self not shown") return end
 
     local cdInfo = C_Spell.GetSpellCooldown(GCD_DUMMY_ID)
-    
     if cdInfo and cdInfo.duration and cdInfo.duration > 0 then
-        local currentDummyHaste = (baseGCD / cdInfo.duration - 1) * 100
-        
+        local currentDummyHaste = (baseGCD / cdInfo.duration - 1.0) * 100 - 0.1
         if currentDummyHaste > 0 then
             local official = GetHaste()
             local now = GetTime()
             
             -- Detect the 0.75s cap
-            local isCapped = (cdInfo.duration <= GCD_FLOOR + 0.001)
+            local isCapped = (cdInfo.duration <= GCD_FLOOR)
             local capText = isCapped and "|cffff0000(CAP)|r" or ""
 
             -- Update the visible text
@@ -116,7 +192,6 @@ frame:SetScript("OnUpdate", function(self, elapsed)
             if math.abs(currentDummyHaste - lastLoggedDummyValue) >= 1.0 then
                 -- UPDATE GLOBAL VARIABLE
                 GuestimatedHaste = currentDummyHaste
-                
                 local timeInCombat = (combatStartTime > 0) and (now - combatStartTime) or 0
                 local logEntry = string.format("[%.1fs] Dummy: %.1f%% %s | Off: %.1f%%", 
                     timeInCombat, currentDummyHaste, (isCapped and "CAP" or ""), official)
