@@ -190,6 +190,7 @@ For an authoritative, localization-independent list of class specializations and
 
 The referenced markdown includes a table mapping class, spec name, and `API ID` — use the numeric ID first when building per-spec mappings to avoid localization issues.
 
+
 ### shmIcons tips (if your addon uses shared icons)
 - Register icons with `shmIcons:Register(addonName, id, db, { onResize = func, onMove = func })`.
 - Toggle visibility with `shmIcons:SetVisible(addonName, id, visible)`.

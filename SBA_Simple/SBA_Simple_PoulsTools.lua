@@ -168,7 +168,7 @@ local function OnBuildUI(parent)
                             local displayName = (targetID and apiSpecNameByID[targetID]) or expectedName
 
                             local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-                            btn:SetSize(520, 22)
+                            btn:SetSize(130, 22)
                             btn:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 12, y)
                             btn:SetText(displayName)
                             local f = btn:GetFontString()
