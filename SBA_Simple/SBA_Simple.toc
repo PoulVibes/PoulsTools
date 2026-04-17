@@ -6,6 +6,6 @@
 
 ## Dependencies: shmIcons, PoulsTools
 
-## SavedVariablesPerCharacter: SBA_SimpleDB
+## SavedVariables: SBA_SimpleDB
 SBA_Simple.lua
 SBA_Simple_PoulsTools.lua
