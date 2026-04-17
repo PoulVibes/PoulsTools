@@ -120,7 +120,6 @@ end)
 - Register runtime events only while the addon is active; `UnregisterEvent` when disabling.
 - Reset timers and hide UI when disabling so the addon leaves no visible artifacts.
 - Use `PLAYER_SPECIALIZATION_CHANGED` and `ACTIVE_TALENT_GROUP_CHANGED` to detect respeccing and talent-set swaps.
-- Keep debug prints guarded (or use a debug flag) and remove verbose prints in release.
 
 ## Testing
 - Test by logging in on the target class/spec and verifying the addon enables.
