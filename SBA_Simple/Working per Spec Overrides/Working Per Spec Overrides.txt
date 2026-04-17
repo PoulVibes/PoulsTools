@@ -1,0 +1,85 @@
+local spellID = C_AssistedCombat.GetNextCastSpell()
+-- dummy GCD
+local GCD_ID = 61304
+-- Rotational Core
+local TP_ID              = 100780  -- Tiger Palm
+local RSK_ID             = 107428  -- Rising Sun Kick
+local BOK_ID             = 100784  -- Blackout Kick
+local FOF_ID             = 113656  -- Fists of Fury
+local SCK_ID             = 101546  -- Spinning Crane Kick
+
+-- Talent Abilities
+local WDP_ID             = 152175  -- Whirling Dragon Punch
+local SW_ID   			 = 1217413 -- Surgind Winds
+local RWK_ID             = 1250566 -- Rushing Wind Kick
+local SOTW_ID            = 392983  -- Strike of the Windlord
+
+-- Utility  
+local TOD_ID             = 322109  -- Touch of Death
+local CJL_ID             = 117952  -- Crackling Jade Lightning
+
+
+local chi = UnitPower("player", Enum.PowerType.Chi)
+--Priorities
+--1.) TOD
+if C_Spell.IsSpellUsable(TOD_ID) and not C_Spell.GetSpellCooldown(TOD_ID) then return TOD_ID end
+--if tod_proc_active or spellID==TOD_ID then return TOD_ID end --ignoring sba reccomendation because it doesn't evaluate against current t
+
+--2.) WDP
+if (IsPlayerSpell(WDP_ID) and not C_Spell.GetSpellCooldown(WDP_ID).isActive and C_Spell.IsSpellUsable(WDP_ID)) or spellID == WDP_ID then return WDP_ID end
+
+--3.) TP to not cap energy
+if (not ZenithActiveTracker or (ZenithActiveTracker and not IsPlayerSpell(1249832))) and chi < 4 and not bok_proc_active and (spellID == TP_ID or currentEnergy > 85) and LastComboStrikeSpellID ~= TP_ID then 
+	return TP_ID end
+
+--4.) SOTW
+if (IsPlayerSpell(SOTW_ID) and not C_Spell.GetSpellCooldown(SOTW_ID).isActive and C_Spell.IsSpellUsable(SOTW_ID)) or spellID == SOTW_ID then return SOTW_ID end
+
+--5.) FOF
+--if not C_Spell.GetSpellCooldown(FOF_ID).isActive and C_Spell.IsSpellUsable(FOF_ID) then return FOF_ID end
+if (not C_Spell.GetSpellCooldown(FOF_ID).timeUntilEndOfStartRecovery and C_Spell.IsSpellUsable(FOF_ID)) or spellID == FOF_ID then return FOF_ID end
+
+--6.) RWK
+if (chi > 0 and ZenithActiveTracker and rwk_proc_active) or (chi > 1 and rwk_proc_active) or spellID==RWK_ID then return RWK_ID end
+
+--7.) SCK - to not waste procs
+if  not ZenithActiveTracker and docj_proc_active and docj_proc_timer < 4 and not bok_proc_active  and LastComboStrikeSpellID ~= SCK_ID then return SCK_ID end
+
+--8.) RSK
+if (not C_Spell.GetSpellCooldown(RSK_ID).isActive and C_Spell.IsSpellUsable(RSK_ID)) or (chi>0 and ZenithActiveTracker and spellID==RSK_ID) or (chi>1 and spellID==RSK_ID) then return RSK_ID end
+
+--8.5) BOK to build chi during zenith
+ if ZenithActiveTracker and LastComboStrikeSpellID ~= BOK_ID then return BOK_ID end
+
+--9.) TP to use high ability
+if not (C_Spell.GetSpellCooldown(RSK_ID).isActive or (IsPlayerSpell(RWK_ID) and not C_Spell.GetSpellCooldown(RWK_ID).isActive) or not C_Spell.GetSpellCooldown(FOF_ID).isActive or (IsPlayerSpell(SOTW_ID) and not C_Spell.GetSpellCooldown(SOTW_ID).isActive)) and chi < 3 and LastComboStrikeSpellID ~= TP_ID then
+	return TP_ID
+end
+
+--10.) BOK with Proc or Zenith
+if (ZenithActiveTracker or bok_proc_active) and LastComboStrikeSpellID ~= BOK_ID then return BOK_ID end
+
+--11.) Zenith SCK
+if ZenithActiveTracker and chi > 3 then return SCK_ID end
+
+--12.) Slicing Winds
+if IsPlayerSpell(SW_ID) and not C_Spell.GetSpellCooldown(SW_ID).isActive and C_Spell.IsSpellUsable(SW_ID) then return SW_ID end
+
+
+--13.) chi ji Proc
+if docj_proc_active and LastComboStrikeSpellID ~= SCK_ID then return SCK_ID end
+
+--14.) BOK
+if (chi > 1 or (chi == 1 and LastComboStrikeSpellID == TP_ID)) and LastComboStrikeSpellID ~= BOK_ID then return BOK_ID end
+
+--14.5.) SCK
+if spellID == SCK_ID then return SCK_ID end
+
+--15.) TP last resort
+if LastComboStrikeSpellID ~= TP_ID then return TP_ID end
+
+--16.) CJL last resort
+if LastComboStrikeSpellID == TP_ID then return CJL_ID end
+
+--Use Default Spell
+return spellID
