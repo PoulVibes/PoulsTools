@@ -17,6 +17,16 @@ local DEFAULT_SIZE = 64
 -- spellKey → { spellName, spellID } for the currently active spec
 local tracked = {}
 
+-- Change listeners for UI integrations (called when trackers change)
+local changeListeners = {}
+
+local function NotifyChangeListeners()
+    for _, cb in ipairs(changeListeners) do
+        local ok, err = pcall(cb)
+        if not ok then print("|cFFFF4444CooldownTracker: listener error: " .. tostring(err) .. "|r") end
+    end
+end
+
 -- The spec ID we last loaded icons for
 local currentSpecID = nil
 
@@ -159,6 +169,8 @@ local function AddTracker(spellName, specID)
 
     tracked[key] = { spellName = spellName, spellID = spellID }
     UpdateTracker(key)
+    -- notify any UI listeners so they can refresh lists
+    NotifyChangeListeners()
 end
 
 local function RemoveTracker(key)
@@ -166,6 +178,8 @@ local function RemoveTracker(key)
     tracked[key] = nil
     local spells = GetSpecSpells(currentSpecID)
     if spells[key] then spells[key].enabled = false end
+    -- notify UI listeners
+    NotifyChangeListeners()
 end
 
 -- Unregister all current icons and clear tracked table.
@@ -195,8 +209,11 @@ end
 -- ============================================================
 
 SLASH_COOLDOWNTRACKER1 = "/cdt"
-SlashCmdList["COOLDOWNTRACKER"] = function(msg)
-    local cmd = msg:lower():trim()
+
+-- Central command handler so UI and slash both use the same logic
+function CooldownTracker_HandleCommand(msg)
+    local raw = (type(msg) == "string") and msg or ""
+    local cmd = (raw or ""):lower():trim()
 
     local glowName = cmd:match("^glow%s+(.+)$")
     if glowName then
@@ -264,14 +281,18 @@ SlashCmdList["COOLDOWNTRACKER"] = function(msg)
         return
     end
 
-    local key = KeyFor(msg:trim())
+    local key = KeyFor(raw:trim())
     if tracked[key] then
         RemoveTracker(key)
-        print("|cFFFFFF00CooldownTracker: removed tracker for " .. msg:trim() .. ".|r")
+        print("|cFFFFFF00CooldownTracker: removed tracker for " .. raw:trim() .. ".|r")
     else
-        AddTracker(msg:trim())
-        print("|cFF00FF00CooldownTracker: now tracking " .. msg:trim() .. ".|r")
+        AddTracker(raw:trim())
+        print("|cFF00FF00CooldownTracker: now tracking " .. raw:trim() .. ".|r")
     end
+end
+
+SlashCmdList["COOLDOWNTRACKER"] = function(msg)
+    CooldownTracker_HandleCommand(msg)
 end
 
 -- ============================================================
@@ -307,3 +328,89 @@ eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 eventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+
+-- Public API wrappers for PoulsTools UI and other integrations
+function CooldownTracker_Add(spellName, specID)
+    AddTracker(spellName, specID)
+end
+
+function CooldownTracker_Remove(spellName)
+    if not spellName then return end
+    local key = KeyFor(spellName)
+    if tracked[key] then
+        RemoveTracker(key)
+    else
+        print("|cFFFF0000CooldownTracker: not tracking '" .. spellName .. "'.|r")
+    end
+end
+
+function CooldownTracker_ToggleGlow(spellName)
+    if not spellName then return end
+    local key = KeyFor(spellName)
+    if tracked[key] then
+        local enabled = shmIcons:ToggleGlowEnabled(ADDON_NAME, key)
+        local state = enabled and "|cFF00FF00enabled|r" or "|cFFFFFF00disabled|r"
+        print("CooldownTracker: glow " .. state .. " for " .. spellName .. ".")
+        UpdateTracker(key)
+        return enabled
+    else
+        print("|cFFFF0000CooldownTracker: not tracking '" .. spellName .. "'.|r")
+        return nil
+    end
+end
+
+function CooldownTracker_Reset(spellName)
+    if not spellName then return end
+    local key = KeyFor(spellName)
+    if tracked[key] then
+        shmIcons:ResetIcon(ADDON_NAME, key, DEFAULT_SIZE)
+        print("|cFF00FF00CooldownTracker: reset " .. spellName .. ".|r")
+    else
+        print("|cFFFF0000CooldownTracker: not tracking '" .. spellName .. "'.|r")
+    end
+end
+
+function CooldownTracker_ResetAll()
+    for key in pairs(tracked) do shmIcons:ResetIcon(ADDON_NAME, key, DEFAULT_SIZE) end
+    print("|cFF00FF00CooldownTracker: All positions reset.|r")
+end
+
+function CooldownTracker_ToggleLock()
+    local locked = shmIcons:ToggleLock()
+    local state = locked and "|cFF00FF00Locked.|r" or "|cFFFFFF00Unlocked. Left-drag: move solo. Right-drag: move group.|r"
+    print("shmIcons: All icons " .. state)
+    return locked
+end
+
+function CooldownTracker_List()
+    local found = false
+    for key, entry in pairs(tracked) do
+        local db = GetSpecSpells(currentSpecID)[key]
+        local glowState = db and db.glow_enabled and "glow on" or "glow off"
+        print(string.format("|cFFFFFF00  %s|r  [%s]", entry.spellName, glowState))
+        found = true
+    end
+    if not found then print("|cFFFFFF00CooldownTracker: no abilities tracked yet.|r") end
+end
+
+-- Allow external UI to register a callback to be notified when the tracked
+-- abilities for the current spec change (add/remove).
+function CooldownTracker_RegisterChangeListener(fn)
+    if type(fn) ~= "function" then return end
+    changeListeners[#changeListeners + 1] = fn
+end
+
+-- Return a simple array of tracked spell entries for the given specID.
+function CooldownTracker_GetTrackedSpells(specID)
+    specID = specID or GetCurrentSpecID()
+    local out = {}
+    local spells = GetSpecSpells(specID)
+    for key, db in pairs(spells) do
+        if db.enabled and db.spellName then
+            table.insert(out, { key = key, spellName = db.spellName, spellID = db.spellID, db = db })
+        end
+    end
+    return out
+end
+
+-- PoulsTools integration moved to CooldownTracker_PoulsTools.lua

@@ -241,9 +241,11 @@ function W:EditBox(parent, anchor, yOffset, label, placeholder, getValue, setVal
     box:SetText(getValue() or "")
     box:SetMaxLetters(255)
 
-    if placeholder and box:GetText() == "" then
-        box:SetTextColor(0.4, 0.5, 0.6, 1.0)
-        box:SetText(placeholder)
+    if placeholder then
+        if box:GetText() == "" then
+            box:SetTextColor(0.4, 0.5, 0.6, 1.0)
+            box:SetText(placeholder)
+        end
         box:SetScript("OnEditFocusGained", function(self)
             if self:GetText() == placeholder then
                 self:SetText("")
@@ -251,10 +253,18 @@ function W:EditBox(parent, anchor, yOffset, label, placeholder, getValue, setVal
             end
         end)
         box:SetScript("OnEditFocusLost", function(self)
-            if self:GetText() == "" then
+            local val = self:GetText()
+            if val == "" or val == placeholder then
                 self:SetText(placeholder)
                 self:SetTextColor(0.4, 0.5, 0.6, 1.0)
+                setValue("")
+            else
+                setValue(val)
             end
+        end)
+    else
+        box:SetScript("OnEditFocusLost", function(self)
+            setValue(self:GetText())
         end)
     end
 
@@ -266,6 +276,9 @@ function W:EditBox(parent, anchor, yOffset, label, placeholder, getValue, setVal
         self:ClearFocus()
     end)
 
+    -- expose inner box and placeholder for callers who need immediate access
+    row.box = box
+    row.placeholder = placeholder
     return row
 end
 
