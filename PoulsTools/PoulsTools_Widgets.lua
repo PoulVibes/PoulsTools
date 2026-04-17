@@ -143,6 +143,10 @@ function W:Slider(parent, anchor, yOffset, label, min, max, step, getValue, setV
         valText:SetText(string.format(fmt, value))
     end)
 
+    -- expose inner elements so callers can update them later if needed
+    row.slider = slider
+    row.valText = valText
+
     return row
 end
 

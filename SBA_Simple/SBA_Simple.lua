@@ -81,6 +81,30 @@ local function RegisterIcon()
         onMove   = function()   end,
     })
     shmIcons:RestoreSnapGroups()
+    -- Ensure the icon visibility follows the DB setting
+    if shmIcons and shmIcons.SetVisible then
+        shmIcons:SetVisible(ADDON_NAME, ICON_KEY, (db.enabled ~= false))
+    end
+end
+
+
+-- Public helpers for UI to control the icon live
+function SBA_Simple_SetEnabled(enabled)
+    local db = GetDB()
+    db.enabled = enabled
+    if shmIcons and shmIcons.SetVisible then
+        shmIcons:SetVisible(ADDON_NAME, ICON_KEY, enabled)
+    end
+end
+
+function SBA_Simple_SetSize(size)
+    local db = GetDB()
+    db.size = tonumber(size) or db.size
+    if shmIcons and shmIcons.Unregister then
+        shmIcons:Unregister(ADDON_NAME, ICON_KEY)
+    end
+    -- Recreate the icon with the updated size
+    RegisterIcon()
 end
 
 -- ── Per-frame update ──────────────────────────────────────────────────────

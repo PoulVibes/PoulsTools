@@ -38,34 +38,19 @@ local function OnBuildUI(parent)
         "Enabled",
         "Enable the SBA Simple icon.",
         function() return (SBA_SimpleDB and SBA_SimpleDB.enabled) ~= false end,
-        function(val) SBA_SimpleDB = SBA_SimpleDB or {}; SBA_SimpleDB.enabled = val end
+        function(val) SBA_SimpleDB = SBA_SimpleDB or {}; SBA_SimpleDB.enabled = val; if SBA_Simple_SetEnabled then SBA_Simple_SetEnabled(val) end end
     )
     y = -6
 
-    anchor = W:Slider(parent, anchor, y,
+    local sliderRow = W:Slider(parent, anchor, y,
         "Icon Size", 16, 128, 1,
         function() return (SBA_SimpleDB and SBA_SimpleDB.size) or 64 end,
-        function(val) SBA_SimpleDB = SBA_SimpleDB or {}; SBA_SimpleDB.size = val end,
+        function(val) SBA_SimpleDB = SBA_SimpleDB or {}; SBA_SimpleDB.size = val; if SBA_Simple_SetSize then SBA_Simple_SetSize(val) end end,
         "%d"
     )
+    anchor = sliderRow
     y = -8
-
-    anchor = W:Dropdown(parent, anchor, y,
-        "Anchor Point",
-        {
-            {text = "CENTER", value = "CENTER"},
-            {text = "TOPLEFT", value = "TOPLEFT"},
-            {text = "TOPRIGHT", value = "TOPRIGHT"},
-            {text = "BOTTOMLEFT", value = "BOTTOMLEFT"},
-            {text = "BOTTOMRIGHT", value = "BOTTOMRIGHT"},
-            {text = "LEFT", value = "LEFT"},
-            {text = "RIGHT", value = "RIGHT"},
-            {text = "TOP", value = "TOP"},
-            {text = "BOTTOM", value = "BOTTOM"},
-        },
-        function() return (SBA_SimpleDB and SBA_SimpleDB.point) or "CENTER" end,
-        function(val) SBA_SimpleDB = SBA_SimpleDB or {}; SBA_SimpleDB.point = val end
-    )
+    -- Anchor Point dropdown removed: position is persisted but not editable here
     y = -8
 
     anchor = W:Checkbox(parent, anchor, y,
@@ -100,10 +85,40 @@ local function OnBuildUI(parent)
     end)
     y = -8
 
+    -- Lock / Unlock button for shmIcons
+    local lockBtn = nil
+    local lockLabel = "Lock Icons"
+    if shmIcons and shmIcons.IsLocked and shmIcons:IsLocked() then lockLabel = "Unlock Icons" end
+    anchor = W:Button(parent, anchor, y, lockLabel, function()
+        if shmIcons and shmIcons.ToggleLock then
+            local locked = shmIcons:ToggleLock()
+            -- Update label to reflect the next action (clicking will toggle)
+            local nextLabel = locked and "Unlock Icons" or "Lock Icons"
+            if lockBtn then lockBtn:SetText(nextLabel) end
+        else
+            print("|cFFFF4444SBA_Simple:|r shmIcons not available.")
+        end
+    end)
+    lockBtn = anchor
+    y = -8
+
     y = -8
     local hdr, dy2 = W:SectionHeader(parent, anchor, y, "Single-Button Suggestion Overrides (by Class / Spec)")
     local listAnchor = hdr
     y = dy2
+
+    -- Keep slider in sync when the settings panel is shown (reflect manual resizes)
+    if sliderRow and sliderRow.slider and sliderRow.valText then
+        parent:HookScript("OnShow", function()
+            local sz = (SBA_SimpleDB and SBA_SimpleDB.size) or 64
+            sliderRow.slider:SetValue(sz)
+            sliderRow.valText:SetText(string.format("%d", sz))
+            -- refresh lock button label
+            if lockBtn and shmIcons and shmIcons.IsLocked then
+                lockBtn:SetText(shmIcons:IsLocked() and "Unlock Icons" or "Lock Icons")
+            end
+        end)
+    end
 
     -- Try preferred API: GetNumSpecializationsForClassID / GetSpecializationInfoForClassID
     if type(GetNumSpecializationsForClassID) == "function" and type(GetSpecializationInfoForClassID) == "function" and type(GetClassInfo) == "function" then
@@ -219,7 +234,7 @@ end
 PoulsTools.Menu:RegisterAddon({
     name    = "SBA Simple",
     id      = "SBA_Simple",
-    desc    = "Displays the next suggested cast using shmIcons.",
+    desc    = "Displays the Assited Combat spell reccomendation and allows for overriding this logic.",
     version = "1.0.0",
     icon    = "Interface\\Icons\\INV_Misc_Gear_01",
     OnBuildUI = OnBuildUI,
