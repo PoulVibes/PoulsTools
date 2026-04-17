@@ -22,8 +22,7 @@ local CJL_ID             = 117952  -- Crackling Jade Lightning
 local chi = UnitPower("player", Enum.PowerType.Chi)
 --Priorities
 --1.) TOD
-if C_Spell.IsSpellUsable(TOD_ID) and not C_Spell.GetSpellCooldown(TOD_ID) then return TOD_ID end
---if tod_proc_active or spellID==TOD_ID then return TOD_ID end --ignoring sba reccomendation because it doesn't evaluate against current t
+--ignore ToD for now
 
 --2.) WDP
 if (IsPlayerSpell(WDP_ID) and not C_Spell.GetSpellCooldown(WDP_ID).isActive and C_Spell.IsSpellUsable(WDP_ID)) or spellID == WDP_ID then return WDP_ID end
@@ -34,7 +33,6 @@ C_Spell.IsSpellUsable(WDP_ID) and not
 C_Spell.GetSpellCooldown(WDP_ID).isActive
  then
 spellID = WDP_ID
-print("WDP!!!!")
 return WDP_ID
 end
 
@@ -46,8 +44,11 @@ if (not ZenithActiveTracker or (ZenithActiveTracker and not IsPlayerSpell(124983
 if (IsPlayerSpell(SOTW_ID) and not C_Spell.GetSpellCooldown(SOTW_ID).isActive and C_Spell.IsSpellUsable(SOTW_ID)) or spellID == SOTW_ID then return SOTW_ID end
 
 --5.) FOF
---if not C_Spell.GetSpellCooldown(FOF_ID).isActive and C_Spell.IsSpellUsable(FOF_ID) then return FOF_ID end
+if not C_Spell.GetSpellCooldown(FOF_ID).isActive and C_Spell.IsSpellUsable(FOF_ID) then return FOF_ID end
 if (not C_Spell.GetSpellCooldown(FOF_ID).timeUntilEndOfStartRecovery and C_Spell.IsSpellUsable(FOF_ID)) or spellID == FOF_ID then return FOF_ID end
+
+if spellID == FOF_ID and (chi > 2 or ZenithActiveTracker and chi > 1) then return FOF_ID end
+
 
 --6.) RWK
 if (chi > 0 and ZenithActiveTracker and rwk_proc_active) or (chi > 1 and rwk_proc_active) or spellID==RWK_ID then return RWK_ID end
@@ -57,6 +58,8 @@ if  not ZenithActiveTracker and docj_proc_active and docj_proc_timer < 4 and not
 
 --8.) RSK
 if (not C_Spell.GetSpellCooldown(RSK_ID).isActive and C_Spell.IsSpellUsable(RSK_ID)) or (chi>0 and ZenithActiveTracker and spellID==RSK_ID) or (chi>1 and spellID==RSK_ID) then return RSK_ID end
+
+if spellID == RSK_ID and  (chi > 1 or ZenithActiveTracker and chi > 0) then return RSK_ID end
 
 --8.5) BOK to build chi during zenith
  if ZenithActiveTracker and LastComboStrikeSpellID ~= BOK_ID then return BOK_ID end
