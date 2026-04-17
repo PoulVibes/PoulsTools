@@ -190,7 +190,6 @@ For an authoritative, localization-independent list of class specializations and
 
 The referenced markdown includes a table mapping class, spec name, and `API ID` — use the numeric ID first when building per-spec mappings to avoid localization issues.
 
-
 ### shmIcons tips (if your addon uses shared icons)
 - Register icons with `shmIcons:Register(addonName, id, db, { onResize = func, onMove = func })`.
 - Toggle visibility with `shmIcons:SetVisible(addonName, id, visible)`.
@@ -201,4 +200,72 @@ The referenced markdown includes a table mapping class, spec name, and `API ID` 
 - If a helper is missing, verify PoulsTools loaded before your addon (dependencies in `.toc`) and that `PoulsTools_Widgets.lua` is present.
 - Use `ExampleAddon_PoulsTools.lua` as a minimal working reference.
 
+---
+
+## Integration Lessons — CooldownTracker Case Study
+
+This repository's recent work integrating `CooldownTracker` into PoulsTools surfaced several practical patterns and APIs you can reuse when integrating other addons. Below are the key lessons, code patterns, and pitfalls discovered while copying the style of `SBA_Simple` and wiring a live, dynamic UI.
+
+### Key Patterns
+
+- **Guard & Load Order:** Always check `if not PoulsTools then return end` at the top of your PoulsTools integration file and declare `## Dependencies: PoulsTools` in your `.toc` so load order is predictable.
+
+- **Central Command Handler / Public API:** Put slash parsing and behavior in a function (for example `CooldownTracker_HandleCommand(msg)`) and expose small public helpers (`CooldownTracker_Add`, `CooldownTracker_Remove`, `CooldownTracker_ToggleLock`, `CooldownTracker_Reset`, etc.). This lets the settings UI call your logic directly instead of invoking `SlashCmdList`. Don't forget to always make your buttons have actions.
+
+- **Dynamic UI via Change Listeners:** If your runtime state can change outside the settings panel, expose a small listener API so the PoulsTools UI can refresh dynamically. In the CooldownTracker example we added:
+
+    - `CooldownTracker_RegisterChangeListener(fn)` — register a callback called when trackers change (add/remove).
+    - `CooldownTracker_GetTrackedSpells(specID)` — return an array of tracked entries for the current spec.
+
+    Usage pattern in `OnBuildUI`:
+
+    ```lua
+    CooldownTracker_RegisterChangeListener(BuildTrackedList)
+    -- BuildTrackedList reads CooldownTracker_GetTrackedSpells() and rebuilds rows
+    ```
+
+- **PoulsTools Widget Anchor Chaining:** `PoulsTools.Widgets` helpers follow the (parent, anchor, yOffset, ...) pattern and return a frame (or row) you should assign to `anchor` for the next widget. If you don't reassign and update `y`, multiple rows will overlap.
+
+    Example:
+
+    ```lua
+    local anchor = parent
+    local div, dy = W:SectionHeader(parent, anchor, y, "Header")
+    anchor = div; y = dy
+    anchor = W:Checkbox(parent, anchor, y, "Label", nil, getValue, setValue)
+    y = -6
+    ```
+
+- **EditBox internals:** `W:EditBox` exposes `row.box` and `row.placeholder`. Use `edit.box:GetText()` when a button is clicked (don't rely solely on the `setValue` callback). Clear focus and reset text after use (e.g., `edit.box:ClearFocus(); edit.box:SetText("")`).
+
+- **Let `shmIcons` be authoritative for icon movement:** If you use `shmIcons` for icons, call `shmIcons:Register` to create icons, `shmIcons:RestoreSnapGroups()` after registering, and `shmIcons:ToggleLock()` to toggle lock state. Do not override icon frame drag handlers, reparent icon frames, or disable mouse handling — doing so breaks snap/move behavior.
+
+### SBA_Simple Lessons Observed
+
+- `SBA_Simple` demonstrates persisting per-spec DB tables and seeding per-spec entries from global values when needed. Follow the `db.specs[specID]` pattern for per-specialization settings.
+- Preferred `shmIcons` usage: register icons once and use `shmIcons:SetVisible`/`SetIcon`/`SetCooldown`/`SetGlow` to update visuals.
+- Use `parent:HookScript("OnShow", ...)` to synchronize controls that may change outside the settings UI (slider values, lock button label, etc.).
+
+### Practical Tips & Pitfalls
+
+- **Anchor chaining mistakes cause overlapping rows.** Always reassign `anchor` to the return value of widget helpers.
+- **Don't call `SlashCmdList` from UI.** Instead call a central handler function or a small public API so behavior is consistent between slash and UI.
+- **When building dynamic lists:** create a `trackedContainer` frame, create/hide per-row frames, update the container's height, and reanchor subsequent sections (Actions header) to the container's bottom.
+
+
+### Files touched in this case study
+
+- `CooldownTracker/CooldownTracker.lua` — added change-listener registration, public wrappers, and notifications on add/remove.
+- `CooldownTracker/CooldownTracker_PoulsTools.lua` — implemented a dynamic tracked-abilities list that shows icon + name and registers for runtime updates.
+- `PoulsTools/PoulsTools_Widgets.lua` — `EditBox` exposes `row.box`/`row.placeholder` and propagates `setValue` on focus-lost (pattern already present; follow it as a best-practice).
+
+### How to test (in-game)
+
+1. Reload UI and open PoulsTools → CooldownTracker.
+2. Add a tracker via the Add Tracker button or `/cdt Fireball` and confirm the tracked list updates with an icon and name.
+3. Unlock icons with the Lock button and drag an icon; it should snap to nearby icons within threshold.
+4. Toggle the glow checkbox in the list to enable/disable ready glow for that ability.
+5. Reset a single icon and `reset all` to verify positions and sizes restore.
+
+---
 
