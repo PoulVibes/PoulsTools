@@ -29,6 +29,10 @@ local VERSION           = "0.1.8"
 local ICON_SIZE_DEFAULT = 64
 local GAP               = 8
 
+local WINDWALKER_SPEC_ID = 269
+local iconsRegistered = false
+local addonEnabled = false
+
 ------------------------------------------------------------------------
 -- Global proc-active booleans (readable by other addons)
 ------------------------------------------------------------------------
@@ -129,6 +133,7 @@ local function RegisterIcons()
         end
     end
 
+    iconsRegistered = true
     shmIcons:RestoreSnapGroups()
 end
 
@@ -196,6 +201,76 @@ for _, entry in pairs(PROC_REGISTRY) do
     end
 end
 
+-- Create event frame early so helper functions can register/unregister events
+local eventFrame = CreateFrame("Frame")
+eventFrame:RegisterEvent("PLAYER_LOGIN")
+eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+eventFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
+
+------------------------------------------------------------------------
+-- Enable/disable helpers (Monk + Windwalker checks)
+------------------------------------------------------------------------
+local function IsPlayerMonk()
+    local _, classToken = UnitClass("player")
+    return classToken == "MONK"
+end
+
+local function IsPlayerWindwalkerSpec()
+    local specIndex = GetSpecialization()
+    if not specIndex then return false end
+    local specID = select(1, GetSpecializationInfo(specIndex))
+    return specID == WINDWALKER_SPEC_ID
+end
+
+local function EnableAddon()
+    if addonEnabled then return end
+    addonEnabled = true
+    if not iconsRegistered then RegisterIcons() end
+    eventFrame:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_SHOW")
+    eventFrame:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_HIDE")
+    print("|cff00ff00[" .. ADDON .. " v" .. VERSION .. "]|r")
+    print("  ProcViewer enabled (Windwalker).")
+end
+
+local function DisableAddon()
+    if not addonEnabled then return end
+    addonEnabled = false
+    eventFrame:UnregisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_SHOW")
+    eventFrame:UnregisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_HIDE")
+    for _, def in ipairs(SLOT_DEFS) do
+        shmIcons:SetGlow(ADDON, def.key, false)
+        shmIcons:SetVisible(ADDON, def.key, false)
+    end
+    _G["bok_proc_active"] = false
+    _G["docj_proc_active"] = false
+    _G["tod_proc_active"] = false
+    _G["rwk_proc_active"] = false
+
+    _G["bok_proc_timer"]  = 0
+    _G["docj_proc_timer"] = 0
+    _G["rwk_proc_timer"]  = 0
+
+    for _, entry in pairs(TIMED_ENTRIES) do
+        entry.endTime = 0
+    end
+
+    tickerFrame:Hide()
+    print("|cff00ff00[" .. ADDON .. " v" .. VERSION .. "]|r")
+    print("  ProcViewer disabled (not Windwalker).")
+end
+
+local function UpdateEnabledState()
+    if not IsPlayerMonk() then
+        DisableAddon()
+        return
+    end
+    if IsPlayerWindwalkerSpec() then
+        EnableAddon()
+    else
+        DisableAddon()
+    end
+end
+
 ------------------------------------------------------------------------
 -- Slash command
 ------------------------------------------------------------------------
@@ -208,16 +283,19 @@ end
 ------------------------------------------------------------------------
 -- Event handler
 ------------------------------------------------------------------------
-local eventFrame = CreateFrame("Frame")
-eventFrame:RegisterEvent("PLAYER_LOGIN")
-eventFrame:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_SHOW")
-eventFrame:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_HIDE")
-
 eventFrame:SetScript("OnEvent", function(self, event, arg1)
     if event == "PLAYER_LOGIN" then
-        RegisterIcons()
+        -- Abort if not a Monk (no point continuing)
+        local _, classToken = UnitClass("player")
+        if classToken ~= "MONK" then
+            print("|cff00ff00[" .. ADDON .. " v" .. VERSION .. "]|r")
+            print("  ProcViewer disabled: not a Monk.")
+            eventFrame:UnregisterAllEvents()
+            return
+        end
 
-        -- Initialise timer globals and endTimes
+        -- Initialise icons and timers
+        RegisterIcons()
         _G["bok_proc_timer"]  = 0
         _G["docj_proc_timer"] = 0
         _G["rwk_proc_timer"]  = 0
@@ -226,7 +304,25 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
         end
         tickerFrame:Hide()
 
+        -- Enable only if Windwalker, otherwise stay disabled but listen for spec changes
+        if IsPlayerWindwalkerSpec() then
+            EnableAddon()
+        else
+            DisableAddon()
+            print("|cff00ff00[" .. ADDON .. " v" .. VERSION .. "]|r")
+            print("  ProcViewer loaded but inactive (not Windwalker).")
+        end
+
+    elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
+        if arg1 == "player" then
+            UpdateEnabledState()
+        end
+
+    elseif event == "ACTIVE_TALENT_GROUP_CHANGED" then
+        UpdateEnabledState()
+
     elseif event == "SPELL_ACTIVATION_OVERLAY_GLOW_SHOW" then
+        if not addonEnabled then return end
         local entry = PROC_REGISTRY[arg1]
         if entry then
             _G[entry.globalKey] = true
@@ -239,6 +335,7 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
         end
 
     elseif event == "SPELL_ACTIVATION_OVERLAY_GLOW_HIDE" then
+        if not addonEnabled then return end
         local entry = PROC_REGISTRY[arg1]
         if entry then
             _G[entry.globalKey] = false
