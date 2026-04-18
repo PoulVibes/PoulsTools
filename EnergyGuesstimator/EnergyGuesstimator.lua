@@ -18,6 +18,59 @@ local ASCENSION_MODIFIER = 1.10
 
 _G.GuesstimatedHaste = _G.GuesstimatedHaste or 0.21
 
+-- Single-spec gating (Monk - Windwalker)
+local REQUIRED_CLASS = "MONK"
+local REQUIRED_SPEC_ID = 269
+local addonEnabled = false
+
+local function IsPlayerClass(token)
+    local _, classToken = UnitClass("player")
+    return classToken == token
+end
+
+local function IsPlayerSpec(specID)
+    local specIndex = GetSpecialization()
+    if not specIndex then return false end
+    local id = select(1, GetSpecializationInfo(specIndex))
+    return id == specID
+end
+
+local function EnableAddon()
+    if addonEnabled then return end
+    addonEnabled = true
+    frame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+    frame:RegisterEvent("UNIT_POWER_UPDATE")
+    frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    frame:RegisterEvent("UNIT_MAXPOWER")
+    print("[Guesstimator] enabled for required spec")
+end
+
+local function DisableAddon()
+    if not addonEnabled then return end
+    addonEnabled = false
+    frame:UnregisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+    frame:UnregisterEvent("UNIT_POWER_UPDATE")
+    frame:UnregisterEvent("PLAYER_REGEN_ENABLED")
+    frame:UnregisterEvent("UNIT_MAXPOWER")
+    ui:Hide()
+    print("[Guesstimator] disabled (not required spec)")
+end
+
+local function UpdateEnabledState()
+    if not IsPlayerClass(REQUIRED_CLASS) then
+        print("[Guesstimator] abort: wrong class")
+        frame:UnregisterAllEvents()
+        ui:SetScript("OnUpdate", nil)
+        ui:Hide()
+        return
+    end
+    if IsPlayerSpec(REQUIRED_SPEC_ID) then
+        EnableAddon()
+    else
+        DisableAddon()
+    end
+end
+
 -- 2. Internal "Clean" State
 local maxEnergy = UnitPowerMax("player", 3) or 120
 currentEnergy = maxEnergy
@@ -60,19 +113,42 @@ function Guesstimator:HandleVivifyNormal()
 end
 
 -- 5. Standard Event Logic
-frame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
-frame:RegisterEvent("UNIT_POWER_UPDATE")
-frame:RegisterEvent("PLAYER_REGEN_ENABLED")
-frame:RegisterEvent("UNIT_MAXPOWER")
+-- Runtime events are registered only when the addon is enabled
+frame:RegisterEvent("ADDON_LOADED")
+frame:RegisterEvent("PLAYER_LOGIN")
+frame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+frame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
 
 frame:SetScript("OnEvent", function(self, event, ...)
+    if event == "ADDON_LOADED" and select(1, ...) == "EnergyGuesstimator" then
+        -- no saved-vars for this addon; keep UI hidden until enabled/toggled
+        return
+    end
+
+    if event == "PLAYER_LOGIN" then
+        UpdateEnabledState()
+        return
+    end
+
+    if event == "PLAYER_SPECIALIZATION_CHANGED" then
+        if select(1, ...) == "player" then UpdateEnabledState() end
+        return
+    end
+
+    if event == "ACTIVE_TALENT_GROUP_CHANGED" then
+        UpdateEnabledState()
+        return
+    end
+
+    if not addonEnabled then return end
+
     if event == "PLAYER_REGEN_ENABLED" then
         local realPower = UnitPower("player", 3)
         if not issecretvalue(realPower) then currentEnergy = realPower end
         return
     end
 
-    local unit = ...
+    local unit = select(1, ...)
     if unit ~= "player" then return end
 
     if event == "UNIT_SPELLCAST_SUCCEEDED" then
@@ -83,7 +159,6 @@ frame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "UNIT_POWER_UPDATE" then
         local powerType = select(2, ...)
         if powerType == "ENERGY" then
-			if true then return end
             local isVivify = C_Spell.IsSpellUsable(VIVIFY_ID)
             local isCJL = C_Spell.IsSpellUsable(CJL_ID)
             if not issecretvalue(isVivify) and isVivify then
@@ -100,8 +175,10 @@ end)
 
 -- 6. UI Update with Secret Value Comparison
 ui:SetScript("OnUpdate", function(self, elapsed)
+    if not addonEnabled or not self:IsShown() then return end
+
     local currentRegenRate = (BASE_REGEN * (1 + _G.GuesstimatedHaste)) * ASCENSION_MODIFIER
-    
+
     if currentEnergy < maxEnergy then
         currentEnergy = math.min(maxEnergy, currentEnergy + (currentRegenRate * elapsed))
     end
@@ -116,5 +193,13 @@ end)
 -- 7. Slash Commands
 SLASH_GUESSTIMATE1 = "/ge"
 SlashCmdList["GUESSTIMATE"] = function()
+    if not IsPlayerClass(REQUIRED_CLASS) then
+        print("[Guesstimator] only available for Monks")
+        return
+    end
+    if not IsPlayerSpec(REQUIRED_SPEC_ID) then
+        print("[Guesstimator] only active for Windwalker")
+        return
+    end
     if ui:IsShown() then ui:Hide() else ui:Show() end
 end
