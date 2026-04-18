@@ -3,6 +3,8 @@
 ## Notes: Speculative energy tracking for Monks using AceEvent and 12.0.1 security compliance.
 ## OptionalDeps: Ace3
 ## Version: 1.0
+## IconTexture: Interface\Icons\ability_monk_ascension
+## Category-enUS: PoulsTools
 
 # Library Loads
 Libs\LibStub\LibStub.lua

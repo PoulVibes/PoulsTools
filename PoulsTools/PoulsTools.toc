@@ -4,11 +4,10 @@
 ## Author: Poul
 ## Version: 1.0.0
 ## SavedVariables: PoulsToolsDB
-## IconTexture: Interface\AddOns\PoulsTools\Media\icon
+## IconTexture: Interface\Icons\ui_profession_inscription
 
-## X-Category: Interface Enhancements
-## X-Email: 
-## X-Website: 
+## Category-enUS: PoulsTools
+
 
 # Core files - order matters
 PoulsTools.lua

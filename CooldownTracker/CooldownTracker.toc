@@ -2,9 +2,11 @@
 ## Title: CooldownTracker
 ## Notes: Tracks any ability cooldown by name with icon, cooldown sweep, and ready glow.
 ## Version: 2.0.0
-## Author: You
+## IconTexture: Interface\Icons\inv_misc_book_11
+## Category-enUS: PoulsTools
+## Author: Poul
 ## SavedVariables: CooldownTrackerDB
-## Dependencies: shmIcons, PoulsTools
+## RequiredDeps: shmIcons, PoulsTools
 
 CooldownTracker.lua
 CooldownTracker_PoulsTools.lua

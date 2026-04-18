@@ -2,9 +2,11 @@
 ## Title: ItemTracker
 ## Notes: Tracks inventory items by name — shows cooldown, stack count, and ready glow.
 ## Version: 1.0.0
-## Author: You
+## Author: Poul
 ## SavedVariablesPerCharacter: ItemTrackerDB
-## Dependencies: shmIcons, PoulsTools
+## IconTexture: Interface\Icons\inv_misc_bag_01
+## Category-enUS: PoulsTools
+## RequiredDeps: shmIcons, PoulsTools
 
 ItemTracker.lua
 ItemTracker_PoulsTools.lua

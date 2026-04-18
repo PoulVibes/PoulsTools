@@ -2,7 +2,9 @@
 ## Title: shmIcons
 ## Notes: Shared icon/cooldown/glow/snap framework library for shmIcons-based addons.
 ## Version: 1.0.0
-## Author: You
+## Author: Poul
+## IconTexture: Interface\Icons\battleground_strongbox_skirmish_horde
+## Category-enUS: PoulsTools
 ## SavedVariables: shmIconsDB
 ## LoadOnDemand: 0
 ## OptionalDeps: PoulsTools

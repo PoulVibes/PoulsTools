@@ -3,7 +3,9 @@
 ## Notes: Centered HUD proc icons with spell activation glow.
 ## Author: Poul
 ## Version: 0.1.8
-## Dependencies: shmIcons
+## RequiredDeps: shmIcons
+## IconTexture: Interface\Icons\inv_misc_book_08
+## Category-enUS: PoulsTools
 ## SavedVariablesPerCharacter: ProcViewerDB
 
 ProcViewer.lua

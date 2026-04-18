@@ -4,4 +4,7 @@
 ## Author: Poul
 ## Version: 1.0
 
+## IconTexture: Interface\Icons\inv_ability_monk_weaponsoforder
+## Category-enUS: PoulsTools
+
 ZenithTracker.lua
