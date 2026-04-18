@@ -408,17 +408,16 @@ local function BuildIconFrame(globalID, db)
     end
 
     frame:SetScript("OnDragStart", function(self, button)
-        if button == "LeftButton" or button == "RightButton" then
-            -- Record starting state so we can revert live snaps on move-away
+        if button == "LeftButton" then
+            -- Solo drag with snap preview
             dragState = {
-                originalSize    = frame:GetWidth(),
-                currentSnapID   = nil,
+                originalSize  = frame:GetWidth(),
+                currentSnapID = nil,
             }
             self:StartMoving()
 
-            -- Solo drag OnUpdate: real-time snap preview
             local soloUpdateFrame = CreateFrame("Frame")
-            icon.groupDragFrame = soloUpdateFrame  -- reuse field for cleanup
+            icon.groupDragFrame = soloUpdateFrame
 
             soloUpdateFrame:SetScript("OnUpdate", function()
                 local myCX, myCY = frame:GetCenter()
@@ -474,6 +473,63 @@ local function BuildIconFrame(globalID, db)
                     end
                 end
             end)
+
+        elseif button == "RightButton" then
+            -- Group drag: BFS from this icon to find all recursively adjacent
+            -- same-size icons. All members move together, maintaining offsets.
+            local mySize         = frame:GetWidth()
+            local initCX, initCY = frame:GetCenter()
+            local uiCX, uiCY     = UIParent:GetCenter()
+
+            -- BFS to collect adjacent same-size icons
+            local groupMembers = {}  -- { icon, offsetX, offsetY }
+            local visited = { [globalID] = true }
+            local queue   = { { id = globalID, cx = initCX, cy = initCY } }
+
+            while #queue > 0 do
+                local curr = table.remove(queue, 1)
+                for otherID, other in pairs(icons) do
+                    if not visited[otherID] and other.frame:IsShown()
+                       and other.frame:GetHeight() == mySize then
+                        local ocx, ocy = other.frame:GetCenter()
+                        local adx = math.abs(ocx - curr.cx)
+                        local ady = math.abs(ocy - curr.cy)
+                        -- Adjacent = within one icon-width in both axes,
+                        -- but not occupying the same center (not the same icon)
+                        if adx <= mySize + 2 and ady <= mySize + 2
+                           and (adx > 2 or ady > 2) then
+                            visited[otherID] = true
+                            table.insert(queue, { id = otherID, cx = ocx, cy = ocy })
+                            table.insert(groupMembers, {
+                                icon    = other,
+                                offsetX = ocx - initCX,
+                                offsetY = ocy - initCY,
+                            })
+                        end
+                    end
+                end
+            end
+
+            dragState = {
+                isGroupDrag  = true,
+                groupMembers = groupMembers,
+                originalSize = mySize,
+            }
+            self:StartMoving()
+
+            -- OnUpdate: reposition group members to follow the dragged icon
+            local groupUpdateFrame = CreateFrame("Frame")
+            icon.groupDragFrame = groupUpdateFrame
+
+            groupUpdateFrame:SetScript("OnUpdate", function()
+                local newCX, newCY = frame:GetCenter()
+                for _, member in ipairs(groupMembers) do
+                    member.icon.frame:ClearAllPoints()
+                    member.icon.frame:SetPoint("CENTER", UIParent, "CENTER",
+                        newCX + member.offsetX - uiCX,
+                        newCY + member.offsetY - uiCY)
+                end
+            end)
         end
     end)
 
@@ -485,7 +541,15 @@ local function BuildIconFrame(globalID, db)
         end
         self:StopMovingOrSizing()
 
-        if dragState and dragState.pendingSnap then
+        if dragState and dragState.isGroupDrag then
+            -- Commit final positions for the dragged icon and all group members
+            SaveIconPos(icon)
+            if icon.onMove then icon.onMove(icon.db) end
+            for _, member in ipairs(dragState.groupMembers) do
+                SaveIconPos(member.icon)
+                if member.icon.onMove then member.icon.onMove(member.icon.db) end
+            end
+        elseif dragState and dragState.pendingSnap then
             local snap   = dragState.pendingSnap
             local isCtrl = dragState.pendingCtrl
 
