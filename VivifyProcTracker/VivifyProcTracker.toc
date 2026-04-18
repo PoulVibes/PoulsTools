@@ -3,6 +3,7 @@
 ## Notes: Tracks Vivacious Vivification procs and broadcasts AceMessages.
 ## Author: YourName
 ## Version: 1.1
+## Dependencies: shmIcons
 ## SavedVariables: VivifyProcTrackerDB
 
 # Libraries

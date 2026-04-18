@@ -1,56 +1,53 @@
+local ADDON_NAME = "VivifyProcTracker"
+
 -- Initialize AceAddon
-local VPT = LibStub("AceAddon-3.0"):NewAddon("VivifyProcTracker", "AceEvent-3.0")
+local VPT = LibStub("AceAddon-3.0"):NewAddon(ADDON_NAME, "AceEvent-3.0")
 
 -- Configuration & IDs
 local VIVIFY_SPELL_ID = 116670
-local RSK_SPELL_ID = 107428
-local RWK_SPELL_ID = 467307
-local PROC_DURATION = 20
-local isLocked = true
+local RSK_SPELL_ID    = 107428
+local RWK_SPELL_ID    = 467307
+local PROC_DURATION   = 20
 local timerHandle
+local procActive      = false
 
 function VPT:OnInitialize()
-    -- Setup Saved Variables
-    VivifyProcTrackerDB = VivifyProcTrackerDB or { point = "CENTER", x = 0, y = -100, width = 50, height = 50 }
-    
-    self:CreateUI()
+    -- Setup Saved Variables with shmIcons-compatible schema
+    VivifyProcTrackerDB = VivifyProcTrackerDB or {
+        point        = "CENTER",
+        x            = 0,
+        y            = -100,
+        size         = 50,
+        enabled      = true,
+        glow_enabled = false,
+    }
+
+    -- Migrate legacy width/height fields to size
+    local db = VivifyProcTrackerDB
+    if db.width and not db.size then
+        db.size   = db.width
+        db.width  = nil
+        db.height = nil
+    end
+
+    -- Register icon with shmIcons; library owns the frame
+    shmIcons:Register(ADDON_NAME, "vivify", db, {
+        onResize = function(sq) db.size = sq end,
+        onMove   = function(_db) end,
+    })
+    shmIcons:SetIcon(ADDON_NAME, "vivify", C_Spell.GetSpellTexture(VIVIFY_SPELL_ID))
+    shmIcons:SetVisible(ADDON_NAME, "vivify", false)
+
     self:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
-    
-    -- Slash Command
+
+    -- Slash Command: /vpt lock  →  delegates to shmIcons global lock toggle
     SLASH_VPT1 = "/vpt"
-    SlashCmdList["VPT"] = function(msg) self:ToggleLock(msg) end
-end
-
-function VPT:CreateUI()
-    local frame = CreateFrame("Frame", "VivifyProcTrackerFrame", UIParent, "BackdropTemplate")
-    self.frame = frame
-    frame:SetMovable(true)
-    frame:SetResizable(true)
-    frame:SetClampedToScreen(true)
-    frame:SetSize(VivifyProcTrackerDB.width, VivifyProcTrackerDB.height)
-    frame:SetPoint(VivifyProcTrackerDB.point, UIParent, VivifyProcTrackerDB.relPoint or "CENTER", VivifyProcTrackerDB.x, VivifyProcTrackerDB.y)
-    frame:Hide()
-
-    -- Icon & Cooldown
-    frame.texture = frame:CreateTexture(nil, "ARTWORK")
-    frame.texture:SetAllPoints(frame)
-    frame.texture:SetTexture(C_Spell.GetSpellTexture(VIVIFY_SPELL_ID))
-
-    frame.cooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
-    frame.cooldown:SetAllPoints(frame)
-    frame.cooldown:SetReverse(true)
-    frame.cooldown:SetHideCountdownNumbers(false)
-
-    -- Visual Unlock BG
-    frame.bg = frame:CreateTexture(nil, "BACKGROUND")
-    frame.bg:SetAllPoints(frame)
-    frame.bg:SetColorTexture(0, 0, 0, 0.5)
-    frame.bg:Hide()
-
-    -- Drag/Resize Logic
-    frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStop", function(f) f:StopMovingOrSizing(); self:SavePos() end)
-    frame:SetScript("OnDragStart", function(f) if not isLocked then f:StartMoving() end end)
+    SlashCmdList["VPT"] = function(msg)
+        if msg:lower() == "lock" then
+            local locked = shmIcons:ToggleLock()
+            print("shmIcons: All icons " .. (locked and "Locked." or "Unlocked."))
+        end
+    end
 end
 
 function VPT:UNIT_SPELLCAST_SUCCEEDED(event, unit, castGUID, spellID)
@@ -58,47 +55,33 @@ function VPT:UNIT_SPELLCAST_SUCCEEDED(event, unit, castGUID, spellID)
 
     -- Trigger the Proc
     if spellID == RSK_SPELL_ID or spellID == RWK_SPELL_ID then
-        self.frame:Show()
-        self.frame.cooldown:SetCooldown(GetTime(), PROC_DURATION)
-        
+        procActive = true
+        shmIcons:SetVisible(ADDON_NAME, "vivify", true)
+        shmIcons:SetCooldownRaw(ADDON_NAME, "vivify", GetTime(), PROC_DURATION)
+        shmIcons:SetGlow(ADDON_NAME, "vivify", false)
+
         if timerHandle then timerHandle:Cancel() end
-        timerHandle = C_Timer.After(PROC_DURATION, function() 
-            if self.frame:IsVisible() and isLocked then
-                self.frame:Hide()
-            end
+        timerHandle = C_Timer.After(PROC_DURATION, function()
+            procActive = false
+            timerHandle = nil
+            shmIcons:SetVisible(ADDON_NAME, "vivify", false)
+            shmIcons:SetCooldownRaw(ADDON_NAME, "vivify", 0, 0)
+            shmIcons:SetGlow(ADDON_NAME, "vivify", false)
         end)
 
     -- Handle Vivify Logic
     elseif spellID == VIVIFY_SPELL_ID then
-        -- If frame is visible and locked, it's a proc
-        if self.frame:IsVisible() and isLocked then
-            self.frame:Hide()
+        if procActive then
+            -- Proc consumed by this cast
+            procActive = false
             if timerHandle then timerHandle:Cancel() end
-            -- Custom Message: Proc Consumed
+            timerHandle = nil
+            shmIcons:SetVisible(ADDON_NAME, "vivify", false)
+            shmIcons:SetCooldownRaw(ADDON_NAME, "vivify", 0, 0)
+            shmIcons:SetGlow(ADDON_NAME, "vivify", false)
             self:SendMessage("VIVIFY_PROC_CONSUMED")
         else
-            -- Custom Message: Normal Cast
             self:SendMessage("VIVIFY_NORMAL_CAST")
-        end
-    end
-end
-
-function VPT:SavePos()
-    local point, _, relPoint, x, y = self.frame:GetPoint()
-    VivifyProcTrackerDB.point, VivifyProcTrackerDB.relPoint = point, relPoint
-    VivifyProcTrackerDB.x, VivifyProcTrackerDB.y = x, y
-    VivifyProcTrackerDB.width, VivifyProcTrackerDB.height = self.frame:GetWidth(), self.frame:GetHeight()
-end
-
-function VPT:ToggleLock(msg)
-    if msg:lower() == "lock" then
-        isLocked = not isLocked
-        if isLocked then
-            self.frame:EnableMouse(false); self.frame.bg:Hide(); self.frame:Hide()
-            print("|cFF00FF00VPT: Locked.|r")
-        else
-            self.frame:EnableMouse(true); self.frame.bg:Show(); self.frame:Show()
-            print("|cFFFFFF00VPT: Unlocked. Drag to move/resize.|r")
         end
     end
 end
