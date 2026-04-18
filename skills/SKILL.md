@@ -9,7 +9,7 @@ All source code being worked on in this repository is lua code for WoW addons, s
 
 
 ## Core Reference
-- **Main API Index**: [./WOW%20API%20documentation/documentation/API_changes.md](./WOW%20API%20documentation/documentation/API_changes.md)
+- **Main API Index**: [./WOW API documentation/documentation/API_changes.md](./WOW API documentation/documentation/API_changes.md)
   - Use this file as your primary starting point to find function signatures, command changes, and links to specific module documentation.
 
 ## Instructions for the Agent
@@ -36,4 +36,3 @@ All source code being worked on in this repository is lua code for WoW addons, s
 
 ### Third-Party Library Docs
 - **[../VivifyProcTracker/Libs/README.md](../VivifyProcTracker/Libs/README.md)** — Read when working with the Ace3 framework (lifecycle, saved variables, events, config); points to official Ace3 documentation and repository links.
- 
