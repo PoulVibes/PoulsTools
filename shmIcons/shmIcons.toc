@@ -5,5 +5,7 @@
 ## Author: You
 ## SavedVariables: shmIconsDB
 ## LoadOnDemand: 0
+## OptionalDeps: PoulsTools
 
 shmIcons.lua
+shmIcons_PoulsTools.lua
