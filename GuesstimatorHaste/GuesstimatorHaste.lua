@@ -40,7 +40,7 @@ local function EnableAddon()
         frame:Hide()
         logFrame:Hide()
     end
-    print("[GuesstimatorHaste] enabled for required spec")
+    --print("[GuesstimatorHaste] enabled for required spec")
 end
 
 local function DisableAddon()
@@ -49,24 +49,24 @@ local function DisableAddon()
     frame:UnregisterEvent("PLAYER_REGEN_DISABLED")
     frame:Hide()
     logFrame:Hide()
-    print("[GuesstimatorHaste] disabled (not required spec)")
+    --print("[GuesstimatorHaste] disabled (not required spec)")
 end
 
 local function UpdateEnabledState()
     if not IsPlayerClass(REQUIRED_CLASS) then
-        print("[GuesstimatorHaste] abort: wrong class")
+        --print("[GuesstimatorHaste] abort: wrong class")
         frame:UnregisterAllEvents()
         frame:SetScript("OnUpdate", nil)
         frame:Hide()
         logFrame:Hide()
-        print("Not a Monk please disable GuesstimatorHaste")
+        --print("Not a Monk please disable GuesstimatorHaste")
         return
     end
     if IsPlayerSpec(REQUIRED_SPEC_ID) then
-        print("I am the required class and spec.")
+        --print("I am the required class and spec.")
         EnableAddon()
     else
-        print("Not a windwalker GuesstimatedHaste will be disabled")
+        --print("Not a windwalker GuesstimatedHaste will be disabled")
         DisableAddon()
     end
 end
@@ -118,11 +118,11 @@ end
 SLASH_GUESSHASTE1 = "/gh"
 SlashCmdList["GUESSHASTE"] = function()
     if not IsPlayerClass(REQUIRED_CLASS) then
-        print("[GuesstimatorHaste] only available for Monks")
+        --print("[GuesstimatorHaste] only available for Monks")
         return
     end
     if not IsPlayerSpec(REQUIRED_SPEC_ID) then
-        print("[GuesstimatorHaste] only active for Windwalker")
+        --print("[GuesstimatorHaste] only active for Windwalker")
         return
     end
     local show = not frame:IsShown()

@@ -36,9 +36,64 @@ local function ResetStreak()
     shmIcons:SetGlow(ADDON_NAME, "combo", false)
 end
 
+local REQUIRED_CLASS = "MONK"
+local REQUIRED_SPEC_ID = 269
+local addonEnabled = false
+
+-- Create event frame early so helpers can register/unregister safely
 local eventFrame = CreateFrame("Frame")
+eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("ADDON_LOADED")
-eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+eventFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
+
+local function IsPlayerMonk()
+    local _, classToken = UnitClass("player")
+    return classToken == REQUIRED_CLASS
+end
+
+local function IsPlayerWindwalkerSpec()
+    local specIndex = GetSpecialization()
+    if not specIndex then return false end
+    local specID = select(1, GetSpecializationInfo(specIndex))
+    return specID == REQUIRED_SPEC_ID
+end
+
+local function EnableAddon()
+    if addonEnabled then return end
+    addonEnabled = true
+    eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+    --print("[" .. ADDON_NAME .. "] enabled (Windwalker).")
+end
+
+local function DisableAddon()
+    if not addonEnabled then return end
+    addonEnabled = false
+    eventFrame:UnregisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+    if timerHandle then timerHandle:Cancel(); timerHandle = nil end
+    ComboStrikeStreak = 0
+    LastComboStrikeSpellID = 0
+    shmIcons:SetVisible(ADDON_NAME, "combo", false)
+    shmIcons:SetCooldownRaw(ADDON_NAME, "combo", 0, 0)
+    shmIcons:SetStacks(ADDON_NAME, "combo", 0)
+    shmIcons:SetGlow(ADDON_NAME, "combo", false)
+    --print("[" .. ADDON_NAME .. "] disabled (not Windwalker).")
+end
+
+local function UpdateEnabledState()
+    if not IsPlayerMonk() then
+        --print("[" .. ADDON_NAME .. "] abort: wrong class (not Monk).")
+        eventFrame:UnregisterAllEvents()
+        return
+    end
+    if IsPlayerWindwalkerSpec() then
+        EnableAddon()
+    else
+
+        DisableAddon()
+    end
+end
+
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" and ... == ADDON_NAME then
         ComboTrackerDB = ComboTrackerDB or {
@@ -52,13 +107,40 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         -- Migrate legacy locked field
         local db = ComboTrackerDB
         db.locked = nil
-
+        
         shmIcons:Register(ADDON_NAME, "combo", db, {
             onResize = function(sq) db.size = sq end,
             onMove   = function(_db) end,
         })
         shmIcons:SetIcon(ADDON_NAME, "combo", TRACKER_ICON)
         shmIcons:SetVisible(ADDON_NAME, "combo", false)
+        -- After initialization, enable/disable based on class/spec
+        UpdateEnabledState()
+
+    elseif event == "PLAYER_LOGIN" then
+        -- Abort if not a Monk (no point continuing)
+        local _, classToken = UnitClass("player")
+        if classToken ~= "MONK" then
+            --print("|cff00ff00[" .. ADDON .. " v" .. VERSION .. "]|r")
+            --print("  ProcViewer disabled: not a Monk.")
+            eventFrame:UnregisterAllEvents()
+            return
+        end
+        -- Enable only if Windwalker, otherwise stay disabled but listen for spec changes
+        if IsPlayerWindwalkerSpec() then
+            EnableAddon()
+        else
+            DisableAddon()
+            --print("|cff00ff00[" .. ADDON .. " v" .. VERSION .. "]|r")
+            --print("  ProcViewer loaded but inactive (not Windwalker).")
+        end
+
+    elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
+        local unit = select(1,...)
+        if unit == "player" then UpdateEnabledState() end
+
+    elseif event == "ACTIVE_TALENT_GROUP_CHANGED" then
+        UpdateEnabledState()
 
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
         local _, _, spellID = ...

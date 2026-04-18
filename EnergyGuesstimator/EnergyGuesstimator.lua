@@ -42,7 +42,7 @@ local function EnableAddon()
     frame:RegisterEvent("UNIT_POWER_UPDATE")
     frame:RegisterEvent("PLAYER_REGEN_ENABLED")
     frame:RegisterEvent("UNIT_MAXPOWER")
-    print("[Guesstimator] enabled for required spec")
+    --print("[Guesstimator] enabled for required spec")
 end
 
 local function DisableAddon()
@@ -53,12 +53,12 @@ local function DisableAddon()
     frame:UnregisterEvent("PLAYER_REGEN_ENABLED")
     frame:UnregisterEvent("UNIT_MAXPOWER")
     ui:Hide()
-    print("[Guesstimator] disabled (not required spec)")
+    --print("[Guesstimator] disabled (not required spec)")
 end
 
 local function UpdateEnabledState()
     if not IsPlayerClass(REQUIRED_CLASS) then
-        print("[Guesstimator] abort: wrong class")
+        --print("[Guesstimator] abort: wrong class")
         frame:UnregisterAllEvents()
         ui:SetScript("OnUpdate", nil)
         ui:Hide()
@@ -194,11 +194,11 @@ end)
 SLASH_GUESSTIMATE1 = "/ge"
 SlashCmdList["GUESSTIMATE"] = function()
     if not IsPlayerClass(REQUIRED_CLASS) then
-        print("[Guesstimator] only available for Monks")
+        --print("[Guesstimator] only available for Monks")
         return
     end
     if not IsPlayerSpec(REQUIRED_SPEC_ID) then
-        print("[Guesstimator] only active for Windwalker")
+        --print("[Guesstimator] only active for Windwalker")
         return
     end
     if ui:IsShown() then ui:Hide() else ui:Show() end

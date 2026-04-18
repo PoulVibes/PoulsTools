@@ -13,6 +13,8 @@ This short how-to explains the common pattern to ensure an addon only runs while
 - Create your event frame early so helper functions can register/unregister events without nil errors.
 - Register only the events needed while the addon is active (reduce overhead and avoid spurious handling for other classes).
 
+Note about timing: do not rely on `GetSpecialization()` during `ADDON_LOADED` — the player's specialization may not be initialized by the UI yet. Perform the first specialization check at `PLAYER_LOGIN` (or later), and use `PLAYER_SPECIALIZATION_CHANGED` / `ACTIVE_TALENT_GROUP_CHANGED` to handle runtime changes.
+
 ## Useful APIs
 - `UnitClass("player")` → returns (localizedName, classToken) where `classToken` is e.g. `"MONK"`.
 - `GetSpecialization()` → returns the active specialization index (or nil).
@@ -31,6 +33,8 @@ local REQUIRED_SPEC_ID = 269        -- specID (e.g. Windwalker)
 
 -- Create event frame early so Enable/Disable helpers can reference it
 local eventFrame = CreateFrame("Frame")
+-- Listen for saved-vars initialization and the player login (spec is valid at LOGIN)
+eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 eventFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
@@ -92,15 +96,21 @@ local function UpdateEnabledState()
 end
 
 eventFrame:SetScript("OnEvent", function(self, event, arg1)
-  if event == "PLAYER_LOGIN" then
+  if event == "ADDON_LOADED" then
+    -- Initialise saved-variables and register any icons/UI here.
+    -- Do NOT rely on `GetSpecialization()` here; the player's spec may not be ready.
+    if arg1 == ADDON then
+      -- init saved-vars, register icons, etc.
+    end
+
+  elseif event == "PLAYER_LOGIN" then
+    -- PLAYER_LOGIN is the first reliable point to query the player's specialization.
     UpdateEnabledState()
 
   elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
-    -- arg1 will be "player" when the player's spec changed
     if arg1 == "player" then UpdateEnabledState() end
 
   elseif event == "ACTIVE_TALENT_GROUP_CHANGED" then
-    -- Handle talent group swaps (if relevant to the addon)
     UpdateEnabledState()
 
   elseif event == "SPELL_ACTIVATION_OVERLAY_GLOW_SHOW" then

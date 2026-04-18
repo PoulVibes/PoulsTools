@@ -228,8 +228,8 @@ local function EnableAddon()
     if not iconsRegistered then RegisterIcons() end
     eventFrame:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_SHOW")
     eventFrame:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_HIDE")
-    print("|cff00ff00[" .. ADDON .. " v" .. VERSION .. "]|r")
-    print("  ProcViewer enabled (Windwalker).")
+    --print("|cff00ff00[" .. ADDON .. " v" .. VERSION .. "]|r")
+    --print("  ProcViewer enabled (Windwalker).")
 end
 
 local function DisableAddon()
@@ -255,8 +255,8 @@ local function DisableAddon()
     end
 
     tickerFrame:Hide()
-    print("|cff00ff00[" .. ADDON .. " v" .. VERSION .. "]|r")
-    print("  ProcViewer disabled (not Windwalker).")
+    --print("|cff00ff00[" .. ADDON .. " v" .. VERSION .. "]|r")
+    --print("  ProcViewer disabled (not Windwalker).")
 end
 
 local function UpdateEnabledState()
@@ -288,8 +288,8 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
         -- Abort if not a Monk (no point continuing)
         local _, classToken = UnitClass("player")
         if classToken ~= "MONK" then
-            print("|cff00ff00[" .. ADDON .. " v" .. VERSION .. "]|r")
-            print("  ProcViewer disabled: not a Monk.")
+            --print("|cff00ff00[" .. ADDON .. " v" .. VERSION .. "]|r")
+            --print("  ProcViewer disabled: not a Monk.")
             eventFrame:UnregisterAllEvents()
             return
         end
@@ -309,8 +309,8 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
             EnableAddon()
         else
             DisableAddon()
-            print("|cff00ff00[" .. ADDON .. " v" .. VERSION .. "]|r")
-            print("  ProcViewer loaded but inactive (not Windwalker).")
+            --print("|cff00ff00[" .. ADDON .. " v" .. VERSION .. "]|r")
+            --print("  ProcViewer loaded but inactive (not Windwalker).")
         end
 
     elseif event == "PLAYER_SPECIALIZATION_CHANGED" then

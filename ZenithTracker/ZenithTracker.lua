@@ -26,7 +26,7 @@ local function EnableAddon()
     if addonEnabled then return end
     addonEnabled = true
     frame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
-    print("[ZenithTracker] enabled for required spec")
+    --print("[ZenithTracker] enabled for required spec")
 end
 
 local function DisableAddon()
@@ -34,12 +34,12 @@ local function DisableAddon()
     addonEnabled = false
     frame:UnregisterEvent("UNIT_SPELLCAST_SUCCEEDED")
     iconFrame:Hide()
-    print("[ZenithTracker] disabled (not required spec)")
+    --print("[ZenithTracker] disabled (not required spec)")
 end
 
 local function UpdateEnabledState()
     if not IsPlayerClass(REQUIRED_CLASS) then
-        print("[ZenithTracker] abort: wrong class")
+        --print("[ZenithTracker] abort: wrong class")
         frame:UnregisterAllEvents()
         iconFrame:Hide()
         return
@@ -79,7 +79,7 @@ SLASH_ZENITH1 = "/zenith"
 SlashCmdList["ZENITH"] = function(msg)
     _G["ZenithIconEnabled"] = not _G["ZenithIconEnabled"]
     local status = _G["ZenithIconEnabled"] and "|cff00FF00Enabled|r" or "|cffFF0000Disabled|r"
-    print("|cff00FFFFZenith Tracker:|r Icon display is now " .. status)
+    --print("|cff00FFFFZenith Tracker:|r Icon display is now " .. status)
     
     -- If disabled while active, hide immediately
     if not _G["ZenithIconEnabled"] then iconFrame:Hide() end
