@@ -163,36 +163,66 @@ function Menu:RefreshAddonList()
     end
     self.addonEntries = {}
 
-    local anchor = self.addonListAnchor
-    local yOffset = -8
-    local count = 0
-
+    -- Build ordered list: top-level addons (sorted by name), each followed by their children
+    local topLevel = {}
     for id, info in pairs(self.registry) do
-        count = count + 1
-        local row = self:CreateAddonListRow(self.addonListFrame, info, count)
-        row:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, yOffset - ((count - 1) * 32))
-        table.insert(self.addonEntries, row)
+        if not info.parentId then
+            topLevel[#topLevel + 1] = info
+        end
+    end
+    table.sort(topLevel, function(a, b) return a.name < b.name end)
+
+    local ordered = {}
+    for _, info in ipairs(topLevel) do
+        ordered[#ordered + 1] = { info = info, isChild = false }
+        local children = {}
+        for id2, child in pairs(self.registry) do
+            if child.parentId == info.id then
+                children[#children + 1] = child
+            end
+        end
+        table.sort(children, function(a, b) return a.name < b.name end)
+        for _, child in ipairs(children) do
+            ordered[#ordered + 1] = { info = child, isChild = true }
+        end
     end
 
-    if count == 0 then
+    if #ordered == 0 then
         local empty = self.addonListFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        empty:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -12)
+        empty:SetPoint("TOPLEFT", self.addonListAnchor, "BOTTOMLEFT", 0, -12)
         empty:SetText("|cFF888888No sub-addons registered yet.|r")
         table.insert(self.addonEntries, empty)
+        return
+    end
+
+    local prevRow = nil
+    for i, entry in ipairs(ordered) do
+        local row = self:CreateAddonListRow(self.addonListFrame, entry.info, i, entry.isChild)
+        if prevRow then
+            row:SetPoint("TOPLEFT", prevRow, "BOTTOMLEFT", 0, -4)
+        else
+            row:SetPoint("TOPLEFT", self.addonListAnchor, "BOTTOMLEFT", 0, -8)
+        end
+        table.insert(self.addonEntries, row)
+        prevRow = row
     end
 end
 
 -- ============================================================
 -- Create a single row entry for the main panel addon list
+-- isChild: if true, indent icon/text and use a dimmer background
 -- ============================================================
-function Menu:CreateAddonListRow(parent, info, index)
+function Menu:CreateAddonListRow(parent, info, index, isChild)
     local row = CreateFrame("Button", nil, parent)
+    local indent = isChild and 20 or 0
     row:SetSize(560, 28)
 
-    -- Alternating row background
+    -- Row background
     local bg = row:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
-    if index % 2 == 0 then
+    if isChild then
+        bg:SetColorTexture(0.03, 0.05, 0.10, 0.25)
+    elseif index % 2 == 0 then
         bg:SetColorTexture(0.06, 0.10, 0.16, 0.5)
     else
         bg:SetColorTexture(0.04, 0.07, 0.12, 0.3)
@@ -203,8 +233,16 @@ function Menu:CreateAddonListRow(parent, info, index)
     hl:SetAllPoints()
     hl:SetColorTexture(0.0, 0.6, 1.0, 0.15)
 
+    -- Indent connector bar for child rows
+    if isChild then
+        local connector = row:CreateTexture(nil, "OVERLAY")
+        connector:SetPoint("LEFT", row, "LEFT", indent - 10, 0)
+        connector:SetSize(2, 18)
+        connector:SetColorTexture(0.2, 0.5, 0.8, 0.5)
+    end
+
     -- Icon (if provided)
-    local xOffset = 8
+    local xOffset = 8 + indent
     if info.icon then
         local icon = row:CreateTexture(nil, "ARTWORK")
         icon:SetPoint("LEFT", row, "LEFT", xOffset, 0)
@@ -217,7 +255,11 @@ function Menu:CreateAddonListRow(parent, info, index)
     local nameLabel = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     nameLabel:SetPoint("LEFT", row, "LEFT", xOffset, 0)
     nameLabel:SetText(info.name)
-    nameLabel:SetTextColor(0.9, 0.95, 1.0, 1.0)
+    if isChild then
+        nameLabel:SetTextColor(0.75, 0.88, 0.98, 1.0)
+    else
+        nameLabel:SetTextColor(0.9, 0.95, 1.0, 1.0)
+    end
 
     -- Version (if provided)
     if info.version then
@@ -233,7 +275,7 @@ function Menu:CreateAddonListRow(parent, info, index)
         descLabel:SetPoint("RIGHT", row, "RIGHT", -8, 0)
         descLabel:SetText(info.desc)
         descLabel:SetTextColor(0.55, 0.65, 0.75, 1.0)
-        descLabel:SetWidth(220)
+        descLabel:SetWidth(220 - indent)
         descLabel:SetJustifyH("RIGHT")
     end
 
@@ -352,12 +394,55 @@ function Menu:CreateSubPanel(info)
     contentFrame:SetPoint("TOPLEFT", scroll, "TOPLEFT", 0, 0)
     scroll:SetScrollChild(contentFrame)
 
-    -- Call the addon's UI builder inside the scroll child
+    -- Collect direct children of this addon (already in registry at PLAYER_LOGIN)
+    local children = {}
+    for id, reg in pairs(self.registry) do
+        if reg.parentId == info.id then
+            children[#children + 1] = reg
+        end
+    end
+    table.sort(children, function(a, b) return a.name < b.name end)
+
+    -- If this addon has children, inject a sub-addons list at the top of the scroll content
+    local onBuildUIParent = contentFrame
+    if #children > 0 then
+        local childLabel = contentFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        childLabel:SetPoint("TOPLEFT", contentFrame, "TOPLEFT", 0, -12)
+        childLabel:SetText("SUB-ADDONS")
+        childLabel:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
+        childLabel:SetTextColor(0.4, 0.6, 0.8, 1.0)
+
+        local childLine = contentFrame:CreateTexture(nil, "OVERLAY")
+        childLine:SetPoint("TOPLEFT", childLabel, "BOTTOMLEFT", 0, -4)
+        childLine:SetSize(540, 1)
+        childLine:SetColorTexture(0.15, 0.25, 0.35, 0.8)
+
+        local prevAnchor = childLine
+        for i, child in ipairs(children) do
+            local row = self:CreateAddonListRow(contentFrame, child, i, false)
+            row:SetPoint("TOPLEFT", prevAnchor, "BOTTOMLEFT", 0, -4)
+            prevAnchor = row
+        end
+
+        -- Divider between child list and addon's own settings
+        local dividerLine = contentFrame:CreateTexture(nil, "OVERLAY")
+        dividerLine:SetPoint("TOPLEFT", prevAnchor, "BOTTOMLEFT", 0, -12)
+        dividerLine:SetSize(540, 1)
+        dividerLine:SetColorTexture(0.1, 0.2, 0.3, 0.5)
+
+        -- Inner frame below the child list; passed as parent to OnBuildUI
+        local innerFrame = CreateFrame("Frame", nil, contentFrame)
+        innerFrame:SetPoint("TOPLEFT", dividerLine, "BOTTOMLEFT", 0, -8)
+        innerFrame:SetSize(560, 900)
+        onBuildUIParent = innerFrame
+    end
+
+    -- Call the addon's UI builder
     if info.OnBuildUI then
-        local ok, err = pcall(info.OnBuildUI, contentFrame)
+        local ok, err = pcall(info.OnBuildUI, onBuildUIParent)
         if not ok then
-            local errText = contentFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            errText:SetPoint("TOPLEFT", contentFrame, "TOPLEFT", 16, -16)
+            local errText = onBuildUIParent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            errText:SetPoint("TOPLEFT", onBuildUIParent, "TOPLEFT", 16, -16)
             errText:SetWidth(548)
             errText:SetText("|cFFFF4444Error building UI for " .. info.name .. ":|r\n" .. tostring(err))
         end
