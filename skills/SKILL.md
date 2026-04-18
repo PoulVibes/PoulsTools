@@ -9,7 +9,7 @@ All source code being worked on in this repository is lua code for WoW addons, s
 
 
 ## Core Reference
-- **Main API Index**: [./WOW API documentation/documentation/API_changes.md](./WOW API documentation/documentation/API_changes.md)
+- **Main API Index**: [./WOW_API_documentation/documentation/API_changes.md](./WOW_API_documentation/documentation/API_changes.md)
   - Use this file as your primary starting point to find function signatures, command changes, and links to specific module documentation.
 
 ## Instructions for the Agent
