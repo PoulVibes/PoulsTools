@@ -8,8 +8,14 @@ local VIVIFY_SPELL_ID = 116670
 local RSK_SPELL_ID    = 107428
 local RWK_SPELL_ID    = 467307
 local PROC_DURATION   = 20
-local timerHandle
+local timerHandle     = nil
 local procActive      = false
+
+local REQUIRED_CLASS = "MONK"
+local function IsPlayerMonk()
+    local _, classToken = UnitClass("player")
+    return classToken == REQUIRED_CLASS
+end
 
 function VPT:OnInitialize()
     -- Setup Saved Variables with shmIcons-compatible schema
@@ -28,6 +34,11 @@ function VPT:OnInitialize()
         db.size   = db.width
         db.width  = nil
         db.height = nil
+    end
+
+    -- Only enable this addon for Monks
+    if not IsPlayerMonk() then
+        return
     end
 
     -- Register icon with shmIcons; library owns the frame
@@ -61,8 +72,9 @@ function VPT:UNIT_SPELLCAST_SUCCEEDED(event, unit, castGUID, spellID)
         shmIcons:SetGlow(ADDON_NAME, "vivify", false)
 
         if timerHandle then timerHandle:Cancel() end
-        timerHandle = C_Timer.After(PROC_DURATION, function()
+        timerHandle =  C_Timer.NewTimer(PROC_DURATION, function()
             procActive = false
+            if timerHandle then timerHandle:Cancel() end
             timerHandle = nil
             shmIcons:SetVisible(ADDON_NAME, "vivify", false)
             shmIcons:SetCooldownRaw(ADDON_NAME, "vivify", 0, 0)
