@@ -4,6 +4,7 @@
 ## Version: 1.0.0
 ## Author: You
 ## SavedVariablesPerCharacter: ItemTrackerDB
-## Dependencies: shmIcons
+## Dependencies: shmIcons, PoulsTools
 
 ItemTracker.lua
+ItemTracker_PoulsTools.lua

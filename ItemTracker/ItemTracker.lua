@@ -23,6 +23,16 @@ local tracked = {}
 
 local currentSpecID = nil
 
+-- Change listeners for UI integrations (called when trackers change)
+local changeListeners = {}
+
+local function NotifyChangeListeners()
+    for _, cb in ipairs(changeListeners) do
+        local ok, err = pcall(cb)
+        if not ok then print("|cFFFF4444ItemTracker: listener error: " .. tostring(err) .. "|r") end
+    end
+end
+
 -- ============================================================
 -- Spec helper
 -- ============================================================
@@ -197,6 +207,8 @@ local function AddItem(input, specID)
 
     tracked[key] = { itemName = itemName, itemID = itemID }
     UpdateItem(key)
+    -- notify external UIs (PoulsTools) so they can refresh lists
+    NotifyChangeListeners()
 end
 
 local function RemoveItem(key)
@@ -204,6 +216,8 @@ local function RemoveItem(key)
     tracked[key] = nil
     local items = GetSpecItems(currentSpecID)
     if items[key] then items[key].enabled = false end
+    -- notify external UIs (PoulsTools) so they can refresh lists
+    NotifyChangeListeners()
 end
 
 local function UnloadSpec()
@@ -211,6 +225,8 @@ local function UnloadSpec()
         shmIcons:Unregister(ADDON_NAME, key)
     end
     tracked = {}
+    -- notify external UIs that tracked list changed (cleared)
+    NotifyChangeListeners()
 end
 
 local function LoadSpec(specID)
@@ -234,6 +250,8 @@ local function LoadSpec(specID)
     end
     shmIcons:RestoreSnapGroups()
     UpdateAllItems()
+    -- notify external UIs so they can refresh when specialization changes
+    NotifyChangeListeners()
 end
 
 -- ============================================================
@@ -374,3 +392,92 @@ eventFrame:RegisterEvent("BAG_UPDATE_COOLDOWN")
 eventFrame:RegisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
 eventFrame:RegisterEvent("BAG_UPDATE")
 eventFrame:RegisterEvent("ITEM_COUNT_CHANGED")
+
+
+-- Public API wrappers for PoulsTools UI and other integrations
+function ItemTracker_Add(itemName, specID)
+    AddItem(itemName, specID)
+end
+
+function ItemTracker_Remove(itemName)
+    local key = KeyFor(itemName)
+    if tracked[key] then RemoveItem(key) end
+end
+
+function ItemTracker_ToggleGlow(itemName)
+    local key = KeyFor(itemName)
+    if not tracked[key] then
+        print("|cFFFF0000ItemTracker: not tracking '" .. itemName .. "'.|r")
+        return
+    end
+    local enabled = shmIcons:ToggleGlowEnabled(ADDON_NAME, key)
+    local state = enabled and "|cFF00FF00enabled|r" or "|cFFFFFF00disabled|r"
+    print("ItemTracker: glow " .. state .. " for " .. itemName .. ".")
+    UpdateItem(key)
+end
+
+function ItemTracker_Reset(itemName)
+    local key = KeyFor(itemName)
+    if not tracked[key] then
+        print("|cFFFF0000ItemTracker: not tracking '" .. itemName .. "'.|r")
+        return
+    end
+    shmIcons:ResetIcon(ADDON_NAME, key, DEFAULT_SIZE)
+    print("|cFF00FF00ItemTracker: reset " .. itemName .. ".|r")
+end
+
+function ItemTracker_ResetAll()
+    for key in pairs(tracked) do
+        shmIcons:ResetIcon(ADDON_NAME, key, DEFAULT_SIZE)
+    end
+    print("|cFF00FF00ItemTracker: All positions reset.|r")
+end
+
+function ItemTracker_ToggleLock()
+    local locked = shmIcons:ToggleLock()
+    local state = locked
+        and "|cFF00FF00Locked.|r"
+        or  "|cFFFFFF00Unlocked. Left-drag: move solo. Right-drag: move group.|r"
+    print("shmIcons: All icons " .. state)
+    return locked
+end
+
+function ItemTracker_List()
+    local found = false
+    for key, entry in pairs(tracked) do
+        local db        = GetSpecItems(currentSpecID)[key]
+        local glowState = db and db.glow_enabled and "glow on" or "glow off"
+        local count     = GetItemCount(entry.itemID, false, false) or 0
+        local countStr  = count > 0 and ("|cFFFFFFFFx" .. count .. "|r") or "|cFFFF4444none in bags|r"
+        print(string.format("|cFFFFFF00  %s|r  [ID:%d]  %s  [%s]",
+            entry.itemName, entry.itemID, countStr, glowState))
+        found = true
+    end
+    if not found then print("|cFFFFFF00ItemTracker: no items tracked yet.|r") end
+end
+
+-- Allow external UI to register a callback to be notified when the tracked
+-- items for the current spec change (add/remove).
+function ItemTracker_RegisterChangeListener(fn)
+    changeListeners[#changeListeners + 1] = fn
+end
+
+-- Return a simple array of tracked item entries for the given specID.
+function ItemTracker_GetTrackedItems(specID)
+    specID = specID or GetCurrentSpecID()
+    local items = GetSpecItems(specID)
+    local out = {}
+    for key, db in pairs(items) do
+        if db and db.enabled and db.itemID then
+            out[#out + 1] = { key = key, db = db, itemName = db.itemName, itemID = db.itemID }
+        end
+    end
+    return out
+end
+
+-- Central command handler (optional) so UI and slash both use the same logic
+function ItemTracker_HandleCommand(msg)
+    if SlashCmdList and SlashCmdList["ITEMTRACKER"] then
+        SlashCmdList["ITEMTRACKER"](msg)
+    end
+end
