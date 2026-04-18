@@ -6,6 +6,17 @@
 if not PoulsTools then return end
 if not shmIcons   then return end
 
+-- Slot names for TrinketTracker entries (localID is the numeric slotID as a string)
+local TRINKET_SLOT_NAMES = {
+    [1]  = "Head",      [2]  = "Neck",      [3]  = "Shoulder",
+    [4]  = "Shirt",     [5]  = "Chest",     [6]  = "Belt",
+    [7]  = "Legs",      [8]  = "Feet",      [9]  = "Wrist",
+    [10] = "Gloves",    [11] = "Ring 1",    [12] = "Ring 2",
+    [13] = "Trinket 1", [14] = "Trinket 2", [15] = "Back",
+    [16] = "Main Hand", [17] = "Off Hand",  [18] = "Ranged",
+    [19] = "Tabard",
+}
+
 local function OnBuildUI(parent)
     local W = PoulsTools.Widgets
     if not W then
@@ -107,9 +118,17 @@ local function OnBuildUI(parent)
                 rowY = rowY + 20
             end
 
-            -- Derive a human-readable display name from the saved DB, falling back
-            -- to the key with underscores replaced by spaces.
-            local displayName = (db and (db.spellName or db.itemName)) or localID:gsub("_", " ")
+            -- Derive a human-readable display name from the saved DB.
+            -- For TrinketTracker the localID is the numeric slot ID; map it to a name.
+            local displayName = db and (db.spellName or db.itemName)
+            if not displayName then
+                local slotNum = tonumber(localID)
+                if slotNum and TRINKET_SLOT_NAMES[slotNum] then
+                    displayName = TRINKET_SLOT_NAMES[slotNum]
+                else
+                    displayName = localID:gsub("_", " ")
+                end
+            end
 
             -- ---- Icon entry row ----
             local row = CreateFrame("Frame", nil, listContainer)
@@ -160,6 +179,11 @@ local function OnBuildUI(parent)
                     if itemName and type(ItemTracker_Remove) == "function" then
                         ItemTracker_Remove(itemName)
                     end
+                elseif capturedAddon == "TrinketTracker" then
+                    local slotNum = tonumber(capturedID)
+                    if slotNum and type(TrinketTracker_Remove) == "function" then
+                        TrinketTracker_Remove(slotNum)
+                    end
                 else
                     -- Generic fallback for unknown addons: unregister from shmIcons
                     shmIcons:Unregister(capturedAddon, capturedID)
@@ -190,12 +214,15 @@ local function OnBuildUI(parent)
     -- Initial populate
     BuildIconList()
 
-    -- Auto-refresh whenever CooldownTracker or ItemTracker add/remove trackers
+    -- Auto-refresh whenever CooldownTracker, ItemTracker, or TrinketTracker add/remove trackers
     if type(CooldownTracker_RegisterChangeListener) == "function" then
         CooldownTracker_RegisterChangeListener(BuildIconList)
     end
     if type(ItemTracker_RegisterChangeListener) == "function" then
         ItemTracker_RegisterChangeListener(BuildIconList)
+    end
+    if type(TrinketTracker_RegisterChangeListener) == "function" then
+        TrinketTracker_RegisterChangeListener(BuildIconList)
     end
 
     -- Refresh list and sync lock label each time the panel is opened

@@ -55,9 +55,18 @@ function Menu:BuildSettingsPanel()
     Settings.RegisterAddOnCategory(category)
     self.mainCategory = category
 
-    -- Register any addons that registered before login
+    -- First pass: addons without a parentId (register directly under PoulsTools)
     for id, info in pairs(self.registry) do
-        self:AddSubcategory(info)
+        if not info.parentId then
+            self:AddSubcategory(info)
+        end
+    end
+
+    -- Second pass: addons that nest under another registered addon
+    for id, info in pairs(self.registry) do
+        if info.parentId then
+            self:AddSubcategory(info)
+        end
     end
 end
 
@@ -246,9 +255,18 @@ function Menu:AddSubcategory(info)
     -- Create the sub-panel canvas
     local subPanel = self:CreateSubPanel(info)
 
-    -- Register as a subcategory under the main PoulsTools category
+    -- Determine parent: nest under another addon's category if parentId is set
+    local parentCategory = self.mainCategory
+    if info.parentId then
+        local parentInfo = self.registry[info.parentId]
+        if parentInfo and parentInfo._category then
+            parentCategory = parentInfo._category
+        end
+    end
+
+    -- Register as a subcategory under the resolved parent
     local subCategory, layout = Settings.RegisterCanvasLayoutSubcategory(
-        self.mainCategory,
+        parentCategory,
         subPanel,
         info.name
     )

@@ -30,6 +30,16 @@ local trackedSlots = {}
 -- The spec ID we last loaded icons for
 local currentSpecID = nil
 
+-- Change listeners for UI integrations (called when trackers change)
+local changeListeners = {}
+
+local function NotifyChangeListeners()
+    for _, cb in ipairs(changeListeners) do
+        local ok, err = pcall(cb)
+        if not ok then print("|cFFFF4444TrinketTracker: listener error: " .. tostring(err) .. "|r") end
+    end
+end
+
 -- ============================================================
 -- Spec helper
 -- ============================================================
@@ -119,6 +129,7 @@ local function AddSlot(slotID, specID)
     trackedSlots[slotID] = true
     GetSpecSlots(specID)[slotID].enabled = true
     UpdateSlot(slotID)
+    NotifyChangeListeners()
 end
 
 local function RemoveSlot(slotID)
@@ -126,6 +137,7 @@ local function RemoveSlot(slotID)
     trackedSlots[slotID] = nil
     local slots = GetSpecSlots(currentSpecID)
     if slots[slotID] then slots[slotID].enabled = false end
+    NotifyChangeListeners()
 end
 
 -- Unregister all current icons and clear trackedSlots.
@@ -134,6 +146,7 @@ local function UnloadSpec()
         shmIcons:Unregister(ADDON_NAME, slotID)
     end
     trackedSlots = {}
+    NotifyChangeListeners()
 end
 
 -- Load all enabled slots for the given specID.
@@ -148,6 +161,7 @@ local function LoadSpec(specID)
     end
     shmIcons:RestoreSnapGroups()
     UpdateAllSlots()
+    NotifyChangeListeners()
 end
 
 -- ============================================================
@@ -274,3 +288,94 @@ eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 eventFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 eventFrame:RegisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
+
+-- ============================================================
+-- Public API for PoulsTools UI and other integrations
+-- ============================================================
+
+function TrinketTracker_Add(slotID, specID)
+    local id = tonumber(slotID)
+    if not id or id < 1 or id > 19 then return end
+    if not trackedSlots[id] then
+        AddSlot(id, specID)
+        local name = SLOT_NAMES[id] or ("Slot " .. id)
+        print("|cFF00FF00TrinketTracker: now tracking " .. name .. ".|r")
+    end
+end
+
+function TrinketTracker_Remove(slotID)
+    local id = tonumber(slotID)
+    if not id then return end
+    if trackedSlots[id] then
+        RemoveSlot(id)
+        local name = SLOT_NAMES[id] or ("Slot " .. id)
+        print("|cFFFFFF00TrinketTracker: removed tracker for " .. name .. ".|r")
+    end
+end
+
+function TrinketTracker_ToggleGlow(slotID)
+    local id = tonumber(slotID)
+    if not id or not trackedSlots[id] then return end
+    local enabled = shmIcons:ToggleGlowEnabled(ADDON_NAME, id)
+    local db = GetSpecSlots(currentSpecID)[id]
+    if db then db.glow_enabled = enabled end
+    UpdateSlot(id)
+    return enabled
+end
+
+function TrinketTracker_Reset(slotID)
+    local id = tonumber(slotID)
+    if not id or not trackedSlots[id] then return end
+    shmIcons:ResetIcon(ADDON_NAME, id, DEFAULT_SIZE)
+    local name = SLOT_NAMES[id] or ("Slot " .. id)
+    print("|cFF00FF00TrinketTracker: reset " .. name .. ".|r")
+end
+
+function TrinketTracker_ResetAll()
+    for slotID in pairs(trackedSlots) do
+        shmIcons:ResetIcon(ADDON_NAME, slotID, DEFAULT_SIZE)
+    end
+    print("|cFF00FF00TrinketTracker: All positions reset.|r")
+end
+
+function TrinketTracker_ToggleLock()
+    local locked = shmIcons:ToggleLock()
+    local state = locked and "|cFF00FF00Locked.|r" or "|cFFFFFF00Unlocked.|r"
+    print("shmIcons: All icons " .. state)
+    return locked
+end
+
+function TrinketTracker_List()
+    local found = false
+    for slotID in pairs(trackedSlots) do
+        local db        = GetSpecSlots(currentSpecID)[slotID]
+        local name      = SLOT_NAMES[slotID] or ("Slot " .. slotID)
+        local glowState = db and db.glow_enabled and "glow on" or "glow off"
+        print(string.format("|cFFFFFF00  [%d] %s|r  [%s]", slotID, name, glowState))
+        found = true
+    end
+    if not found then print("|cFFFFFF00TrinketTracker: no slots tracked yet.|r") end
+end
+
+-- Allow external UI to register a callback to be notified when the tracked
+-- slots for the current spec change (add/remove/spec switch).
+function TrinketTracker_RegisterChangeListener(fn)
+    changeListeners[#changeListeners + 1] = fn
+end
+
+-- Return an array of tracked slot entries for the given specID.
+function TrinketTracker_GetTrackedSlots(specID)
+    local slots = GetSpecSlots(specID or currentSpecID or 0)
+    local out = {}
+    for slotID, db in pairs(slots) do
+        if db.enabled then
+            table.insert(out, {
+                key      = tostring(slotID),
+                slotID   = slotID,
+                slotName = SLOT_NAMES[slotID] or ("Slot " .. slotID),
+                db       = db,
+            })
+        end
+    end
+    return out
+end

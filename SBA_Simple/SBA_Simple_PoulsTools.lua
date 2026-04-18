@@ -299,10 +299,11 @@ local function OnBuildUI(parent)
 end
 
 PoulsTools.Menu:RegisterAddon({
-    name    = "SBA Simple",
-    id      = "SBA_Simple",
-    desc    = "Displays the Assited Combat spell reccomendation and allows for overriding this logic.",
-    version = "1.0.0",
-    icon    = "Interface\\Icons\\INV_Misc_Gear_01",
+    name      = "SBA Simple",
+    id        = "SBA_Simple",
+    desc      = "Displays the Assited Combat spell reccomendation and allows for overriding this logic.",
+    version   = "1.0.0",
+    icon      = "Interface\\Icons\\INV_Misc_Gear_01",
+    parentId  = "shmIcons",
     OnBuildUI = OnBuildUI,
 })

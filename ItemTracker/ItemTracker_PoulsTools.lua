@@ -265,10 +265,11 @@ local function OnBuildUI(parent)
 end
 
 PoulsTools.Menu:RegisterAddon({
-    name    = "ItemTracker",
-    id      = "ItemTracker",
-    desc    = "Track inventory items per specialization.",
-    version = "1.0.0",
-    icon    = "Interface\\Icons\\INV_Misc_Bag_08",
+    name      = "ItemTracker",
+    id        = "ItemTracker",
+    desc      = "Track inventory items per specialization.",
+    version   = "1.0.0",
+    icon      = "Interface\\Icons\\INV_Misc_Bag_08",
+    parentId  = "shmIcons",
     OnBuildUI = OnBuildUI,
 })

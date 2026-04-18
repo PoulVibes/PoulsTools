@@ -4,6 +4,7 @@
 ## Version: 2.0.0
 ## Author: You
 ## SavedVariablesPerCharacter: TrinketTrackerDB
-## Dependencies: shmIcons
+## Dependencies: shmIcons, PoulsTools
 
 TrinketTracker.lua
+TrinketTracker_PoulsTools.lua
