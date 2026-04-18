@@ -3,6 +3,7 @@
 ## Notes: Displays the last used ability that triggers Mastery: Combo Strikes.
 ## Author: User
 ## Version: 1.0
+## Dependencies: shmIcons
 ## SavedVariables: ComboTrackerDB
 
 ComboTracker.lua

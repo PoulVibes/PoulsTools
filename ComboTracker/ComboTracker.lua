@@ -1,8 +1,10 @@
--- Global variables for other addons to access
-LastComboStrikeSpellID = 0 
-ComboStrikeStreak = 0
-local timerRemaining = 0
+local ADDON_NAME = "ComboTracker"
 local TRACKER_ICON = "Interface\\Icons\\ability_monk_palmstrike"
+
+-- Globals for cross-addon access
+LastComboStrikeSpellID = 0
+ComboStrikeStreak      = 0
+local timerHandle      = nil
 
 -- Midnight (12.0.1) Mastery: Combo Strikes Triggers
 local comboStrikesAbilities = {
@@ -22,135 +24,80 @@ local comboStrikesAbilities = {
     [1272696] = true, -- Zenith Stomp
 }
 
-local frame = CreateFrame("Frame", "ComboTrackerFrame", UIParent)
-frame:SetSize(64, 64)
-frame:SetPoint("CENTER", 0, -100)
-frame:SetMovable(true)
-frame:SetResizable(true)
-frame:SetResizeBounds(32, 32, 256, 256)
-frame:SetClampedToScreen(true)
-frame:Hide()
-
-local texture = frame:CreateTexture(nil, "BACKGROUND")
-texture:SetAllPoints(frame)
-texture:SetTexture(TRACKER_ICON)
-frame.texture = texture
-
--- Blizzard Cooldown Swipe (Inverted)
-local cooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
-cooldown:SetAllPoints(frame)
-cooldown:SetDrawEdge(false)
-cooldown:SetSwipeColor(0, 0, 0, 0.8)
-cooldown:SetHideCountdownNumbers(true) 
-cooldown:SetReverse(true) 
-frame.cooldown = cooldown
-
--- Counter Text Setup
-local countText = frame:CreateFontString(nil, "OVERLAY", "NumberFontNormalHuge")
-countText:SetPoint("CENTER", frame, "CENTER", 0, 0)
-frame.countText = countText
-
--- Dynamic Scaling: Sets font to 50% of frame height
-local function UpdateTextScale()
-    local height = frame:GetHeight()
-    countText:SetFont("Fonts\\ARIALN.TTF", height * 0.5, "OUTLINE")
+local function ResetStreak()
+    print("Streak Reset ", LastComboStrikeSpellID, " used twice.")
+    if timerHandle then timerHandle:Cancel() end
+    ComboStrikeStreak      = 0
+    LastComboStrikeSpellID = 0
+    timerHandle            = nil
+    shmIcons:SetVisible(ADDON_NAME, "combo", false)
+    shmIcons:SetCooldownRaw(ADDON_NAME, "combo", 0, 0)
+    shmIcons:SetStacks(ADDON_NAME, "combo", 0)
+    shmIcons:SetGlow(ADDON_NAME, "combo", false)
 end
 
--- Update font size live during resize
-frame:SetScript("OnSizeChanged", UpdateTextScale)
+local eventFrame = CreateFrame("Frame")
+eventFrame:RegisterEvent("ADDON_LOADED")
+eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+eventFrame:SetScript("OnEvent", function(self, event, ...)
+    if event == "ADDON_LOADED" and ... == ADDON_NAME then
+        ComboTrackerDB = ComboTrackerDB or {
+            x            = 0,
+            y            = -100,
+            point        = "CENTER",
+            size         = 64,
+            enabled      = true,
+            glow_enabled = false,
+        }
+        -- Migrate legacy locked field
+        local db = ComboTrackerDB
+        db.locked = nil
 
--- Resize Handle (Bottom-Left)
-local resizer = CreateFrame("Frame", nil, frame)
-resizer:SetSize(16, 16)
-resizer:SetPoint("BOTTOMLEFT")
-resizer:Hide()
-local resTexture = resizer:CreateTexture(nil, "OVERLAY")
-resTexture:SetAllPoints()
-resTexture:SetColorTexture(1, 1, 1, 0.5)
+        shmIcons:Register(ADDON_NAME, "combo", db, {
+            onResize = function(sq) db.size = sq end,
+            onMove   = function(_db) end,
+        })
+        shmIcons:SetIcon(ADDON_NAME, "combo", TRACKER_ICON)
+        shmIcons:SetVisible(ADDON_NAME, "combo", false)
 
--- Slash Command & Locking Logic
-local function UpdateLockState()
-    if ComboTrackerDB.locked then
-        frame:EnableMouse(false)
-        resizer:Hide()
-        if ComboStrikeStreak == 0 then frame:Hide() end
-        print("|cFF00FF00ComboTracker Locked|r")
-    else
-        frame:EnableMouse(true)
-        resizer:Show()
-        frame:Show() 
-        print("|cFFFFFF00ComboTracker Unlocked (Drag to move, Corner to resize)|r")
+    elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
+        local _, _, spellID = ...
+        if not comboStrikesAbilities[spellID] then return end
+
+        if spellID == LastComboStrikeSpellID then
+            -- Buzzer Logic: Same spell breaks the combo
+            -- commented out for now but here is a print statement for debugging should I need it later. do not remove
+            -- print("Combo Broken Spell:", LastComboStrikeSpellID)
+            ComboStrikeStreak = 0
+            PlaySound(847, "Master") -- Quest Failed Sound
+            shmIcons:SetVisible(ADDON_NAME, "combo", false)
+            shmIcons:SetCooldownRaw(ADDON_NAME, "combo", 0, 0)
+            shmIcons:SetStacks(ADDON_NAME, "combo", 0)
+            shmIcons:SetGlow(ADDON_NAME, "combo", false)
+            if timerHandle then timerHandle:Cancel() end
+            timerHandle = nil
+        else
+            ComboStrikeStreak = math.min(5, ComboStrikeStreak + 1)
+            shmIcons:SetVisible(ADDON_NAME, "combo", true)
+            shmIcons:SetCooldownRaw(ADDON_NAME, "combo", GetTime(), 29)
+            shmIcons:SetStacks(ADDON_NAME, "combo", ComboStrikeStreak)
+            shmIcons:SetGlow(ADDON_NAME, "combo", false)
+            if timerHandle then timerHandle:Cancel() end
+            timerHandle = C_Timer.NewTimer(30, ResetStreak)
+        end
+        LastComboStrikeSpellID = spellID
+        -- commented out for now but here is a print statement for debugging should I need it later. do not remove
+        -- elseif (spellID ~= 109132 and spellID ~= 101545 and spellID ~= 116841 and spellID ~= 115057) then
+        --      print("Not a combo breaker spell used:", spellID)
     end
-end
+end)
 
 SLASH_COMBOTRACKER1 = "/combo"
 SlashCmdList["COMBOTRACKER"] = function(msg)
     if msg == "lock" then
-        ComboTrackerDB.locked = not ComboTrackerDB.locked
-        UpdateLockState()
+        local locked = shmIcons:ToggleLock()
+        print("shmIcons: All icons " .. (locked and "Locked." or "Unlocked."))
     else
         print("Usage: /combo lock")
     end
 end
-
--- Dragging Logic
-frame:SetScript("OnMouseDown", function(self, button)
-    if not ComboTrackerDB.locked and button == "LeftButton" then self:StartMoving() end
-end)
-frame:SetScript("OnMouseUp", function(self)
-    self:StopMovingOrSizing()
-    self:SetUserPlaced(true)
-end)
-
-resizer:EnableMouse(true)
-resizer:SetScript("OnMouseDown", function() if not ComboTrackerDB.locked then frame:StartSizing("BOTTOMLEFT") end end)
-resizer:SetScript("OnMouseUp", function() frame:StopMovingOrSizing() end)
-
--- Internal Timer Logic
-frame:SetScript("OnUpdate", function(self, elapsed)
-    if timerRemaining > 0 then
-        timerRemaining = timerRemaining - elapsed
-        if timerRemaining <= 0 or ComboStrikeStreak <= 0 then
-            timerRemaining = 0
-            ComboStrikeStreak = 0
-			LastComboStrikeSpellID = 0
-            if ComboTrackerDB.locked then self:Hide() end
-            self.countText:SetText("")
-            self.cooldown:SetCooldown(0, 0)
-        end
-    end
-end)
-
-frame:RegisterEvent("ADDON_LOADED")
-frame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
-frame:SetScript("OnEvent", function(self, event, ...)
-    if event == "ADDON_LOADED" and ... == "ComboTracker" then
-        ComboTrackerDB = ComboTrackerDB or { locked = true }
-        UpdateLockState()
-        UpdateTextScale()
-    elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
-        local _, _, spellID = ...
-        if comboStrikesAbilities[spellID] then
-			-- Buzzer Logic: Same spell breaks the combo
-            if spellID == LastComboStrikeSpellID then
-                -- commented out for now but here is a print statement for debugging should I need it later. do not remove
-				-- print("Combo Broken Spell:", LastComboStrikeSpellID)
-				ComboStrikeStreak = 0
-                PlaySound(847, "Master") -- Quest Failed Sound
-                if ComboTrackerDB.locked then self:Hide() end
-            else
-                ComboStrikeStreak = math.min(5, ComboStrikeStreak + 1)
-                self.countText:SetTextColor(1, 1, 1)
-                self:Show()
-            end
-            LastComboStrikeSpellID = spellID
-            timerRemaining = 29 
-            self.cooldown:SetCooldown(GetTime(), 29)
-            self.countText:SetText(ComboStrikeStreak)
-        -- commented out for now but here is a print statement for debugging should I need it later. do not remove
-		-- elseif (spellID ~= 109132 and spellID ~= 101545 and spellID ~= 116841 and spellID ~= 115057) then
-		--		print("Not a combo breaker spell used:", spellID)
-		end
-		
-    end
-end)
