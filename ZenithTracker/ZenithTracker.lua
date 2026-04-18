@@ -1,7 +1,55 @@
 local frame = CreateFrame("Frame")
-frame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("TRAIT_CONFIG_UPDATED")
+frame:RegisterEvent("PLAYER_LOGIN")
+frame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+frame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
+
+-- Single-spec gating (Monk - Windwalker)
+local REQUIRED_CLASS = "MONK"
+local REQUIRED_SPEC_ID = 269
+local addonEnabled = false
+
+local function IsPlayerClass(token)
+    local _, classToken = UnitClass("player")
+    return classToken == token
+end
+
+local function IsPlayerSpec(specID)
+    local specIndex = GetSpecialization()
+    if not specIndex then return false end
+    local id = select(1, GetSpecializationInfo(specIndex))
+    return id == specID
+end
+
+local function EnableAddon()
+    if addonEnabled then return end
+    addonEnabled = true
+    frame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+    print("[ZenithTracker] enabled for required spec")
+end
+
+local function DisableAddon()
+    if not addonEnabled then return end
+    addonEnabled = false
+    frame:UnregisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+    iconFrame:Hide()
+    print("[ZenithTracker] disabled (not required spec)")
+end
+
+local function UpdateEnabledState()
+    if not IsPlayerClass(REQUIRED_CLASS) then
+        print("[ZenithTracker] abort: wrong class")
+        frame:UnregisterAllEvents()
+        iconFrame:Hide()
+        return
+    end
+    if IsPlayerSpec(REQUIRED_SPEC_ID) then
+        EnableAddon()
+    else
+        DisableAddon()
+    end
+end
 
 -- Initialize globals
 _G["ZenithActiveTracker"] = false
@@ -51,6 +99,23 @@ frame:SetScript("OnEvent", function(self, event, unit, castGUID, spellID)
         UpdateTimerDuration()
         return
     end
+
+    if event == "PLAYER_LOGIN" then
+        UpdateEnabledState()
+        return
+    end
+
+    if event == "PLAYER_SPECIALIZATION_CHANGED" then
+        if unit == "player" then UpdateEnabledState() end
+        return
+    end
+
+    if event == "ACTIVE_TALENT_GROUP_CHANGED" then
+        UpdateEnabledState()
+        return
+    end
+
+    if not addonEnabled then return end
 
     -- Trigger tracker if Zenith cast succeeded and tracker isn't already active
     if unit == "player" and ZENITH_IDS[spellID] and not _G["ZenithActiveTracker"] then 
