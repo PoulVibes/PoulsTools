@@ -195,7 +195,7 @@ Slash command `/shm lock` also available from shmIcons itself.
 
 ## Snap Groups
 - Snap data stored in `shmIconsDB` (account-wide SavedVariables in shmIcons.toc)
-- Left-drag: move solo, breaks snap group
-- Right-drag: move entire snap group
-- Shift+snap: resize to match target
-- Ctrl+snap: 20% size, corner-attach, raised strata
+- Default drag: move icon; snaps edge-to-edge with nearest **same-size** icon; never overlaps other icons
+- Shift+drag: live resizes the dragged icon to match the nearest icon's size; after resize, normal edge-snap with same-size icons applies; size is committed on drop
+- Ctrl+drag: corner-attach mode — icon resized to 30% of target, raised strata; only snaps to same-size icons; overlap at corners is intentional
+- If an icon is dropped without a snap and without ctrl held, it is automatically pushed out of any bounding-box overlap

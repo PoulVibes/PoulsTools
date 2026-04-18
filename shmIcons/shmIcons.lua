@@ -258,9 +258,12 @@ local function BuildIconFrame(globalID, db)
     local dragState = nil
 
     -- Apply a snap candidate immediately (called live from OnUpdate)
-    local function ApplySnap(candidate, isShift, isCtrl)
+    local function ApplySnap(candidate, isCtrl)
+        -- Save the size the frame has right now so RevertSnap can restore to it
+        -- (the frame may already have been shift-resized before entering snap).
+        dragState.sizeAtSnapEnter = frame:GetWidth()
         if isCtrl then
-            -- Corner-attach: 20% size, raised strata, corner-to-corner
+            -- Corner-attach: 30% size, raised strata, corner-to-corner
             local cornerSize = math.max(MIN_SIZE, math.floor(candidate.targetSize * 0.3))
             frame:SetSize(cornerSize, cornerSize)
             ScaleText(cd, stackLabel, cornerSize)
@@ -269,47 +272,82 @@ local function BuildIconFrame(globalID, db)
             -- Position the small corner-size icon at the candidate location
             frame:ClearAllPoints()
             frame:SetPoint("CENTER", UIParent, "CENTER", candidate.cx, candidate.cy)
-        elseif isShift then
-            -- Resize to match target only; do not move while shift is held
-            local sz = candidate.targetSize
-            frame:SetSize(sz, sz)
-            ScaleText(cd, stackLabel, sz)
-            ResizeGlow(icon.glow, frame, sz)
-            frame:SetFrameStrata("MEDIUM")
         else
-            -- Default: position to candidate (no live resize)
+            -- Default: snap to edge-aligned candidate position (no live resize)
             frame:SetFrameStrata("MEDIUM")
             frame:ClearAllPoints()
             frame:SetPoint("CENTER", UIParent, "CENTER", candidate.cx, candidate.cy)
         end
     end
 
-    -- Revert any live snap changes made during dragging (size/strata)
+    -- Revert any live snap changes made during dragging (size/strata).
+    -- Restores to the size the frame had when snap was entered (which may be a
+    -- shift-resized value), falling back to the original drag-start size.
     local function RevertSnap()
-        if dragState and dragState.originalSize then
-            local orig = dragState.originalSize
-            frame:SetSize(orig, orig)
-            ScaleText(cd, stackLabel, orig)
-            ResizeGlow(icon.glow, frame, orig)
+        local revertTo = (dragState and dragState.sizeAtSnapEnter)
+                      or (dragState and dragState.originalSize)
+        if revertTo then
+            frame:SetSize(revertTo, revertTo)
+            ScaleText(cd, stackLabel, revertTo)
+            ResizeGlow(icon.glow, frame, revertTo)
         end
         frame:SetFrameStrata("MEDIUM")
     end
 
-    -- Find snap candidates implementing new rules:
-    --  - Ctrl: corner-attach to nearest icon corner (small corner size)
-    --  - Shift: only resize to match the nearest icon's size (no movement)
-    --  - Default: snap evenly to nearest icon of the same size. Candidate
-    --             positions are at offsets of {-size,0,size} from the other
-    --             icon's center (so centers line up that produce edge-to-edge)
-    local function FindSnapCandidate(myCX, myCY, mySize, isShift, isCtrl)
+    -- Push the dragged icon out of any bounding-box overlaps after drop.
+    -- Iterates until fully resolved or the iteration cap is hit.
+    -- Not called when ctrl was held (ctrl corner-attach intentionally overlaps).
+    local function ResolveOverlaps()
+        local myCX, myCY = frame:GetCenter()
+        local myHalf = frame:GetWidth() * 0.5
+        local uiCX, uiCY = UIParent:GetCenter()
+
+        local changed = true
+        local iters = 0
+        while changed and iters < 8 do
+            changed = false
+            iters = iters + 1
+            for otherID, other in pairs(icons) do
+                if otherID ~= globalID and other.frame:IsShown() then
+                    local oCX, oCY = other.frame:GetCenter()
+                    local oHalf = other.frame:GetHeight() * 0.5
+                    local absDX = math.abs(myCX - oCX)
+                    local absDY = math.abs(myCY - oCY)
+                    local minDist = myHalf + oHalf
+                    if absDX < minDist and absDY < minDist then
+                        -- Resolve along the axis of minimum penetration
+                        local penX = minDist - absDX
+                        local penY = minDist - absDY
+                        if penX <= penY then
+                            local dir = (myCX >= oCX) and 1 or -1
+                            myCX = oCX + dir * minDist
+                        else
+                            local dir = (myCY >= oCY) and 1 or -1
+                            myCY = oCY + dir * minDist
+                        end
+                        changed = true
+                    end
+                end
+            end
+        end
+
+        frame:ClearAllPoints()
+        frame:SetPoint("CENTER", UIParent, "CENTER", myCX - uiCX, myCY - uiCY)
+    end
+
+    -- Find snap candidates:
+    --  - Ctrl: corner-attach to nearest same-size icon corner (icon resized to 30%)
+    --  - Default (all other modifiers ignored): snap edge-to-edge with nearest
+    --    same-size icon. dx=0,dy=0 is excluded to prevent overlap.
+    local function FindSnapCandidate(myCX, myCY, mySize, isCtrl)
         local uiCX, uiCY = UIParent:GetCenter()
 
         if isCtrl then
-            -- Corner-attach mode: single nearest corner across all icons
+            -- Corner-attach mode: nearest corner on same-size icons only
             local bestDist = math.huge
             local best = nil
             for otherID, other in pairs(icons) do
-                if otherID ~= globalID and other.frame:IsShown() then
+                if otherID ~= globalID and other.frame:IsShown() and other.frame:GetHeight() == mySize then
                     local oH = other.frame:GetHeight()
                     local oCX, oCY = other.frame:GetCenter()
                     local oHalf = oH * 0.5
@@ -339,32 +377,8 @@ local function BuildIconFrame(globalID, db)
             return best
         end
 
-        if isShift then
-            -- Shift: find nearest icon by center and only match its size.
-            local bestDist = math.huge
-            local best = nil
-            for otherID, other in pairs(icons) do
-                if otherID ~= globalID and other.frame:IsShown() then
-                    local oCX, oCY = other.frame:GetCenter()
-                    local dist = math.sqrt((myCX - oCX)^2 + (myCY - oCY)^2)
-                    if dist < bestDist then
-                        bestDist = dist
-                        best = {
-                            targetID = otherID,
-                            targetSize = other.frame:GetHeight(),
-                            cx = myCX - uiCX,
-                            cy = myCY - uiCY,
-                        }
-                    end
-                end
-            end
-            if best and bestDist < SNAP_THRESHOLD then
-                return best
-            end
-            return nil
-        end
-
-        -- Default: snap to positions relative to nearest icon of same size.
+        -- Default: edge-aligned snap to nearest same-size icon.
+        -- dx=0,dy=0 skipped — that position would perfectly overlap the target.
         local bestDist = math.huge
         local best = nil
         for otherID, other in pairs(icons) do
@@ -372,17 +386,19 @@ local function BuildIconFrame(globalID, db)
                 local oCX, oCY = other.frame:GetCenter()
                 for dx = -1, 1 do
                     for dy = -1, 1 do
-                        local posX = oCX + dx * mySize
-                        local posY = oCY + dy * mySize
-                        local dist = math.sqrt((myCX - posX)^2 + (myCY - posY)^2)
-                        if dist < SNAP_THRESHOLD and dist < bestDist then
-                            bestDist = dist
-                            best = {
-                                cx = posX - uiCX,
-                                cy = posY - uiCY,
-                                targetID = otherID,
-                                targetSize = mySize,
-                            }
+                        if not (dx == 0 and dy == 0) then  -- skip: would overlap target
+                            local posX = oCX + dx * mySize
+                            local posY = oCY + dy * mySize
+                            local dist = math.sqrt((myCX - posX)^2 + (myCY - posY)^2)
+                            if dist < SNAP_THRESHOLD and dist < bestDist then
+                                bestDist = dist
+                                best = {
+                                    cx = posX - uiCX,
+                                    cy = posY - uiCY,
+                                    targetID = otherID,
+                                    targetSize = mySize,
+                                }
+                            end
                         end
                     end
                 end
@@ -407,21 +423,44 @@ local function BuildIconFrame(globalID, db)
             soloUpdateFrame:SetScript("OnUpdate", function()
                 local myCX, myCY = frame:GetCenter()
                 local mySize     = frame:GetWidth()
-                local isShift    = IsShiftKeyDown()
                 local isCtrl     = IsControlKeyDown()
 
-                local candidate = FindSnapCandidate(myCX, myCY, mySize, isShift, isCtrl)
+                -- Shift: live resize to the nearest icon's size (no position snap).
+                -- Runs every tick while shift is held; resets snap state when size
+                -- changes so the next tick evaluates candidates with the new size.
+                if IsShiftKeyDown() then
+                    local nearestDist = math.huge
+                    local nearestSize = nil
+                    for otherID, other in pairs(icons) do
+                        if otherID ~= globalID and other.frame:IsShown() then
+                            local oCX, oCY = other.frame:GetCenter()
+                            local d = math.sqrt((myCX - oCX)^2 + (myCY - oCY)^2)
+                            if d < nearestDist then
+                                nearestDist = d
+                                nearestSize = other.frame:GetHeight()
+                            end
+                        end
+                    end
+                    if nearestSize and nearestSize ~= mySize then
+                        frame:SetSize(nearestSize, nearestSize)
+                        ScaleText(cd, stackLabel, nearestSize)
+                        ResizeGlow(icon.glow, frame, nearestSize)
+                        mySize = nearestSize
+                        -- Force re-evaluation next tick with the new size
+                        dragState.currentSnapID = nil
+                    end
+                end
+
+                local candidate = FindSnapCandidate(myCX, myCY, mySize, isCtrl)
 
                 if candidate then
                     if dragState.currentSnapID ~= candidate.targetID
-                       or dragState.pendingShift ~= isShift
                        or dragState.pendingCtrl ~= isCtrl then
                         -- New snap target or modifier change — apply live
                         dragState.currentSnapID = candidate.targetID
                         dragState.pendingSnap   = candidate
-                        dragState.pendingShift  = isShift
                         dragState.pendingCtrl   = isCtrl
-                        ApplySnap(candidate, isShift, isCtrl)
+                        ApplySnap(candidate, isCtrl)
                     end
                 else
                     if dragState.currentSnapID then
@@ -444,22 +483,15 @@ local function BuildIconFrame(globalID, db)
             icon.groupDragFrame:SetScript("OnUpdate", nil)
             icon.groupDragFrame = nil
         end
-        -- Treat both left and right as solo-drag; commit any pending snap
         self:StopMovingOrSizing()
 
         if dragState and dragState.pendingSnap then
-            local snap    = dragState.pendingSnap
-            local isShift = dragState.pendingShift
-            local isCtrl  = dragState.pendingCtrl
+            local snap   = dragState.pendingSnap
+            local isCtrl = dragState.pendingCtrl
 
-            local finalSize
-            if isCtrl then
-                finalSize = math.max(MIN_SIZE, math.floor(snap.targetSize * 0.3))
-            elseif isShift then
-                finalSize = snap.targetSize
-            else
-                finalSize = frame:GetWidth()
-            end
+            local finalSize = isCtrl
+                and math.max(MIN_SIZE, math.floor(snap.targetSize * 0.3))
+                or  frame:GetWidth()
 
             frame:SetSize(finalSize, finalSize)
             ScaleText(cd, stackLabel, finalSize)
@@ -467,23 +499,23 @@ local function BuildIconFrame(globalID, db)
             db.size = finalSize
             if icon.onResize then icon.onResize(finalSize) end
 
-            if not isShift then
-                frame:ClearAllPoints()
-                frame:SetPoint("CENTER", UIParent, "CENTER", snap.cx, snap.cy)
-                db.point = "CENTER"
-                db.x     = snap.cx
-                db.y     = snap.cy
-                db.strata = frame:GetFrameStrata()
-                if icon.onMove then icon.onMove(db) end
-            else
-                -- Shift: only resized, keep position unchanged
-                SaveIconPos(icon)
-                if icon.onMove then icon.onMove(icon.db) end
-            end
-
-            -- No group linking performed when snapping
+            frame:ClearAllPoints()
+            frame:SetPoint("CENTER", UIParent, "CENTER", snap.cx, snap.cy)
+            db.point = "CENTER"
+            db.x     = snap.cx
+            db.y     = snap.cy
+            db.strata = frame:GetFrameStrata()
+            if icon.onMove then icon.onMove(db) end
         else
-            -- No snap — just save the free position
+            -- No snap — commit any shift-resize, resolve overlaps, then save
+            local finalSize = frame:GetWidth()
+            if finalSize ~= dragState.originalSize then
+                db.size = finalSize
+                if icon.onResize then icon.onResize(finalSize) end
+            end
+            if not IsControlKeyDown() then
+                ResolveOverlaps()
+            end
             SaveIconPos(icon)
             if icon.onMove then icon.onMove(icon.db) end
         end
