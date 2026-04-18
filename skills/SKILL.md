@@ -23,6 +23,21 @@ All source code being worked on in this repository is lua code for WoW addons, s
 
 ---
 
+## Condensed Addon Summary
+- **ComboTracker** — Displays the last used ability that triggers Mastery: Combo Strikes.
+- **CooldownTracker** — Tracks ability cooldowns with icon, cooldown sweep, and ready glow.
+- **GuesstimatorEnergy** — Experimental energy estimator (Monk-focused); uses Ace libraries.
+- **GuesstimatorHaste** — Compares `GetHaste()` vs a GCD dummy to assess haste effects.
+- **ItemTracker** — Tracks item cooldowns, stack counts, and ready glow.
+- **PoulsTools** — Central settings hub and addon registration UI.
+- **ProcViewer** — Centered HUD proc icons with activation glow.
+- **SBA_Simple** — Displays the next suggested cast from `C_AssistedCombat`.
+- **shmIcons** — Shared icon/cooldown/glow framework used by other addons.
+- **TrinketTracker** — Tracks trinket/equipment cooldowns with UI integration.
+- **VivifyProcTracker** — Tracks Vivacious Vivification procs and broadcasts AceMessages.
+- **ZenithTracker** — Tracks Zenith uptime (15/20s) and plays an audio alert.
+- **Libs/** — Bundled Ace3/LibStub libraries used by select addons.
+
 ## Other Repository Reference Files
 
 ### Skills & How-Tos
