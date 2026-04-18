@@ -1,0 +1,8 @@
+## Interface: 120001
+## Title: Combo Tracker
+## Notes: Displays the last used ability that triggers Mastery: Combo Strikes.
+## Author: User
+## Version: 1.0
+## SavedVariables: ComboTrackerDB
+
+ComboTracker.lua
