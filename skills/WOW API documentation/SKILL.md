@@ -20,4 +20,20 @@ All source code being worked on in this repository is lua code for WoW addons, s
 ## Implementation Style
 - Provide code snippets in **Lua**.
 - Ensure examples follow the Midnight framework patterns found in the docs.
+
+---
+
+## Other Repository Reference Files
+
+### Skills & How-Tos
+- **[../../skills/WoW_Core_Concepts_Skill.md](../../skills/WoW_Core_Concepts_Skill.md)** — Read when you need background on WoW fundamentals: classes, specs, combat roles, content types, and leveling systems.
+- **[../../skills/WoW_Detailed_Reference_Skill.md](../../skills/WoW_Detailed_Reference_Skill.md)** — Read when you need spec IDs for `GetSpecializationInfo()`, role matrices, or content difficulty/Midnight systems reference.
+- **[../../skills/HOWTO_Addon_Single_Spec.md](../../skills/HOWTO_Addon_Single_Spec.md)** — Read when building an addon that should only activate for a specific class or specialization; covers startup checks, spec gating, and event timing.
+
+### Addon-Specific Guides
+- **[../../shmIcons/shmIconsIntegrationSkill.md](../../shmIcons/shmIconsIntegrationSkill.md)** — Read when integrating with `shmIcons`: registering icon frames, pushing cooldown/stack/glow updates, TOC dependencies, and the full public API.
+- **[../../PoulsTools/README.md](../../PoulsTools/README.md)** — Read when integrating a sub-addon into the PoulsTools settings hub; covers installation, slash commands, and the `PoulsTools.Menu:RegisterAddon()` API.
+
+### Third-Party Library Docs
+- **[../../VivifyProcTracker/Libs/README.md](../../VivifyProcTracker/Libs/README.md)** — Read when working with the Ace3 framework (lifecycle, saved variables, events, config); points to official Ace3 documentation and repository links.
  
