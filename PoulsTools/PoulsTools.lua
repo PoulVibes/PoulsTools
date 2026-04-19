@@ -56,6 +56,9 @@ end
 -- ============================================================
 function PT:OnLogin()
     PT.Menu:BuildSettingsPanel()
+    if PT.Profiles then
+        PT.Profiles:AddButtonsToMainPanel()
+    end
 end
 
 -- ============================================================

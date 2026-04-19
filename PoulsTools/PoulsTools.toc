@@ -13,3 +13,4 @@
 PoulsTools.lua
 PoulsTools_Menu.lua
 PoulsTools_Widgets.lua
+PoulsTools_Profiles.lua
