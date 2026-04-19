@@ -120,7 +120,7 @@ frame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 frame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
 
 frame:SetScript("OnEvent", function(self, event, ...)
-    if event == "ADDON_LOADED" and select(1, ...) == "EnergyGuesstimator" then
+    if event == "ADDON_LOADED" and select(1, ...) == "PoulsTools_EnergyGuesstimator" then
         -- no saved-vars for this addon; keep UI hidden until enabled/toggled
         return
     end

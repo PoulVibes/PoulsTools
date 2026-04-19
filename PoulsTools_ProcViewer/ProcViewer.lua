@@ -24,7 +24,7 @@ ProcViewerDB = {}--ProcViewerDB or {}
 ------------------------------------------------------------------------
 -- Constants
 ------------------------------------------------------------------------
-local ADDON             = "ProcViewer"
+local ADDON             = "PoulsTools_ProcViewer"
 local VERSION           = "0.1.8"
 local ICON_SIZE_DEFAULT = 64
 local GAP               = 8

@@ -1,9 +1,9 @@
 ## Interface: 120001
-## Title: Vivify Proc Tracker
+## Title: PoulsTools_VivifyProcTracker
 ## Notes: Tracks Vivacious Vivification procs and broadcasts AceMessages.
 ## Author: Poul
 ## Version: 1.1
-## RequiredDeps: shmIcons
+## RequiredDeps: PoulsTools_shmIcons
 ## SavedVariables: VivifyProcTrackerDB
 
 ## IconTexture: Interface\Icons\ability_monk_vivify

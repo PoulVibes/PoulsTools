@@ -5,7 +5,7 @@ if not PoulsTools then return end
 
 ItemTrackerDB = ItemTrackerDB or {}
 
-local ADDON_NAME = "ItemTracker"
+local ADDON_NAME = "PoulsTools_ItemTracker"
 
 local function OnBuildUI(parent)
     local W = PoulsTools.Widgets
@@ -20,7 +20,7 @@ local function OnBuildUI(parent)
     local anchor = parent
     local y = 0
 
-    local div, dy = W:SectionHeader(parent, anchor, y, "ItemTracker")
+    local div, dy = W:SectionHeader(parent, anchor, y, "PoulsTools_ItemTracker")
     anchor = div
     y = dy
 
@@ -265,11 +265,11 @@ local function OnBuildUI(parent)
 end
 
 PoulsTools.Menu:RegisterAddon({
-    name      = "ItemTracker",
-    id        = "ItemTracker",
+    name      = "PoulsTools_ItemTracker",
+    id        = "PoulsTools_ItemTracker",
     desc      = "Track inventory items per specialization.",
     version   = "1.0.0",
     icon      = "Interface\\Icons\\INV_Misc_Bag_08",
-    parentId  = "shmIcons",
+    parentId  = "PoulsTools_shmIcons",
     OnBuildUI = OnBuildUI,
 })

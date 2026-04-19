@@ -169,17 +169,17 @@ local function OnBuildUI(parent)
             removeBtn:SetPoint("RIGHT", row, "RIGHT", -120, 0)
             removeBtn:SetText("Remove")
             removeBtn:SetScript("OnClick", function()
-                if capturedAddon == "CooldownTracker" then
+                if capturedAddon == "PoulsTools_CooldownTracker" then
                     local spellName = capturedDB and capturedDB.spellName
                     if spellName and type(CooldownTracker_Remove) == "function" then
                         CooldownTracker_Remove(spellName)
                     end
-                elseif capturedAddon == "ItemTracker" then
+                elseif capturedAddon == "PoulsTools_ItemTracker" then
                     local itemName = capturedDB and capturedDB.itemName
                     if itemName and type(ItemTracker_Remove) == "function" then
                         ItemTracker_Remove(itemName)
                     end
-                elseif capturedAddon == "TrinketTracker" then
+                elseif capturedAddon == "PoulsTools_TrinketTracker" then
                     local slotNum = tonumber(capturedID)
                     if slotNum and type(TrinketTracker_Remove) == "function" then
                         TrinketTracker_Remove(slotNum)
@@ -233,8 +233,8 @@ local function OnBuildUI(parent)
 end
 
 PoulsTools.Menu:RegisterAddon({
-    name      = "shmIcons",
-    id        = "shmIcons",
+    name      = "PoulsTools_shmIcons",
+    id        = "PoulsTools_shmIcons",
     desc      = "View and manage all icons registered with shmIcons.",
     version   = "1.0.0",
     icon      = "Interface\\Icons\\INV_Misc_Note_06",

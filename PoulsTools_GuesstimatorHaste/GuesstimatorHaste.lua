@@ -138,7 +138,7 @@ frame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 frame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
-    if event == "ADDON_LOADED" and arg1 == "GuesstimatorHaste" then
+    if event == "ADDON_LOADED" and arg1 == "PoulsTools_GuesstimatorHaste" then
         GuesstimatorHasteDB = GuesstimatorHasteDB or { isVisible = true }
         if GuesstimatorHasteDB.main then
             frame:ClearAllPoints()

@@ -28,7 +28,7 @@ local function OnBuildUI(parent)
     local anchor = parent
     local y = 0
 
-    local div, dy = W:SectionHeader(parent, anchor, y, "TrinketTracker")
+    local div, dy = W:SectionHeader(parent, anchor, y, "PoulsTools_TrinketTracker")
     anchor = div
     y = dy
 
@@ -280,11 +280,11 @@ local function OnBuildUI(parent)
 end
 
 PoulsTools.Menu:RegisterAddon({
-    name      = "TrinketTracker",
-    id        = "TrinketTracker",
+    name      = "PoulsTools_TrinketTracker",
+    id        = "PoulsTools_TrinketTracker",
     desc      = "Track equipment slot cooldowns per specialization.",
     version   = "2.0.0",
     icon      = "Interface\\Icons\\INV_Trinket_PVP_S4_02",
-    parentId  = "shmIcons",
+    parentId  = "PoulsTools_shmIcons",
     OnBuildUI = OnBuildUI,
 })

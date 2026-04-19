@@ -1,4 +1,4 @@
-local ADDON_NAME = "VivifyProcTracker"
+local ADDON_NAME = "PoulsTools_VivifyProcTracker"
 
 -- Initialize AceAddon
 local VPT = LibStub("AceAddon-3.0"):NewAddon(ADDON_NAME, "AceEvent-3.0")

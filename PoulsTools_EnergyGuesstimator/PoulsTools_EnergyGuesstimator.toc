@@ -1,5 +1,5 @@
 ## Interface: 120001
-## Title: GuesstimatorEnergy
+## Title: PoulsTools_EnergyGuesstimator
 ## Notes: Speculative energy tracking for Monks using AceEvent and 12.0.1 security compliance.
 ## OptionalDeps: Ace3
 ## Version: 1.0

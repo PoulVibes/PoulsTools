@@ -18,7 +18,7 @@ local function OnBuildUI(parent)
     local anchor = parent
     local y = 0
 
-    local div, dy = W:SectionHeader(parent, anchor, y, "CooldownTracker")
+    local div, dy = W:SectionHeader(parent, anchor, y, "PoulsTools_CooldownTracker")
     anchor = div
     y = dy
 
@@ -243,11 +243,11 @@ local function OnBuildUI(parent)
 end
 
 PoulsTools.Menu:RegisterAddon({
-    name      = "CooldownTracker",
-    id        = "CooldownTracker",
+    name      = "PoulsTools_CooldownTracker",
+    id        = "PoulsTools_CooldownTracker",
     desc      = "Track ability cooldowns per specialization.",
     version   = "2.0.0",
     icon      = "Interface\\Icons\\INV_Misc_Gear_01",
-    parentId  = "shmIcons",
+    parentId  = "PoulsTools_shmIcons",
     OnBuildUI = OnBuildUI,
 })

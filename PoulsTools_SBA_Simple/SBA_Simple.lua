@@ -1,7 +1,7 @@
 -- SBA_Simple.lua
 -- Displays the next suggested cast from C_AssistedCombat using shmIcons.
 
-local ADDON_NAME = "SBA_Simple"
+local ADDON_NAME = "PoulsTools_SBA_Simple"
 local ICON_KEY   = "nextcast"
 
 SBA_SimpleDB = SBA_SimpleDB or {}

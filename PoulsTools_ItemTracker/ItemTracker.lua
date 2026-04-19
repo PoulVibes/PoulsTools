@@ -15,7 +15,7 @@
 -- /it list                        → list tracked items with counts
 -- ============================================================
 
-local ADDON_NAME   = "ItemTracker"
+local ADDON_NAME   = "PoulsTools_ItemTracker"
 local DEFAULT_SIZE = 64
 
 -- itemKey → { itemName, itemID }

@@ -11,7 +11,7 @@
 -- /tt list             → list tracked slots
 -- ============================================================
 
-local ADDON_NAME   = "TrinketTracker"
+local ADDON_NAME   = "PoulsTools_TrinketTracker"
 local DEFAULT_SIZE = 64
 
 local SLOT_NAMES = {

@@ -1,5 +1,5 @@
 ## Interface: 120001
-## Title: TrinketTracker
+## Title: PoulsTools_TrinketTracker
 ## Notes: Tracks equipment slot cooldowns with icon, cooldown sweep, and ready glow.
 ## Version: 2.0.0
 ## Author: Poul
@@ -7,7 +7,7 @@
 ## IconTexture: Interface\Icons\inv_jewelry_trinketpvp_01
 ## Category-enUS: PoulsTools
 ## Group: PoulsTools
-## RequiredDeps: shmIcons, PoulsTools
+## RequiredDeps: PoulsTools_shmIcons, PoulsTools
 
 TrinketTracker.lua
 TrinketTracker_PoulsTools.lua

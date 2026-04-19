@@ -30,7 +30,7 @@ local function OnBuildUI(parent)
         ["Evoker"] = { {name = "Devastation", id = 1467}, {name = "Preservation", id = 1468}, {name = "Augmentation", id = 1473} },
     }
 
-    local header, dy = W:SectionHeader(parent, anchor, y, "SBA Simple")
+    local header, dy = W:SectionHeader(parent, anchor, y, "PoulsTools_SBA_Simple")
     anchor = header
     y = dy
 
@@ -299,11 +299,11 @@ local function OnBuildUI(parent)
 end
 
 PoulsTools.Menu:RegisterAddon({
-    name      = "SBA Simple",
-    id        = "SBA_Simple",
+    name      = "PoulsTools_SBA_Simple",
+    id        = "PoulsTools_SBA_Simple",
     desc      = "Displays the Assited Combat spell reccomendation and allows for overriding this logic.",
     version   = "1.0.0",
     icon      = "Interface\\Icons\\INV_Misc_Gear_01",
-    parentId  = "shmIcons",
+    parentId  = "PoulsTools_shmIcons",
     OnBuildUI = OnBuildUI,
 })

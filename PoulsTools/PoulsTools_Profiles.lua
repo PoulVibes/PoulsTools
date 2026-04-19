@@ -13,13 +13,13 @@ Profiles.VERSION = 1
 -- Known addon SavedVariable globals included in a profile.
 -- Add new entries here as more PoulsTools addons gain saved variables.
 Profiles.knownDBs = {
-    { dbName = "ComboTrackerDB",      label = "ComboTracker"      },
-    { dbName = "CooldownTrackerDB",   label = "CooldownTracker"   },
-    { dbName = "ItemTrackerDB",       label = "ItemTracker"       },
-    { dbName = "ProcViewerDB",        label = "ProcViewer"        },
-    { dbName = "SBA_SimpleDB",        label = "SBA_Simple"        },
-    { dbName = "TrinketTrackerDB",    label = "TrinketTracker"    },
-    { dbName = "VivifyProcTrackerDB", label = "VivifyProcTracker" },
+    { dbName = "ComboTrackerDB",      label = "PoulsTools_ComboTracker"      },
+    { dbName = "CooldownTrackerDB",   label = "PoulsTools_CooldownTracker"   },
+    { dbName = "ItemTrackerDB",       label = "PoulsTools_ItemTracker"       },
+    { dbName = "ProcViewerDB",        label = "PoulsTools_ProcViewer"        },
+    { dbName = "SBA_SimpleDB",        label = "PoulsTools_SBA_Simple"        },
+    { dbName = "TrinketTrackerDB",    label = "PoulsTools_TrinketTracker"    },
+    { dbName = "VivifyProcTrackerDB", label = "PoulsTools_VivifyProcTracker" },
 }
 
 -- Define the reload-after-import static popup once at load time

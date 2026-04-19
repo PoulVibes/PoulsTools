@@ -1,5 +1,5 @@
 ## Interface: 120001
-## Title: ItemTracker
+## Title: PoulsTools_ItemTracker
 ## Notes: Tracks inventory items by name — shows cooldown, stack count, and ready glow.
 ## Version: 1.0.0
 ## Author: Poul
@@ -7,7 +7,7 @@
 ## IconTexture: Interface\Icons\inv_misc_bag_01
 ## Category-enUS: PoulsTools
 ## Group: PoulsTools
-## RequiredDeps: shmIcons, PoulsTools
+## RequiredDeps: PoulsTools_shmIcons, PoulsTools
 
 ItemTracker.lua
 ItemTracker_PoulsTools.lua
