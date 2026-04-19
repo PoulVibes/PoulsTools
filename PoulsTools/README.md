@@ -121,7 +121,7 @@ This section collects best practices, examples, and troubleshooting tips to make
 
 ### Quick Checklist
 - **Guard:** In your addon, check `if not PoulsTools then return end` to skip when PoulsTools isn't installed.
-- **Declare Load Order:** Add `## Dependencies: PoulsTools` to your `.toc` (or `OptionalDeps`).
+- **Declare Load Order:** Add `## Dependencies: PoulsTools` to your `.toc` (or `RequiredDeps`).
 - **Register:** Call `PoulsTools.Menu:RegisterAddon({...})` and implement `OnBuildUI(parent)`.
 - **SavedVariables:** Keep your own saved variables (do not rely on PoulsTools' DB).
 

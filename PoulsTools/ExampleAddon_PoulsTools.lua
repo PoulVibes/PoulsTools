@@ -4,7 +4,7 @@
 --
 -- .toc load order tip:
 --   ## Dependencies: PoulsTools
---   ## OptionalDeps: PoulsTools
+--   ## RequiredDeps: PoulsTools
 
 -- ============================================================
 -- Guard: only register if PoulsTools is loaded

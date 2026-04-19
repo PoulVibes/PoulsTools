@@ -301,7 +301,7 @@ end
 PoulsTools.Menu:RegisterAddon({
     name      = "PoulsTools_SBA_Simple",
     id        = "PoulsTools_SBA_Simple",
-    desc      = "Displays the Assited Combat spell reccomendation and allows for overriding this logic.",
+    desc      = "Displays the Assisted Combat spell recommendation and allows for overriding this logic.",
     version   = "1.0.0",
     icon      = "Interface\\Icons\\ui_spellbook_onebutton",
     parentId  = "PoulsTools_shmIcons",

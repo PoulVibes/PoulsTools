@@ -8,7 +8,7 @@
 ## Group: PoulsTools
 ## SavedVariables: shmIconsDB
 ## LoadOnDemand: 0
-## OptionalDeps: PoulsTools
+## RequiredDeps: PoulsTools
 
 shmIcons.lua
 shmIcons_PoulsTools.lua
