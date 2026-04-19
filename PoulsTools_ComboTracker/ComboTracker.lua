@@ -25,7 +25,7 @@ local comboStrikesAbilities = {
 }
 
 local function ResetStreak()
-    print("Streak Reset ", LastComboStrikeSpellID, " used twice.")
+    --print("Streak Reset ", LastComboStrikeSpellID, " used twice.")
     if timerHandle then timerHandle:Cancel() end
     ComboStrikeStreak      = 0
     LastComboStrikeSpellID = 0
