@@ -1,6 +1,6 @@
 ## Interface: 120001
 ## Title: PoulsTools_VivifyProcTracker
-## Notes: Tracks Vivacious Vivification procs and broadcasts AceMessages.
+## Notes: Tracks Vivacious Vivification procs.
 ## Author: Poul
 ## Version: 1.1
 ## RequiredDeps: PoulsTools_shmIcons
@@ -9,11 +9,6 @@
 ## IconTexture: Interface\Icons\ability_monk_vivify
 ## Category-enUS: PoulsTools
 ## Group: PoulsTools
-
-# Libraries
-Libs\LibStub\LibStub.lua
-Libs\AceAddon-3.0\AceAddon-3.0.xml
-Libs\AceEvent-3.0\AceEvent-3.0.xml
 
 # Main Script
 VivifyProcTracker.lua

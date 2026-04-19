@@ -1,15 +1,30 @@
 local ADDON_NAME = "PoulsTools_VivifyProcTracker"
 
--- Initialize AceAddon
-local VPT = LibStub("AceAddon-3.0"):NewAddon(ADDON_NAME, "AceEvent-3.0")
+-- Addon table
+local VPT = {}
+local frame = CreateFrame("Frame")
+frame:RegisterEvent("ADDON_LOADED")
+frame:SetScript("OnEvent", function(self, event, addonName)
+    if event == "ADDON_LOADED" and addonName == ADDON_NAME then
+        self:UnregisterEvent("ADDON_LOADED")
+        VPT:OnInitialize()
+    end
+end)
 
 -- Configuration & IDs
-local VIVIFY_SPELL_ID = 116670
-local RSK_SPELL_ID    = 107428
-local RWK_SPELL_ID    = 467307
+local VIVIFY_SPELL_ID            = 116670
+local RSK_SPELL_ID               = 107428
+local RWK_SPELL_ID               = 467307
+local VIVACIOUS_VIVIFICATION_MW  = 137024  -- Mistweaver
+local VIVACIOUS_VIVIFICATION_WW  = 388812  -- Windwalker / Brewmaster
 local PROC_DURATION   = 20
 local timerHandle     = nil
 local procActive      = false
+local hasTalent       = false
+
+local function UpdateTalentState()
+    hasTalent = IsPlayerSpell(VIVACIOUS_VIVIFICATION_MW) or IsPlayerSpell(VIVACIOUS_VIVIFICATION_WW)
+end
 
 local REQUIRED_CLASS = "MONK"
 local function IsPlayerMonk()
@@ -49,7 +64,9 @@ function VPT:OnInitialize()
     shmIcons:SetIcon(ADDON_NAME, "vivify", C_Spell.GetSpellTexture(VIVIFY_SPELL_ID))
     shmIcons:SetVisible(ADDON_NAME, "vivify", false)
 
-    self:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+    frame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+    frame:SetScript("OnEvent", function(self, event, ...)        VPT:UNIT_SPELLCAST_SUCCEEDED(event, ...)
+    end)
 
     -- Slash Command: /vpt lock  →  delegates to shmIcons global lock toggle
     SLASH_VPT1 = "/vpt"
@@ -61,11 +78,18 @@ function VPT:OnInitialize()
     end
 end
 
+local function FireVivifyEvent(event)
+    if _G.VivifyProc_OnEvent then
+        _G.VivifyProc_OnEvent(event)
+    end
+end
+
 function VPT:UNIT_SPELLCAST_SUCCEEDED(event, unit, castGUID, spellID)
     if unit ~= "player" then return end
+    UpdateTalentState()
 
     -- Trigger the Proc
-    if spellID == RSK_SPELL_ID or spellID == RWK_SPELL_ID then
+    if (spellID == RSK_SPELL_ID or spellID == RWK_SPELL_ID) and hasTalent then
         procActive = true
         shmIcons:SetVisible(ADDON_NAME, "vivify", true)
         shmIcons:SetCooldownRaw(ADDON_NAME, "vivify", GetTime(), PROC_DURATION)
@@ -91,9 +115,9 @@ function VPT:UNIT_SPELLCAST_SUCCEEDED(event, unit, castGUID, spellID)
             shmIcons:SetVisible(ADDON_NAME, "vivify", false)
             shmIcons:SetCooldownRaw(ADDON_NAME, "vivify", 0, 0)
             shmIcons:SetGlow(ADDON_NAME, "vivify", false)
-            self:SendMessage("VIVIFY_PROC_CONSUMED")
+            FireVivifyEvent("VIVIFY_PROC_CONSUMED")
         else
-            self:SendMessage("VIVIFY_NORMAL_CAST")
+            FireVivifyEvent("VIVIFY_NORMAL_CAST")
         end
     end
 end

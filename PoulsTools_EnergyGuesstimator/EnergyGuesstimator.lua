@@ -1,5 +1,4 @@
--- Register the Addon Object with AceEvent
-local Guesstimator = LibStub("AceAddon-3.0"):NewAddon("Guesstimator", "AceEvent-3.0")
+local Guesstimator = {}
 local frame = CreateFrame("Frame", "EnergyGuesstimatorLogicFrame")
 
 -- 1. Configuration & Constants
@@ -97,19 +96,17 @@ ui.text = ui:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 ui.text:SetPoint("CENTER", 0, 0)
 ui.text:SetTextColor(1, 0.8, 0)
 
--- 4. AceEvent Message Handling
-function Guesstimator:OnInitialize()
-    self:RegisterMessage("VIVIFY_PROC_CONSUMED", "HandleVivifyProc")
-    self:RegisterMessage("VIVIFY_NORMAL_CAST", "HandleVivifyNormal")
-	ui:Hide()
+-- 4. VivifyProc Callback
+_G.VivifyProc_OnEvent = function(event)
+    if event == "VIVIFY_PROC_CONSUMED" then
+        currentEnergy = math.max(0, currentEnergy - ENERGY_COST_VIVIFY_PROC)
+    elseif event == "VIVIFY_NORMAL_CAST" then
+        currentEnergy = math.max(0, currentEnergy - ENERGY_COST_VIVIFY_NORMAL)
+    end
 end
 
-function Guesstimator:HandleVivifyProc()
-    currentEnergy = math.max(0, currentEnergy - ENERGY_COST_VIVIFY_PROC)
-end
-
-function Guesstimator:HandleVivifyNormal()
-    currentEnergy = math.max(0, currentEnergy - ENERGY_COST_VIVIFY_NORMAL)
+local function OnInitialize()
+    ui:Hide()
 end
 
 -- 5. Standard Event Logic
@@ -121,7 +118,7 @@ frame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
 
 frame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" and select(1, ...) == "PoulsTools_EnergyGuesstimator" then
-        -- no saved-vars for this addon; keep UI hidden until enabled/toggled
+        OnInitialize()
         return
     end
 
