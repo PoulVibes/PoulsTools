@@ -1,4 +1,4 @@
-> ⚠️ **Pre-Release** — This collection is actively being built out. Expect rapid updates.
+> ⚠️ **Pre-Release Alpha** — This collection is actively being built out. Expect Updates
 
 ---
 
@@ -51,17 +51,18 @@ Track your equipped on-use items and place them where you want them.
 
 > Currently focused on Windwalker Monk — a broader class library is coming next.
 
-- **Hit Combo** — Tracks the Mastery: Combo Strikes buff and plays an audio alert when you break the chain
+- **Hit Combo** — Tracks Mastery: Combo Strikes for rotation helper, Displays Hit Combo stacks and plays an audio alert when you break the chain
 - **Proc Icons** — Movable HUD icons for: Touch of Death · Blackout Kick! · Dance of Chi-Ji · Rushing Wind Kick
-- **Zenith Tracker** — Monitors Invoker's Delight / Zenith uptime for use in custom rotations
-- **Vivacious Vivification** — Tracks the free Vivify proc for Mistweaver
-- **External Proc API** — Other addons and plugins can push proc data into the rotation helper
+- **Zenith Tracker** — Monitors Zenith uptime for use in custom rotations
+- **Vivacious Vivification** — Tracks the free Vivify proc for talented Monks
 
 ---
 
 ### Plugin & Profile Support
 
 - **Plugin API** — Integrate your own addons into the icon system, menus, and rotation helper with a few lines of Lua
+- **Custom Lua Overrides** — write your own Lua code to override scripts or use the default
+- **Example Scripts** — Comes with some example scripts for overrides
 - **Profile Import / Export** — Share your entire UI layout with friends or move it between characters instantly
 
 ---
