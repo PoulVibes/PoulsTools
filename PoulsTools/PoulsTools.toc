@@ -5,7 +5,6 @@
 ## Version: 1.0.0
 ## SavedVariables: PoulsToolsDB
 ## IconTexture: Interface\Icons\ui_profession_inscription
-
 ## Category-enUS: PoulsTools
 
 
