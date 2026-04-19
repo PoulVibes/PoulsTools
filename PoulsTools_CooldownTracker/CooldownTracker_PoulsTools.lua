@@ -143,6 +143,7 @@ local function OnBuildUI(parent)
 
                 local sInfo = (db.spellID and C_Spell.GetSpellInfo(db.spellID)) or nil
                 row.icon:SetTexture((sInfo and sInfo.iconID) or 134400)
+                row.spellName = db.spellName
                 row.name:SetText(db.spellName)
 
                 row:SetPoint("TOPLEFT", trackedContainer, "TOPLEFT", 0, -(count - 1) * 26)
@@ -247,7 +248,7 @@ PoulsTools.Menu:RegisterAddon({
     id        = "PoulsTools_CooldownTracker",
     desc      = "Track ability cooldowns per specialization.",
     version   = "2.0.0",
-    icon      = "Interface\\Icons\\INV_Misc_Gear_01",
+    icon      = "Interface\\Icons\\inv_misc_book_11",
     parentId  = "PoulsTools_shmIcons",
     OnBuildUI = OnBuildUI,
 })

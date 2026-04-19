@@ -269,7 +269,7 @@ PoulsTools.Menu:RegisterAddon({
     id        = "PoulsTools_ItemTracker",
     desc      = "Track inventory items per specialization.",
     version   = "1.0.0",
-    icon      = "Interface\\Icons\\INV_Misc_Bag_08",
+    icon      = "Interface\\Icons\\inv_misc_bag_01",
     parentId  = "PoulsTools_shmIcons",
     OnBuildUI = OnBuildUI,
 })

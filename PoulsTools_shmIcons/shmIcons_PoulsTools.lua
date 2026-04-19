@@ -237,6 +237,6 @@ PoulsTools.Menu:RegisterAddon({
     id        = "PoulsTools_shmIcons",
     desc      = "View and manage all icons registered with shmIcons.",
     version   = "1.0.0",
-    icon      = "Interface\\Icons\\INV_Misc_Note_06",
+    icon      = "Interface\\Icons\\battleground_strongbox_skirmish_horde",
     OnBuildUI = OnBuildUI,
 })

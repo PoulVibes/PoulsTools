@@ -262,14 +262,16 @@ local function BuildIconFrame(globalID, db)
         -- Save the size the frame has right now so RevertSnap can restore to it
         -- (the frame may already have been shift-resized before entering snap).
         dragState.sizeAtSnapEnter = frame:GetWidth()
+        -- Must stop WoW's movement system before repositioning; otherwise
+        -- StartMoving() tracking overrides SetPoint on the very next cursor move.
+        frame:StopMovingOrSizing()
         if isCtrl then
-            -- Corner-attach: 30% size, raised strata, corner-to-corner
-            local cornerSize = math.max(MIN_SIZE, math.floor(candidate.targetSize * 0.3))
+            -- Corner-attach: 35% size, raised strata, corner-to-corner
+            local cornerSize = math.max(MIN_SIZE, math.floor(candidate.targetSize * 0.35))
             frame:SetSize(cornerSize, cornerSize)
             ScaleText(cd, stackLabel, cornerSize)
             ResizeGlow(icon.glow, frame, cornerSize)
             frame:SetFrameStrata("HIGH")
-            -- Position the small corner-size icon at the candidate location
             frame:ClearAllPoints()
             frame:SetPoint("CENTER", UIParent, "CENTER", candidate.cx, candidate.cy)
         else
@@ -336,41 +338,73 @@ local function BuildIconFrame(globalID, db)
     end
 
     -- Find snap candidates:
-    --  - Ctrl: corner-attach to nearest same-size icon corner (icon resized to 30%)
-    --  - Default (all other modifiers ignored): snap edge-to-edge with nearest
-    --    same-size icon. dx=0,dy=0 is excluded to prevent overlap.
+    --  - Ctrl: corner-attach to nearest same-size icon. Detection is against the
+    --    OUTER corners of the target (what the user visually approaches); the snap
+    --    position is the inner corner (where the 35% icon's centre sits).
+    --    Overlapping is intentional for ctrl corner-attach.
+    --  - Default: snap edge-to-edge with nearest same-size icon.
+    --    dx=0,dy=0 is excluded to prevent overlap.
     local function FindSnapCandidate(myCX, myCY, mySize, isCtrl)
         local uiCX, uiCY = UIParent:GetCenter()
 
         if isCtrl then
-            -- Corner-attach mode: nearest corner on same-size icons only
-            local bestDist = math.huge
-            local best = nil
+            -- Find the icon the cursor is currently inside, then snap to its
+            -- nearest corner. If the cursor isn't inside any icon, use the icon
+            -- whose nearest corner is overall closest (fallback).
+            local function nearestCornerOf(otherID, other)
+                local oH = other.frame:GetHeight()
+                local oCX, oCY = other.frame:GetCenter()
+                local oHalf = oH * 0.5
+                local cHalf = math.max(MIN_SIZE, math.floor(oH * 0.35)) * 0.5
+
+                local bestDist = math.huge
+                local result = nil
+                local offsets = {
+                    { ox = oHalf,  oy = oHalf  },
+                    { ox = -oHalf, oy = oHalf  },
+                    { ox = oHalf,  oy = -oHalf },
+                    { ox = -oHalf, oy = -oHalf },
+                }
+                for _, c in ipairs(offsets) do
+                    local dist = math.sqrt((myCX - (oCX + c.ox))^2 + (myCY - (oCY + c.oy))^2)
+                    if dist < bestDist then
+                        bestDist = dist
+                        local signX = (c.ox > 0) and 1 or -1
+                        local signY = (c.oy > 0) and 1 or -1
+                        result = {
+                            dist     = dist,
+                            cx       = (oCX + c.ox - signX * cHalf) - uiCX,
+                            cy       = (oCY + c.oy - signY * cHalf) - uiCY,
+                            targetID = otherID,
+                            targetSize = oH,
+                        }
+                    end
+                end
+                return result
+            end
+
+            -- Pass 1: cursor is inside this icon's bounding box
             for otherID, other in pairs(icons) do
-                if otherID ~= globalID and other.frame:IsShown() and other.frame:GetHeight() == mySize then
+                if otherID ~= globalID and other.frame:IsShown() then
                     local oH = other.frame:GetHeight()
                     local oCX, oCY = other.frame:GetCenter()
                     local oHalf = oH * 0.5
-                    local cornerSize = math.max(MIN_SIZE, math.floor(oH * 0.3))
-                    local cHalf = cornerSize * 0.5
+                    if myCX >= oCX - oHalf and myCX <= oCX + oHalf
+                    and myCY >= oCY - oHalf and myCY <= oCY + oHalf then
+                        return nearestCornerOf(otherID, other)
+                    end
+                end
+            end
 
-                    local corners = {
-                        { cx = oCX + oHalf - cHalf, cy = oCY + oHalf - cHalf },
-                        { cx = oCX - oHalf + cHalf, cy = oCY + oHalf - cHalf },
-                        { cx = oCX + oHalf - cHalf, cy = oCY - oHalf + cHalf },
-                        { cx = oCX - oHalf + cHalf, cy = oCY - oHalf + cHalf },
-                    }
-                    for _, c in ipairs(corners) do
-                        local dist = math.sqrt((myCX - c.cx)^2 + (myCY - c.cy)^2)
-                        if dist < SNAP_THRESHOLD and dist < bestDist then
-                            bestDist = dist
-                            best = {
-                                cx = c.cx - uiCX,
-                                cy = c.cy - uiCY,
-                                targetID = otherID,
-                                targetSize = oH,
-                            }
-                        end
+            -- Pass 2: fallback — nearest corner across all icons
+            local bestDist = math.huge
+            local best = nil
+            for otherID, other in pairs(icons) do
+                if otherID ~= globalID and other.frame:IsShown() then
+                    local c = nearestCornerOf(otherID, other)
+                    if c and c.dist < bestDist then
+                        bestDist = c.dist
+                        best = c
                     end
                 end
             end
@@ -420,7 +454,14 @@ local function BuildIconFrame(globalID, db)
             icon.groupDragFrame = soloUpdateFrame
 
             soloUpdateFrame:SetScript("OnUpdate", function()
-                local myCX, myCY = frame:GetCenter()
+                -- Use cursor position instead of frame:GetCenter().
+                -- After ApplySnap calls StopMovingOrSizing() the frame is frozen,
+                -- so frame:GetCenter() would always return the snap point and the
+                -- icon could never escape. GetCursorPosition() tracks the mouse.
+                local rawX, rawY = GetCursorPosition()
+                local uiScale    = UIParent:GetEffectiveScale()
+                local myCX = rawX / uiScale
+                local myCY = rawY / uiScale
                 local mySize     = frame:GetWidth()
                 local isCtrl     = IsControlKeyDown()
 
@@ -450,7 +491,12 @@ local function BuildIconFrame(globalID, db)
                     end
                 end
 
-                local candidate = FindSnapCandidate(myCX, myCY, mySize, isCtrl)
+                -- For ctrl mode: after ApplySnap shrinks the frame to 35%, read
+                -- the pre-snap size so FindSnapCandidate can still match full-size
+                -- neighbours. Without this the shrunken size finds no matches →
+                -- instant RevertSnap every tick → oscillation.
+                local searchSize = (isCtrl and dragState.sizeAtSnapEnter) or mySize
+                local candidate = FindSnapCandidate(myCX, myCY, searchSize, isCtrl)
 
                 if candidate then
                     if dragState.currentSnapID ~= candidate.targetID
@@ -554,7 +600,7 @@ local function BuildIconFrame(globalID, db)
             local isCtrl = dragState.pendingCtrl
 
             local finalSize = isCtrl
-                and math.max(MIN_SIZE, math.floor(snap.targetSize * 0.3))
+                and math.max(MIN_SIZE, math.floor(snap.targetSize * 0.35))
                 or  frame:GetWidth()
 
             frame:SetSize(finalSize, finalSize)
