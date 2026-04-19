@@ -1,6 +1,7 @@
 local frame = CreateFrame("Frame", "GuesstimatorHasteFrame", UIParent, "BackdropTemplate")
 local logFrame = CreateFrame("Frame", "GuesstimatorHasteLog", UIParent, "BackdropTemplate")
-
+frame:Hide()
+logFrame:Hide()
 -- Global Variable for external access
 GuestimatedHaste = 0
 
