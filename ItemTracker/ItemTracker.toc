@@ -6,6 +6,7 @@
 ## SavedVariablesPerCharacter: ItemTrackerDB
 ## IconTexture: Interface\Icons\inv_misc_bag_01
 ## Category-enUS: PoulsTools
+## Group: PoulsTools
 ## RequiredDeps: shmIcons, PoulsTools
 
 ItemTracker.lua

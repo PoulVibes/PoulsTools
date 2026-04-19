@@ -6,5 +6,6 @@
 ## SavedVariables: GuesstimatorHasteDB
 ## IconTexture: Interface\Icons\spell_nature_crystalball
 ## Category-enUS: PoulsTools
+## Group: PoulsTools
 
 GuesstimatorHaste.lua

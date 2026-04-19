@@ -6,5 +6,6 @@
 
 ## IconTexture: Interface\Icons\inv_ability_monk_weaponsoforder
 ## Category-enUS: PoulsTools
+## Group: PoulsTools
 
 ZenithTracker.lua

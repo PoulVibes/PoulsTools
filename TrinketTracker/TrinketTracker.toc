@@ -6,6 +6,7 @@
 ## SavedVariablesPerCharacter: TrinketTrackerDB
 ## IconTexture: Interface\Icons\inv_jewelry_trinketpvp_01
 ## Category-enUS: PoulsTools
+## Group: PoulsTools
 ## RequiredDeps: shmIcons, PoulsTools
 
 TrinketTracker.lua

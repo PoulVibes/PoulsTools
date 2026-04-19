@@ -4,6 +4,7 @@
 ## Version: 2.0.0
 ## IconTexture: Interface\Icons\inv_misc_book_11
 ## Category-enUS: PoulsTools
+## Group: PoulsTools
 ## Author: Poul
 ## SavedVariables: CooldownTrackerDB
 ## RequiredDeps: shmIcons, PoulsTools

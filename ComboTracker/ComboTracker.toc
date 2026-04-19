@@ -5,6 +5,7 @@
 ## Version: 1.0
 ## IconTexture: Interface\Icons\ability_monk_palmstrike
 ## Category-enUS: PoulsTools
+## Group: PoulsTools
 ## RequiredDeps: shmIcons
 ## SavedVariables: ComboTrackerDB
 

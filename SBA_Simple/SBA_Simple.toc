@@ -6,6 +6,7 @@
 
 ## IconTexture: Interface\Icons\ui_spellbook_onebutton
 ## Category-enUS: PoulsTools
+## Group: PoulsTools
 
 ## RequiredDeps: shmIcons, PoulsTools
 

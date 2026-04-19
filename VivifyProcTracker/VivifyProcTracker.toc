@@ -8,6 +8,7 @@
 
 ## IconTexture: Interface\Icons\ability_monk_vivify
 ## Category-enUS: PoulsTools
+## Group: PoulsTools
 
 # Libraries
 Libs\LibStub\LibStub.lua

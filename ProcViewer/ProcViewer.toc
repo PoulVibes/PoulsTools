@@ -6,6 +6,7 @@
 ## RequiredDeps: shmIcons
 ## IconTexture: Interface\Icons\inv_misc_book_08
 ## Category-enUS: PoulsTools
+## Group: PoulsTools
 ## SavedVariablesPerCharacter: ProcViewerDB
 
 ProcViewer.lua

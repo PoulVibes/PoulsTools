@@ -5,6 +5,7 @@
 ## Version: 1.0
 ## IconTexture: Interface\Icons\ability_monk_ascension
 ## Category-enUS: PoulsTools
+## Group: PoulsTools
 
 # Library Loads
 Libs\LibStub\LibStub.lua
