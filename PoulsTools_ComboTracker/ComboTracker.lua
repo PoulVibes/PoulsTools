@@ -114,6 +114,17 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         })
         shmIcons:SetIcon(ADDON_NAME, "combo", TRACKER_ICON)
         shmIcons:SetVisible(ADDON_NAME, "combo", false)
+        -- Hide this addon's icons when shmIcons are locked
+        if shmIcons and shmIcons.RegisterLockCallback then
+            shmIcons:RegisterLockCallback(function(locked)
+                if locked then
+                    shmIcons:SetVisible(ADDON_NAME, "combo", false)
+                    shmIcons:SetCooldownRaw(ADDON_NAME, "combo", 0, 0)
+                    shmIcons:SetStacks(ADDON_NAME, "combo", 0)
+                    shmIcons:SetGlow(ADDON_NAME, "combo", false)
+                end
+            end)
+        end
         -- After initialization, enable/disable based on class/spec
         UpdateEnabledState()
 

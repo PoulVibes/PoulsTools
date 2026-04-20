@@ -68,3 +68,13 @@ Track your equipped on-use items and place them where you want them.
 ---
 
 *Just getting started — feedback and requests welcome!*
+
+---
+
+### Slash Commands
+
+List of slash commands available in this addon suite:
+
+- `/pt`, `/poulstools` — Open PoulsTools settings; `/pt help` shows help.
+
+Notes: Commands are case-insensitive. Use the addon's UI for more options.

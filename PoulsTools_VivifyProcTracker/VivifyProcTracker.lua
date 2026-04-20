@@ -64,6 +64,17 @@ function VPT:OnInitialize()
     shmIcons:SetIcon(ADDON_NAME, "vivify", C_Spell.GetSpellTexture(VIVIFY_SPELL_ID))
     shmIcons:SetVisible(ADDON_NAME, "vivify", false)
 
+    -- Hide this addon's icon when shmIcons are locked
+    if shmIcons and shmIcons.RegisterLockCallback then
+        shmIcons:RegisterLockCallback(function(locked)
+            if locked then
+                shmIcons:SetVisible(ADDON_NAME, "vivify", false)
+                shmIcons:SetCooldownRaw(ADDON_NAME, "vivify", 0, 0)
+                shmIcons:SetGlow(ADDON_NAME, "vivify", false)
+            end
+        end)
+    end
+
     frame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
     frame:SetScript("OnEvent", function(self, event, ...)        VPT:UNIT_SPELLCAST_SUCCEEDED(event, ...)
     end)

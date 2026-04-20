@@ -135,6 +135,20 @@ local function RegisterIcons()
 
     iconsRegistered = true
     shmIcons:RestoreSnapGroups()
+    -- Hide all ProcViewer icons when shmIcons are locked
+    if shmIcons and shmIcons.RegisterLockCallback then
+        shmIcons:RegisterLockCallback(function(locked)
+            if locked then
+                for _, def in ipairs(SLOT_DEFS) do
+                    shmIcons:SetGlow(ADDON, def.key, false)
+                    shmIcons:SetVisible(ADDON, def.key, false)
+                end
+                -- clear timers
+                for _, entry in pairs(TIMED_ENTRIES) do entry.endTime = 0 end
+                tickerFrame:Hide()
+            end
+        end)
+    end
 end
 
 ------------------------------------------------------------------------

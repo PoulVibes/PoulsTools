@@ -53,6 +53,134 @@ local CORNER_COORDS = {
 local icons          = {}  -- icons[globalID] = icon object
 local snapNeighbours = {}  -- (unused) kept for API compatibility
 local isLocked       = true
+local lockCallbacks  = {}  -- functions called when lock state changes: fn(isLocked)
+
+function shmIcons:RegisterLockCallback(fn)
+    if type(fn) ~= "function" then return end
+    table.insert(lockCallbacks, fn)
+end
+
+function shmIcons:UnregisterLockCallback(fn)
+    for i, f in ipairs(lockCallbacks) do
+        if f == fn then
+            table.remove(lockCallbacks, i)
+            return
+        end
+    end
+end
+-- Informational frame: shown when unlocked and not in combat.
+local infoFrame = CreateFrame("Frame", "shmIconsInfoFrame", UIParent, "BackdropTemplate")
+infoFrame:SetPoint("TOP", UIParent, "TOP", 0, -140)
+infoFrame:SetFrameStrata("HIGH")
+infoFrame:SetBackdrop({
+    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    edgeSize = 16,
+})
+infoFrame:SetBackdropColor(0, 0, 0, 0.6)
+
+local titleFS = infoFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+local bodyFS  = infoFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+titleFS:SetFont(FONT_PATH, 14, FONT_FLAGS)
+bodyFS:SetFont(FONT_PATH, 13, FONT_FLAGS)
+bodyFS:SetJustifyH("LEFT")
+bodyFS:SetJustifyV("TOP")
+bodyFS:SetWordWrap(true)
+
+-- Lock button at the bottom of the info panel
+local lockBtn = CreateFrame("Button", "shmIconsInfoLockBtn", infoFrame, "UIPanelButtonTemplate")
+lockBtn:SetSize(100, 22)
+lockBtn:SetText("Lock")
+lockBtn:SetScript("OnClick", function()
+    if not isLocked then
+        shmIcons:ToggleLock()
+    end
+    infoFrame:Hide()
+end)
+
+local function LayoutInfoFrame()
+    local linesTitle = "PoulsTools Icons Unlocked:"
+    local bodyText = table.concat({
+        "- Left Click = Drag move / Corner Resize (edge-snap to same-size icons)",
+        "- Right Click = Group drag (drag all adjacent same-size icons together)",
+        "- Shift = Live resize to nearest icon size while dragging",
+        "- Ctrl = Corner-attach: shrink and attach to corner while dragging",
+    }, "\n")
+
+    titleFS:SetText(linesTitle)
+    bodyFS:SetText(bodyText)
+
+    local paddingX = 12
+    local paddingY = 8
+    local spacing  = 4
+
+    -- Measure natural widths, clamp to screen width with margin
+    local naturalW = math.max(titleFS:GetStringWidth(), bodyFS:GetStringWidth())
+    local uiWidth = UIParent:GetWidth() or 1024
+    local maxAllowed = math.max(200, uiWidth - 60)
+    local width = math.min(math.ceil(naturalW + paddingX * 2), maxAllowed)
+
+    -- Ensure the button fits horizontally
+    local btnW = (lockBtn and lockBtn:GetWidth()) or 100
+    if width < btnW + paddingX * 2 then
+        width = math.min(maxAllowed, btnW + paddingX * 2)
+    end
+
+    -- Apply wrapping width to body and re-measure heights
+    bodyFS:SetWidth(width - paddingX * 2)
+    local titleH = math.ceil(titleFS:GetStringHeight())
+    local bodyH  = math.ceil(bodyFS:GetStringHeight())
+    local btnH   = (lockBtn and lockBtn:GetHeight()) or 22
+
+    local totalH = paddingY * 2 + titleH + spacing + bodyH + spacing + btnH
+    infoFrame:SetSize(width, totalH)
+
+    titleFS:ClearAllPoints()
+    titleFS:SetPoint("TOPLEFT", infoFrame, "TOPLEFT", paddingX, -paddingY)
+    bodyFS:ClearAllPoints()
+    bodyFS:SetPoint("TOPLEFT", titleFS, "BOTTOMLEFT", 0, -spacing)
+
+    -- Position the lock button centered at the bottom with padding
+    if lockBtn then
+        lockBtn:ClearAllPoints()
+        lockBtn:SetPoint("BOTTOM", infoFrame, "BOTTOM", 0, paddingY)
+    end
+end
+
+local function UpdateInfoFrameVisibility()
+    if isLocked or InCombatLockdown() then
+        infoFrame:Hide()
+    else
+        LayoutInfoFrame()
+        infoFrame:Show()
+    end
+end
+
+local combatFrame = CreateFrame("Frame")
+combatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+combatFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+combatFrame:SetScript("OnEvent", function(self, event)
+    if event == "PLAYER_REGEN_DISABLED" then
+        -- Entering combat: hide the info frame if it's shown
+        if infoFrame:IsShown() then
+            infoFrame._wasShownBeforeCombat = true
+        else
+            infoFrame._wasShownBeforeCombat = false
+        end
+        infoFrame:Hide()
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        -- Leaving combat: reshow if unlocked
+        if not isLocked then
+            LayoutInfoFrame()
+            infoFrame:Show()
+        end
+    else
+        UpdateInfoFrameVisibility()
+    end
+end)
+
+-- Ensure initial visibility matches current lock/combat state
+UpdateInfoFrameVisibility()
 
 -- ============================================================
 -- Snap DB helpers
@@ -826,6 +954,15 @@ end
 function shmIcons:ToggleLock()
     isLocked = not isLocked
     for _, icon in pairs(icons) do ApplyLockState(icon) end
+    UpdateInfoFrameVisibility()
+    -- Notify registered listeners about the new lock state
+    for _, cb in ipairs(lockCallbacks) do
+        local ok, err = pcall(cb, isLocked)
+        if not ok then
+            -- avoid noisy prints in library, but helpful during debugging
+            print("shmIcons: lock callback error: " .. tostring(err))
+        end
+    end
     return isLocked
 end
 

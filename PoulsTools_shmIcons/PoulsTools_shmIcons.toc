@@ -1,7 +1,7 @@
-## Interface: 120001
+##Interface: 120005
 ## Title: PoulsTools_shmIcons
 ## Notes: Shared icon/cooldown/glow/snap framework library for shmIcons-based addons.
-## Version: 1.0.0
+## Version: 1.0.1
 ## Author: Poul
 ## IconTexture: Interface\Icons\battleground_strongbox_skirmish_horde
 ## Category-enUS: PoulsTools
