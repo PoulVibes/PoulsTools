@@ -94,21 +94,27 @@ local function UpdateTracker(key)
     local isChargeSpell     = chargeInfo and chargeInfo.maxCharges and chargeInfo.maxCharges > 1
     local chargeDuration    = C_Spell.GetSpellChargeDuration(entry.spellID)
     if isChargeSpell then
+        local curCharges = (chargeInfo and chargeInfo.currentCharges)
+        -- Show recharge timer for the next charge when available
         if chargeDuration then
             shmIcons:SetCooldown(ADDON_NAME, key, chargeDuration)
-            shmIcons:SetGlow(ADDON_NAME, key, false)
         elseif durationObject then
             shmIcons:SetCooldown(ADDON_NAME, key, durationObject)
-            if cdInfo.isActive then
-                shmIcons:SetGlow(ADDON_NAME, key, true)
-            else
-                shmIcons:SetGlow(ADDON_NAME, key, false)
-            end
         else
             shmIcons:SetCooldown(ADDON_NAME, key, nil)
-            shmIcons:SetGlow(ADDON_NAME, key, true)
         end
-        shmIcons:SetStacks(ADDON_NAME, key, chargeInfo.currentCharges)
+
+        -- Glow should reflect availability. Guard against secret values.
+        local glowWanted
+        if issecretvalue(curCharges) then
+            -- Fallback: if no active cooldown, assume available
+            glowWanted = not (cdInfo and cdInfo.isActive)
+        else
+            glowWanted = (curCharges or 0) > 0
+        end
+        shmIcons:SetGlow(ADDON_NAME, key, glowWanted)
+
+        shmIcons:SetStacks(ADDON_NAME, key, curCharges)
     else
         shmIcons:SetChargeCooldown(ADDON_NAME, key, nil)
         if durationObject and cdInfo and cdInfo.isActive then
