@@ -1,4 +1,4 @@
-##Interface: 120005
+##Interface: 120001
 ## Title: PoulsTools_shmIcons
 ## Notes: Shared icon/cooldown/glow/snap framework library for shmIcons-based addons.
 ## Version: 1.0.1

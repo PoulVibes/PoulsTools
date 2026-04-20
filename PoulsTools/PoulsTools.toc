@@ -1,4 +1,4 @@
-##Interface: 120005
+##Interface: 120001
 ## Title: |cFF00CCFFPouls|r|cFFFFFFFFTools|r
 ## Notes: Central addon management hub. Provides a Settings menu with submenus for your other addons.
 ## Author: Poul
