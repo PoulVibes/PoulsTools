@@ -173,8 +173,10 @@ frame:SetScript("OnEvent", function(self, event, arg1)
 end)
 
 -- 5. The OnUpdate Loop
-frame:SetScript("OnUpdate", function(self, elapsed)   
-    if not addonEnabled or not self:IsShown() then print("self not shown") return end
+-- tickFrame is never hidden so the haste calculation runs regardless of UI visibility
+local tickFrame = CreateFrame("Frame")
+tickFrame:SetScript("OnUpdate", function(self, elapsed)
+    if not addonEnabled then return end
 
     local cdInfo = C_Spell.GetSpellCooldown(GCD_DUMMY_ID)
     if cdInfo and cdInfo.duration and cdInfo.duration > 0 then
@@ -188,7 +190,9 @@ frame:SetScript("OnUpdate", function(self, elapsed)
             local capText = isCapped and "|cffff0000(CAP)|r" or ""
 
             -- Update the visible text
-            hasteText:SetText(string.format("Off: %.1f%% vs Dummy: %.1f%% %s", official, currentDummyHaste, capText))
+            if frame:IsShown() then
+                hasteText:SetText(string.format("Off: %.1f%% vs Dummy: %.1f%% %s", official, currentDummyHaste, capText))
+            end
 
             -- Logging Logic (1.0% threshold)
             if math.abs(currentDummyHaste - lastLoggedDummyValue) >= 1.0 then

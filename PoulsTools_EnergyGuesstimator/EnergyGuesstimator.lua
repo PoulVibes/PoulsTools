@@ -172,8 +172,9 @@ frame:SetScript("OnEvent", function(self, event, ...)
 end)
 
 -- 6. UI Update with Secret Value Comparison
-ui:SetScript("OnUpdate", function(self, elapsed)
-    if not addonEnabled or not self:IsShown() then return end
+-- OnUpdate is on the logic frame so it runs even when the display UI is hidden
+frame:SetScript("OnUpdate", function(self, elapsed)
+    if not addonEnabled then return end
 
     local currentRegenRate = (BASE_REGEN * (1 + _G.GuesstimatedHaste)) * ASCENSION_MODIFIER
 
@@ -181,11 +182,13 @@ ui:SetScript("OnUpdate", function(self, elapsed)
         currentEnergy = math.min(maxEnergy, currentEnergy + (currentRegenRate * elapsed))
     end
 
-    -- SAFE DISPLAY for 12.0.1
-    -- We use %s to allow the Secret Value to be 'wrapped' into the string visually
-    -- without the Lua script attempting to read the number inside.
-    local actualEnergy = UnitPower("player", 3)
-    self.text:SetFormattedText("%d vs %s", math.floor(currentEnergy), actualEnergy)
+    if ui:IsShown() then
+        -- SAFE DISPLAY for 12.0.1
+        -- We use %s to allow the Secret Value to be 'wrapped' into the string visually
+        -- without the Lua script attempting to read the number inside.
+        local actualEnergy = UnitPower("player", 3)
+        ui.text:SetFormattedText("%d vs %s", math.floor(currentEnergy), actualEnergy)
+    end
 end)
 
 -- 7. Slash Commands
