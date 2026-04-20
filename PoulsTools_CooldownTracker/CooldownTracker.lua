@@ -14,7 +14,7 @@
 local ADDON_NAME   = "PoulsTools_CooldownTracker"
 local DEFAULT_SIZE = 64
 
--- spellKey → { spellName, spellID } for the currently active spec
+-- spellKey → { spellName, spellID } for the currently active specialization.
 local tracked = {}
 
 -- Change listeners for UI integrations (called when trackers change)
