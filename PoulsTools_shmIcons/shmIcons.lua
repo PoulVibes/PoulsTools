@@ -272,12 +272,20 @@ local function ApplyLockState(icon)
         frame:SetBackdrop(nil)
         icon.resizeHandle:Hide()
     else
-        frame:EnableMouse(true)
-        frame:RegisterForDrag("LeftButton", "RightButton")
-        frame:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8" })
-        frame:SetBackdropColor(0, 0, 0, 0.5)
-		frame:Show()
-        icon.resizeHandle:Show()
+        if icon.enabled then
+            frame:EnableMouse(true)
+            frame:RegisterForDrag("LeftButton", "RightButton")
+            frame:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8" })
+            frame:SetBackdropColor(0, 0, 0, 0.5)
+            frame:Show()
+            icon.resizeHandle:Show()
+        else
+            -- Keep disabled icons hidden and non-interactive even when unlocked
+            frame:EnableMouse(false)
+            frame:SetBackdrop(nil)
+            frame:Hide()
+            icon.resizeHandle:Hide()
+        end
     end
 end
 
@@ -797,12 +805,20 @@ function shmIcons:Register(addonName, id, db, callbacks)
     db.y            = tonumber(db.y)     or 0
     db.point        = db.point           or "CENTER"
     db.glow_enabled = (db.glow_enabled == true)
+    -- Per-icon enabled state: default true unless explicitly disabled in db
+    if db.enabled == nil then db.enabled = true end
 
     local icon = BuildIconFrame(globalID, db)
+    -- Mirror enabled state on the runtime icon object
+    icon.enabled = (db.enabled == true)
     icon.onMove   = callbacks and callbacks.onMove
     icon.onResize = callbacks and callbacks.onResize
 
     icons[globalID] = icon
+    -- Ensure frame starts hidden if the icon is disabled
+    if icon.enabled == false then
+        icon.frame:Hide()
+    end
     return icon
 end
 
@@ -909,7 +925,51 @@ end
 function shmIcons:SetVisible(addonName, id, visible)
     local icon = icons[addonName .. ":" .. tostring(id)]
     if not icon then return end
+    -- Do not allow showing if the icon is disabled
+    if not icon.enabled then
+        icon.frame:Hide()
+        return
+    end
     if visible then icon.frame:Show() else icon.frame:Hide() end
+end
+
+function shmIcons:SetEnabled(addonName, id, enabled)
+    local icon = icons[addonName .. ":" .. tostring(id)]
+    if not icon then return end
+    icon.enabled = (enabled == true)
+    icon.db.enabled = icon.enabled
+    if not icon.enabled then
+        -- Immediately hide and clear runtime visuals
+        icon.frame:Hide()
+        icon.cd:Clear()
+        icon.cd2:Clear()
+        icon.stackLabel:SetText("")
+        icon.stackLabel:Hide()
+        icon.glow:Hide()
+        icon.usableOverlay:SetVertexColor(0,0,0,0)
+    else
+        -- Enabling: if icons are unlocked, make this icon visible and interactive.
+        if not isLocked then
+            -- Restore minimal visuals; consumers will update cooldown/stacks as needed
+            if icon.glowEnabled then icon.glow:Show() end
+            ApplyLockState(icon)
+        else
+            -- Locked: ensure ApplyLockState enforces non-interactive state
+            ApplyLockState(icon)
+        end
+    end
+    return icon.enabled
+end
+
+function shmIcons:IsEnabled(addonName, id)
+    local icon = icons[addonName .. ":" .. tostring(id)]
+    if not icon then return false end
+    return icon.enabled == true
+end
+
+function shmIcons:ToggleEnabled(addonName, id)
+    local cur = shmIcons:IsEnabled(addonName, id)
+    return shmIcons:SetEnabled(addonName, id, not cur)
 end
 
 function shmIcons:SetRange(addonName, id, inRange)

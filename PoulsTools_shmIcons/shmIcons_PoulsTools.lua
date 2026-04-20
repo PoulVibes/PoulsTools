@@ -163,32 +163,53 @@ local function OnBuildUI(parent)
             nameLbl:SetText(displayName)
             nameLbl:SetTextColor(unpack(W.colors.text))
 
-            -- Remove button — delegates to the source addon's public API
-            local removeBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-            removeBtn:SetSize(80, 20)
-            removeBtn:SetPoint("RIGHT", row, "RIGHT", -120, 0)
-            removeBtn:SetText("Remove")
-            removeBtn:SetScript("OnClick", function()
-                if capturedAddon == "PoulsTools_CooldownTracker" then
-                    local spellName = capturedDB and capturedDB.spellName
-                    if spellName and type(CooldownTracker_Remove) == "function" then
-                        CooldownTracker_Remove(spellName)
+            -- Action button: either Remove (if addon has a PoulsTools submenu)
+            -- or Enable/Disable (for addons without a PoulsTools submenu).
+            -- Override: always show Enable/Disable for SBA_Simple.
+            local registry = (PoulsTools and PoulsTools.Menu and PoulsTools.Menu.registry) or {}
+            if registry[capturedAddon] and capturedAddon ~= "PoulsTools_SBA_Simple" then
+                local removeBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                removeBtn:SetSize(80, 20)
+                removeBtn:SetPoint("RIGHT", row, "RIGHT", -120, 0)
+                removeBtn:SetText("Remove")
+                removeBtn:SetScript("OnClick", function()
+                    if capturedAddon == "PoulsTools_CooldownTracker" then
+                        local spellName = capturedDB and capturedDB.spellName
+                        if spellName and type(CooldownTracker_Remove) == "function" then
+                            CooldownTracker_Remove(spellName)
+                        end
+                    elseif capturedAddon == "PoulsTools_ItemTracker" then
+                        local itemName = capturedDB and capturedDB.itemName
+                        if itemName and type(ItemTracker_Remove) == "function" then
+                            ItemTracker_Remove(itemName)
+                        end
+                    elseif capturedAddon == "PoulsTools_TrinketTracker" then
+                        local slotNum = tonumber(capturedID)
+                        if slotNum and type(TrinketTracker_Remove) == "function" then
+                            TrinketTracker_Remove(slotNum)
+                        end
+                    else
+                        -- Generic fallback for unknown addons: unregister from shmIcons
+                        shmIcons:Unregister(capturedAddon, capturedID)
                     end
-                elseif capturedAddon == "PoulsTools_ItemTracker" then
-                    local itemName = capturedDB and capturedDB.itemName
-                    if itemName and type(ItemTracker_Remove) == "function" then
-                        ItemTracker_Remove(itemName)
-                    end
-                elseif capturedAddon == "PoulsTools_TrinketTracker" then
-                    local slotNum = tonumber(capturedID)
-                    if slotNum and type(TrinketTracker_Remove) == "function" then
-                        TrinketTracker_Remove(slotNum)
-                    end
-                else
-                    -- Generic fallback for unknown addons: unregister from shmIcons
-                    shmIcons:Unregister(capturedAddon, capturedID)
+                    BuildIconList()
+                end)
+            else
+                local actBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                actBtn:SetSize(100, 20)
+                actBtn:SetPoint("RIGHT", row, "RIGHT", -120, 0)
+                local function UpdateActLabel()
+                    local enabled = shmIcons and shmIcons.IsEnabled and shmIcons:IsEnabled(capturedAddon, capturedID)
+                    actBtn:SetText(enabled and "Disable" or "Enable")
                 end
-            end)
+                actBtn:SetScript("OnClick", function()
+                    if shmIcons and shmIcons.ToggleEnabled then
+                        shmIcons:ToggleEnabled(capturedAddon, capturedID)
+                        UpdateActLabel()
+                    end
+                end)
+                UpdateActLabel()
+            end
 
             row:Show()
             table.insert(activeRows, row)
