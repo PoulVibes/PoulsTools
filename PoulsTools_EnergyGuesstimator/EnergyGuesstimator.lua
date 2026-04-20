@@ -119,6 +119,7 @@ frame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
 frame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" and select(1, ...) == "PoulsTools_EnergyGuesstimator" then
         OnInitialize()
+        UpdateEnabledState()
         return
     end
 

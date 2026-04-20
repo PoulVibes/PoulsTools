@@ -151,6 +151,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         else logFrame:SetPoint("CENTER", 0, -100) end
         if not GuesstimatorHasteDB.isVisible then frame:Hide() logFrame:Hide() end
         UpdateLogUI()
+        UpdateEnabledState()
 
     elseif event == "PLAYER_LOGIN" then
         UpdateEnabledState()

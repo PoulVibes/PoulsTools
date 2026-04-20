@@ -177,11 +177,37 @@ ticker:SetScript("OnUpdate", function()
     shmIcons:SetGlow(ADDON_NAME, ICON_KEY, false)
 end)
 
+-- ── Monk add-on loader ───────────────────────────────────────────────────
+local MONK_ADDONS = {
+    "PoulsTools_VivifyProcTracker",
+    "PoulsTools_ComboTracker",
+    "PoulsTools_ProcViewer",
+    "PoulsTools_EnergyGuesstimator",
+    "PoulsTools_GuesstimatorHaste",
+    "PoulsTools_ZenithTracker",
+}
+
+local monkAddonsLoaded = false
+local function LoadMonkAddons()
+    if monkAddonsLoaded then return end
+    local _, classToken = UnitClass("player")
+    if classToken ~= "MONK" then return end
+    monkAddonsLoaded = true
+    for _, addonName in ipairs(MONK_ADDONS) do
+        if not C_AddOns.IsAddOnLoaded(addonName) then
+            C_AddOns.LoadAddOn(addonName)
+        end
+    end
+end
+
 -- ── Events ────────────────────────────────────────────────────────────────
 local events = CreateFrame("Frame")
 events:RegisterEvent("PLAYER_ENTERING_WORLD")
 events:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 events:SetScript("OnEvent", function(_, event)
+    if event == "PLAYER_ENTERING_WORLD" then
+        LoadMonkAddons()
+    end
     if event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_SPECIALIZATION_CHANGED" then
         shmIcons:Unregister(ADDON_NAME, ICON_KEY)
         RegisterIcon()

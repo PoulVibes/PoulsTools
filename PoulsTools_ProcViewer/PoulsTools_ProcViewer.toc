@@ -1,6 +1,7 @@
 ##Interface: 120001
 ## Title: PoulsTools_ProcViewer
 ## Notes: Centered HUD proc icons with spell activation glow.
+## LoadOnDemand: 1
 ## Author: Poul
 ## Version: 0.1.9
 ## RequiredDeps: PoulsTools_shmIcons

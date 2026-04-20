@@ -1,4 +1,5 @@
 local frame = CreateFrame("Frame")
+frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("TRAIT_CONFIG_UPDATED")
 frame:RegisterEvent("PLAYER_LOGIN")
@@ -95,6 +96,12 @@ local function UpdateTimerDuration()
 end
 
 frame:SetScript("OnEvent", function(self, event, unit, castGUID, spellID)
+    if event == "ADDON_LOADED" and unit == "PoulsTools_ZenithTracker" then
+        UpdateTimerDuration()
+        UpdateEnabledState()
+        return
+    end
+
     if event == "PLAYER_ENTERING_WORLD" or event == "TRAIT_CONFIG_UPDATED" then
         UpdateTimerDuration()
         return

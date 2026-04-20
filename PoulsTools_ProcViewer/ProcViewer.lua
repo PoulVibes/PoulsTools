@@ -19,7 +19,7 @@
 -- shmIcons writes position/size back into each db entry in-place.
 -- Schema per slot: { x, y, point, size, enabled, glow_enabled, spellID }
 ------------------------------------------------------------------------
-ProcViewerDB = {}--ProcViewerDB or {}
+ProcViewerDB = ProcViewerDB or {}
 
 ------------------------------------------------------------------------
 -- Constants
@@ -32,6 +32,7 @@ local GAP               = 8
 local WINDWALKER_SPEC_ID = 269
 local iconsRegistered = false
 local addonEnabled = false
+local procViewerInitialized = false
 
 ------------------------------------------------------------------------
 -- Global proc-active booleans (readable by other addons)
@@ -223,6 +224,7 @@ end
 
 -- Create event frame early so helper functions can register/unregister events
 local eventFrame = CreateFrame("Frame")
+eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 eventFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
@@ -303,35 +305,31 @@ end
 ------------------------------------------------------------------------
 -- Event handler
 ------------------------------------------------------------------------
+local function InitializeProcViewer()
+    if procViewerInitialized then return end
+    local _, classToken = UnitClass("player")
+    if classToken ~= "MONK" then
+        eventFrame:UnregisterAllEvents()
+        return
+    end
+    procViewerInitialized = true
+    if not iconsRegistered then RegisterIcons() end
+    _G["bok_proc_timer"]  = 0
+    _G["docj_proc_timer"] = 0
+    _G["rwk_proc_timer"]  = 0
+    for _, entry in pairs(TIMED_ENTRIES) do
+        entry.endTime = 0
+    end
+    tickerFrame:Hide()
+    UpdateEnabledState()
+end
+
 eventFrame:SetScript("OnEvent", function(self, event, arg1)
-    if event == "PLAYER_LOGIN" then
-        -- Abort if not a Monk (no point continuing)
-        local _, classToken = UnitClass("player")
-        if classToken ~= "MONK" then
-            --print("|cff00ff00[" .. ADDON .. " v" .. VERSION .. "]|r")
-            --print("  ProcViewer disabled: not a Monk.")
-            eventFrame:UnregisterAllEvents()
-            return
-        end
+    if event == "ADDON_LOADED" and arg1 == ADDON then
+        InitializeProcViewer()
 
-        -- Initialise icons and timers
-        RegisterIcons()
-        _G["bok_proc_timer"]  = 0
-        _G["docj_proc_timer"] = 0
-        _G["rwk_proc_timer"]  = 0
-        for _, entry in pairs(TIMED_ENTRIES) do
-            entry.endTime = 0
-        end
-        tickerFrame:Hide()
-
-        -- Enable only if Windwalker, otherwise stay disabled but listen for spec changes
-        if IsPlayerWindwalkerSpec() then
-            EnableAddon()
-        else
-            DisableAddon()
-            --print("|cff00ff00[" .. ADDON .. " v" .. VERSION .. "]|r")
-            --print("  ProcViewer loaded but inactive (not Windwalker).")
-        end
+    elseif event == "PLAYER_LOGIN" then
+        InitializeProcViewer()
 
     elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
         if arg1 == "player" then
