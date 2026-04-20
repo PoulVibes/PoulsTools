@@ -96,6 +96,15 @@ local function AttachTimerText(key, iconObj, size)
     timerTexts[key] = fs
 end
 
+-- TIMED_ENTRIES is populated later from PROC_REGISTRY; declare it
+-- here so closures (e.g. lock callbacks) capture the local variable
+-- rather than a global with the same name.
+local TIMED_ENTRIES = nil   -- built after PROC_REGISTRY is defined (below)
+
+-- `tickerFrame` is used in callbacks registered during icon registration.
+-- Declare it here so closures capture the local upvalue rather than an
+-- uninitialized global, avoiding "attempt to index global 'tickerFrame'".
+local tickerFrame = nil
 ------------------------------------------------------------------------
 -- Icon registration
 ------------------------------------------------------------------------
@@ -167,13 +176,10 @@ end
 ------------------------------------------------------------------------
 -- Countdown ticker
 ------------------------------------------------------------------------
-local tickerFrame = CreateFrame("Frame")
+tickerFrame = CreateFrame("Frame")
 tickerFrame:Hide()
 
 local function StartTicker() tickerFrame:Show() end
-
-local TIMED_ENTRIES = nil   -- built after PROC_REGISTRY is defined (below)
-
 local function MaybeStopTicker()
     for _, entry in pairs(TIMED_ENTRIES) do
         if entry.endTime > 0 then return end
