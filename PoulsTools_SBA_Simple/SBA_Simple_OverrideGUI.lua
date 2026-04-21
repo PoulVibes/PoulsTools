@@ -32,6 +32,8 @@ local COND_TYPES = {
     -- Spell-based checks (needsSpell = true → picker shows This Spell / Other Spell toggle)
     { id = "on_cd",        label = "On Cooldown",               needsSpell = true,
       generate = function(c, s) return ("C_Spell.GetSpellCooldown(%d).isActive"):format(ResolveSpell(c,s)) end },
+    { id = "reactive_enabled", label = "Reactive Spell Enabled", needsSpell = true,
+      generate = function(c, s) return ("C_Spell.GetSpellCooldown(%d).isEnabled"):format(ResolveSpell(c,s)) end },
     { id = "usable",       label = "Is Usable",                 needsSpell = true,
       generate = function(c, s) return ("C_Spell.IsSpellUsable(%d)"):format(ResolveSpell(c,s)) end },
     { id = "talented",     label = "Talented",                  needsSpell = true,
