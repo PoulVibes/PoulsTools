@@ -21,7 +21,7 @@ local comboStrikesAbilities = {
     [467396] = true, -- Slicing Winds
     [1249625] = true, -- Zenith (Main Talent ID)
     [1249763] = true, -- Zenith (Mastery Trigger ID)
-    [1272696] = true, -- Zenith Stomp
+    --[1272696] = true, -- Zenith Stomp -- Currently not triggering mastery combo strikes probably a bug.
 }
 
 local function ResetStreak()

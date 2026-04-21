@@ -1,4 +1,4 @@
-##Interface: 120005
+## Interface: 120005
 ## Title: PoulsTools_CooldownTracker
 ## Notes: Tracks any ability cooldown by name with icon, cooldown sweep, and ready glow.
 ## Version: 2.0.0

@@ -1,4 +1,4 @@
-##Interface: 120005
+## Interface: 120005
 ## Title: PoulsTools_SBA_Simple
 ## Notes: Displays the next suggested cast from C_AssistedCombat using shmIcons.
 ## Author: Poul
