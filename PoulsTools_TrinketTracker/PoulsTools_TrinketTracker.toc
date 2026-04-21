@@ -1,4 +1,4 @@
-##Interface: 120001
+##Interface: 120005
 ## Title: PoulsTools_TrinketTracker
 ## Notes: Tracks equipment slot cooldowns with icon, cooldown sweep, and ready glow.
 ## Version: 2.0.0

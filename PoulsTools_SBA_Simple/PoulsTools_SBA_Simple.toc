@@ -1,4 +1,4 @@
-##Interface: 120001
+##Interface: 120005
 ## Title: PoulsTools_SBA_Simple
 ## Notes: Displays the next suggested cast from C_AssistedCombat using shmIcons.
 ## Author: Poul
@@ -12,4 +12,5 @@
 
 ## SavedVariables: SBA_SimpleDB
 SBA_Simple.lua
+SBA_Simple_OverrideGUI.lua
 SBA_Simple_PoulsTools.lua

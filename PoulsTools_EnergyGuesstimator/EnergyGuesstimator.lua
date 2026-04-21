@@ -21,6 +21,7 @@ _G.GuesstimatedHaste = _G.GuesstimatedHaste or 0.21
 local REQUIRED_CLASS = "MONK"
 local REQUIRED_SPEC_ID = 269
 local addonEnabled = false
+local ui -- forward declaration; assigned below after CreateFrame
 
 local function IsPlayerClass(token)
     local _, classToken = UnitClass("player")
@@ -75,7 +76,7 @@ local maxEnergy = UnitPowerMax("player", 3) or 120
 currentEnergy = maxEnergy
 
 -- 3. UI Setup
-local ui = CreateFrame("Frame", "EnergyGuesstimatorUI", UIParent, "BackdropTemplate")
+ui = CreateFrame("Frame", "EnergyGuesstimatorUI", UIParent, "BackdropTemplate")
 ui:SetSize(160, 40) -- Increased width for comparison text
 ui:SetPoint("CENTER", 0, 0)
 ui:SetMovable(true)

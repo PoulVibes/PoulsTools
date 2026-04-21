@@ -73,6 +73,16 @@ local function Override()
     return result
 end
 
+-- Public API: allows the GUI builder to push compiled override code for the
+-- current spec without needing direct access to the local CompileOverride closure.
+function SBA_Simple_SetOverrideCode(code)
+    local specID = GetCurrentSpecID()
+    local specDB = GetSpecDB(specID)
+    specDB.overrideCode = code or ""
+    GetDB().overrideCode = code or ""
+    CompileOverride(code or "")
+end
+
 -- ── Registration ──────────────────────────────────────────────────────────
 local function RegisterIcon()
     local db = GetDB()
@@ -508,7 +518,10 @@ SlashCmdList["SBASIMPLE"] = function(msg)
         end
     else
         print("|cff00ccffSBA_Simple|r commands:")
-        print("  /SBAS lock      — toggle move/resize lock for all shmIcons")
-        print("  /SBAS override  — toggle the override logic editor")
+        print("  /SBAS lock          — toggle move/resize lock for all shmIcons")
+        print("  /SBAS override      — toggle the raw Lua override code editor")
+        --override GUI not fully functional still in development
+        --print("  /SBAS override_gui  — open the graphical priority-list builder")
+        print("  /SBAS reset         — reset icon position and size")
     end
 end
