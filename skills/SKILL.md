@@ -27,7 +27,7 @@ Any time you add or change a `LUA` file, be sure to roll the minor version numbe
 ## Condensed Addon Summary
 - **ComboTracker** — Displays the last used ability that triggers Mastery: Combo Strikes.
 - **CooldownTracker** — Tracks ability cooldowns with icon, cooldown sweep, and ready glow.
-- **GuesstimatorEnergy** — Experimental energy estimator (Monk-focused); uses Ace libraries.
+- **EnergyGuesstimator** — Experimental energy estimator (Monk-focused); uses native WoW API events and listens for `_G.VivifyProc_OnEvent`.
 - **GuesstimatorHaste** — Compares `GetHaste()` vs a GCD dummy to assess haste effects.
 - **ItemTracker** — Tracks item cooldowns, stack counts, and ready glow.
 - **PoulsTools** — Central settings hub and addon registration UI.
@@ -35,9 +35,9 @@ Any time you add or change a `LUA` file, be sure to roll the minor version numbe
 - **SBA_Simple** — Displays the next suggested cast from `C_AssistedCombat`.
 - **shmIcons** — Shared icon/cooldown/glow framework used by other addons.
 - **TrinketTracker** — Tracks trinket/equipment cooldowns with UI integration.
-- **VivifyProcTracker** — Tracks Vivacious Vivification procs and broadcasts AceMessages.
+- **VivifyProcTracker** — Tracks Vivacious Vivification procs and notifies listeners via `_G.VivifyProc_OnEvent` (no bundled external libraries).
 - **ZenithTracker** — Tracks Zenith uptime (15/20s) and plays an audio alert.
-- **Libs/** — Bundled Ace3/LibStub libraries used by select addons.
+- **Libs/** — Bundled libraries (LibStub, etc.) used by select addons.
 
 ## Other Repository Reference Files
 
@@ -50,5 +50,3 @@ Any time you add or change a `LUA` file, be sure to roll the minor version numbe
 - **[../PoulsTools_shmIcons/shmIconsIntegrationSkill.md](../PoulsTools_shmIcons/shmIconsIntegrationSkill.md)** — Read when integrating with `shmIcons`: registering icon frames, pushing cooldown/stack/glow updates, TOC dependencies, and the full public API.
 - **[../PoulsTools/README.md](../PoulsTools/README.md)** — Read when integrating a sub-addon into the PoulsTools settings hub; covers installation, slash commands, and the `PoulsTools.Menu:RegisterAddon()` API.
 
-### Third-Party Library Docs
-- **[../PoulsTools_VivifyProcTracker/VivifyProcTracker.lua](../PoulsTools_VivifyProcTracker/VivifyProcTracker.lua)** — See the VivifyProcTracker addon file for examples of Ace3 usage (lifecycle and event patterns) and integration notes.

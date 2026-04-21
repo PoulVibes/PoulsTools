@@ -59,7 +59,13 @@ shmIcons:SetUsable(addonName, id, usable)          -- secret bool; false=gray ov
 -- Management
 shmIcons:ToggleGlowEnabled(addonName, id)          -- returns new state
 shmIcons:SetVisible(addonName, id, visible)
+shmIcons:SetEnabled(addonName, id, enabled)        -- enable/disable icon; updates DB and runtime visuals; returns new state
+shmIcons:IsEnabled(addonName, id)                  -- returns whether icon is enabled
+shmIcons:ToggleEnabled(addonName, id)              -- toggles enabled state; returns new state
 shmIcons:ResetIcon(addonName, id, defaultSize)     -- unlinks snap, resets to center
+shmIcons:RegisterLockCallback(fn)                  -- register: fn(isLocked) called on lock state changes
+shmIcons:UnregisterLockCallback(fn)
+shmIcons:RestoreSnapGroups()                       -- restores snap relationships; currently a no-op kept for compatibility
 shmIcons:ToggleLock()                              -- global; affects ALL registered icons; returns locked state
 shmIcons:IsLocked()
 shmIcons:GetAll()                                  -- returns list of all icon info tables
