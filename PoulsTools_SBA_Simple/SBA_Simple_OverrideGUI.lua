@@ -436,6 +436,7 @@ local workingRules = {}    -- deep-copy being edited
 local editSpecID   = 0
 local selectedIdx  = 0     -- 1-based; 0 = none
 local isAddingCond = false
+local selectedCondIdx = nil  -- nil = adding new; number = editing existing cond at that index
 
 local rowFrames        = {}    -- pool of rule-row frames
 local condRowPool      = {}    -- pool of condition-row frames in right panel
@@ -496,24 +497,20 @@ local function CreateRowFrame(parent)
     f.removeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -2, -2)
 
     f.downBtn = CreateFrame("Button", nil, f)
-    f.downBtn:SetSize(22, 22)
+    f.downBtn:SetSize(18, 18)
     f.downBtn:SetPoint("RIGHT", f.removeBtn, "LEFT", -3, 0)
-    local dBg = f.downBtn:CreateTexture(nil, "BACKGROUND")
-    dBg:SetAllPoints() dBg:SetColorTexture(0.10, 0.15, 0.25, 0.8)
-    local dLbl = f.downBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    dLbl:SetAllPoints() dLbl:SetText("▼") dLbl:SetTextColor(0.6, 0.7, 0.9, 1)
-    f.downBtn:SetScript("OnEnter", function() dBg:SetColorTexture(0.20, 0.30, 0.50, 0.9) end)
-    f.downBtn:SetScript("OnLeave", function() dBg:SetColorTexture(0.10, 0.15, 0.25, 0.8) end)
+    f.downBtn:SetNormalTexture("Interface\\Buttons\\Arrow-Down-Up")
+    f.downBtn:SetPushedTexture("Interface\\Buttons\\Arrow-Down-Down")
+    f.downBtn:SetHighlightTexture("Interface\\Buttons\\Arrow-Down-Up")
+    f.downBtn:GetHighlightTexture():SetVertexColor(0.8, 0.9, 1, 0.5)
 
     f.upBtn = CreateFrame("Button", nil, f)
-    f.upBtn:SetSize(22, 22)
+    f.upBtn:SetSize(18, 18)
     f.upBtn:SetPoint("RIGHT", f.downBtn, "LEFT", -3, 0)
-    local uBg = f.upBtn:CreateTexture(nil, "BACKGROUND")
-    uBg:SetAllPoints() uBg:SetColorTexture(0.10, 0.15, 0.25, 0.8)
-    local uLbl = f.upBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    uLbl:SetAllPoints() uLbl:SetText("▲") uLbl:SetTextColor(0.6, 0.7, 0.9, 1)
-    f.upBtn:SetScript("OnEnter", function() uBg:SetColorTexture(0.20, 0.30, 0.50, 0.9) end)
-    f.upBtn:SetScript("OnLeave", function() uBg:SetColorTexture(0.10, 0.15, 0.25, 0.8) end)
+    f.upBtn:SetNormalTexture("Interface\\Buttons\\Arrow-Up-Up")
+    f.upBtn:SetPushedTexture("Interface\\Buttons\\Arrow-Up-Down")
+    f.upBtn:SetHighlightTexture("Interface\\Buttons\\Arrow-Up-Up")
+    f.upBtn:GetHighlightTexture():SetVertexColor(0.8, 0.9, 1, 0.5)
 
     f:SetScript("OnMouseDown", function(self)
         if self._idx then selectedIdx = self._idx; isAddingCond = false
@@ -872,6 +869,7 @@ local function CreateCondInputArea(parent)
     cancelBtn:SetPoint("LEFT", confirmBtn, "RIGHT", 6, 0)
     cancelBtn:SetText("Cancel")
     cancelBtn:SetScript("OnClick", function()
+        selectedCondIdx = nil
         isAddingCond = false
         RefreshRightPanel()
     end)
@@ -1021,6 +1019,62 @@ local function CreateCondInputArea(parent)
         otherNameBox:SetText(""); otherResultLbl:SetText(""); otherIcon:Hide()
         valLbl:Hide(); valBox:SetText(""); valBox:Hide()
         f:SetHeight(95)
+    end
+
+    f.Populate = function(cond)
+        f.Reset()
+        local ct = COND_BY_ID[cond.type]
+        if not ct then return end
+        selType = ct
+        typeBtn:SetText(ct.label)
+        notCheck:SetChecked(cond.negate and true or false)
+        if ct.needsSpell then
+            spellToggleFrame:Show()
+            if not cond.spell or cond.spell == "this" then
+                SetSpellSel("this")
+            else
+                local spellID = type(cond.spell) == "number" and cond.spell or cond.targetID
+                if spellID then
+                    local n = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spellID)
+                    otherNameBox:SetText(n or tostring(spellID))
+                    resolvedOtherID = spellID  -- ensure ID is set even if name lookup fires first
+                end
+                SetSpellSel("other")
+            end
+        end
+        if ct.needsResource then
+            resourceFrame:Show()
+            operatorFrame:Show()
+            SetResSel(cond.resource or "chi")
+            SetOpSel(cond.operator or ">=")
+            valLbl:SetText("Value:")
+            valLbl:Show()
+            valBox:SetText(tostring(cond.value or 0))
+            valBox:Show()
+        end
+        if ct.needsPlugin then
+            pluginFrame:Show()
+            for _, opt in ipairs(PLUGIN_OPTS) do
+                if opt.id == cond.plugin then
+                    selPlugin = opt
+                    pluginBtn:SetText(opt.label)
+                    if opt.needsValue then
+                        valLbl:SetText("Seconds:")
+                        valLbl:Show()
+                        valBox:SetText(tostring(cond.value or opt.default or 4))
+                        valBox:Show()
+                    end
+                    break
+                end
+            end
+        end
+        if ct.needsValue then
+            valLbl:SetText((ct.valueLabel or "Value") .. ":")
+            valLbl:Show()
+            valBox:SetText(tostring(cond.value or ct.default or ""))
+            valBox:Show()
+        end
+        UpdateLayout()
     end
 
     return f
@@ -1197,9 +1251,24 @@ RefreshRightPanel = function()
         row._xb:SetScript("OnClick", function()
             if workingRules[selectedIdx] then
                 table.remove(workingRules[selectedIdx].conditions, capturedI)
+                selectedCondIdx = nil
                 RefreshRightPanel()
                 RefreshRuleList()
             end
+        end)
+        row:EnableMouse(true)
+        row:SetScript("OnMouseDown", function(self, btn)
+            if btn == "LeftButton" then
+                selectedCondIdx = capturedI
+                isAddingCond = true
+                RefreshRightPanel()
+            end
+        end)
+        row:SetScript("OnEnter", function()
+            row:SetBackdropColor(0.14, 0.22, 0.35, 0.95)
+        end)
+        row:SetScript("OnLeave", function()
+            row:SetBackdropColor(0.07, 0.11, 0.18, 0.85)
         end)
         row:Show()
         yBase = yBase - 26
@@ -1215,51 +1284,71 @@ RefreshRightPanel = function()
     if isAddingCond then
         if not condInputArea then
             condInputArea = CreateCondInputArea(rightPanel)
-            condInputArea.confirmBtn:SetScript("OnClick", function()
-                local ct = condInputArea.GetSelectedType()
-                if not ct then
-                    print("|cffff4444SBAS GUI:|r Select a condition type first.")
+        end
+        condInputArea.confirmBtn:SetText(selectedCondIdx and "Update" or "Add")
+        condInputArea.confirmBtn:SetScript("OnClick", function()
+            local ct = condInputArea.GetSelectedType()
+            if not ct then
+                print("|cffff4444SBAS GUI:|r Select a condition type first.")
+                return
+            end
+            local newCond = { type = ct.id, negate = condInputArea.GetNegate() }
+            if ct.needsValue then newCond.value = condInputArea.GetValue() or ct.default end
+            if ct.needsResource then
+                newCond.resource = condInputArea.GetResource()
+                newCond.operator = condInputArea.GetOperator()
+                newCond.value    = condInputArea.GetValue() or 0
+            end
+            if ct.needsPlugin then
+                local pid = condInputArea.GetPlugin()
+                if not pid then
+                    print("|cffff4444SBAS GUI:|r Select a plugin/proc first.")
                     return
                 end
-                local newCond = { type = ct.id, negate = condInputArea.GetNegate() }
-                if ct.needsValue then newCond.value = condInputArea.GetValue() or ct.default end
-                if ct.needsResource then
-                    newCond.resource = condInputArea.GetResource()
-                    newCond.operator = condInputArea.GetOperator()
-                    newCond.value    = condInputArea.GetValue() or 0
+                newCond.plugin = pid
+                if pid == "docj_timer" then
+                    newCond.value = condInputArea.GetValue() or 4
                 end
-                if ct.needsPlugin then
-                    local pid = condInputArea.GetPlugin()
-                    if not pid then
-                        print("|cffff4444SBAS GUI:|r Select a plugin/proc first.")
-                        return
-                    end
-                    newCond.plugin = pid
-                    if pid == "docj_timer" then
-                        newCond.value = condInputArea.GetValue() or 4
-                    end
+            end
+            if ct.needsSpell then
+                local sp = condInputArea.GetSpell()
+                if sp == nil then
+                    print("|cffff4444SBAS GUI:|r Enter a valid spell name for 'Other Spell'.")
+                    return
                 end
-                if ct.needsSpell then
-                    local sp = condInputArea.GetSpell()
-                    if sp == nil then
-                        print("|cffff4444SBAS GUI:|r Enter a valid spell name for 'Other Spell'.")
-                        return
+                newCond.spell = sp
+            end
+            local r = workingRules[selectedIdx]
+            if r then
+                r.conditions = r.conditions or {}
+                if selectedCondIdx then
+                    local existing = r.conditions[selectedCondIdx]
+                    if existing then
+                        for k in pairs(existing) do existing[k] = nil end
+                        for k, v in pairs(newCond) do existing[k] = v end
                     end
-                    newCond.spell = sp
-                end
-                local r = workingRules[selectedIdx]
-                if r then
-                    r.conditions = r.conditions or {}
+                else
                     r.conditions[#r.conditions + 1] = newCond
                 end
-                isAddingCond = false
-                RefreshRightPanel()
-                RefreshRuleList()
-            end)
-        end
+            end
+            selectedCondIdx = nil
+            isAddingCond = false
+            RefreshRightPanel()
+            RefreshRuleList()
+        end)
         condInputArea:ClearAllPoints()
         condInputArea:SetPoint("TOPLEFT", rightPanel, "TOPLEFT", 6, yBase - 4)
-        condInputArea.Reset()
+        if selectedCondIdx then
+            local r = workingRules[selectedIdx]
+            local existingCond = r and r.conditions and r.conditions[selectedCondIdx]
+            if existingCond then
+                condInputArea.Populate(existingCond)
+            else
+                condInputArea.Reset()
+            end
+        else
+            condInputArea.Reset()
+        end
         condInputArea:Show()
     else
         if condInputArea then condInputArea:Hide() end
@@ -1367,6 +1456,7 @@ local function CreateGUI()
     addCondBtn:SetText("+ Add Condition")
     addCondBtn:SetScript("OnClick", function()
         if selectedIdx > 0 and workingRules[selectedIdx] then
+            selectedCondIdx = nil
             isAddingCond = true
             RefreshRightPanel()
         end

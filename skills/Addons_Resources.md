@@ -26,8 +26,7 @@ This file provides a short description of each addon in this repository. Use the
 
 - **EnergyGuesstimator** — Experimental energy estimator (Monk-focused). No longer uses bundled external libraries; uses native WoW API events and listens for the `_G.VivifyProc_OnEvent` global notifications to adjust energy estimation. See [../EnergyGuesstimator/EnergyGuesstimator.toc](../EnergyGuesstimator/EnergyGuesstimator.toc).
 - **VivifyProcTracker** — Tracks Vivacious Vivification procs and notifies listeners via the global callback `_G.VivifyProc_OnEvent` (no bundled external libraries). See [../VivifyProcTracker/VivifyProcTracker.toc](../VivifyProcTracker/VivifyProcTracker.toc).
-- **Libs/** — Bundled libraries (LibStub, etc.) used by several addons; find per-addon `Libs` folders where present.
-
+- 
 - **skills/** — Repository documentation, how-tos, and agent skill definitions (this folder). See [./SKILL.md](./SKILL.md).
 
 ---
