@@ -116,31 +116,33 @@ local function OnBuildUI(parent)
                     row = CreateFrame("Frame", nil, trackedContainer)
                     row:SetSize(540, 26)
 
-                    -- small left checkbox (toggle glow)
-                    row.check = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
-                    row.check:SetPoint("LEFT", row, "LEFT", 0, 0)
-                    row.check:SetSize(22, 22)
+                    -- small left remove button (dynamic trackers use X to remove)
+                    row.removeLeft = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                    row.removeLeft:SetPoint("LEFT", row, "LEFT", 0, 0)
+                    row.removeLeft:SetSize(26, 20)
+                    row.removeLeft:SetText("X")
 
                     -- spell icon
                     row.icon = row:CreateTexture(nil, "ARTWORK")
                     row.icon:SetSize(20, 20)
-                    row.icon:SetPoint("LEFT", row.check, "RIGHT", 6, 0)
+                    row.icon:SetPoint("LEFT", row.removeLeft, "RIGHT", 6, 0)
 
                     -- name label
                     row.name = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
                     row.name:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
                     row.name:SetTextColor(unpack(W.colors.text))
 
-                    -- per-row Remove button (right side)
-                    row.remove = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-                    row.remove:SetSize(80, 20)
-                    -- align the remove column closer to the abilities (fixed column)
-                    row.remove:SetPoint("RIGHT", row, "RIGHT", -220, 0)
-                    row.remove:SetText("Remove")
-                    row.remove:SetScript("OnClick", function(self)
+                    -- right-side Glow button (toggles glow for this tracked ability)
+                    row.glowBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                    row.glowBtn:SetSize(80, 20)
+                    -- align the glow column closer to the abilities (fixed column)
+                    row.glowBtn:SetPoint("RIGHT", row, "RIGHT", -220, 0)
+                    row.glowBtn:SetText("Glow")
+                    row.glowBtn:SetScript("OnClick", function(self)
                         local spell = row.spellName
                         if not spell or spell:trim() == "" then return end
-                        if type(CooldownTracker_Remove) == "function" then CooldownTracker_Remove(spell) end
+                        if row.db then row.db.glow_enabled = not row.db.glow_enabled end
+                        if type(CooldownTracker_ToggleGlow) == "function" then CooldownTracker_ToggleGlow(spell) end
                     end)
                     -- per-row sound dropdown (right-most column) — curated simple sounds
                     row.soundDrop = CreateFrame("Frame", nil, row, "UIDropDownMenuTemplate")
@@ -192,10 +194,10 @@ local function OnBuildUI(parent)
                 end
 
                 -- update values
-                row.check:SetChecked(db.glow_enabled)
-                row.check:SetScript("OnClick", function(self)
-                    db.glow_enabled = self:GetChecked()
-                    if type(CooldownTracker_ToggleGlow) == "function" then CooldownTracker_ToggleGlow(db.spellName) end
+                row.removeLeft:SetScript("OnClick", function(self)
+                    local spell = row.spellName
+                    if not spell or spell:trim() == "" then return end
+                    if type(CooldownTracker_Remove) == "function" then CooldownTracker_Remove(spell) end
                 end)
 
                 local sInfo = (db.spellID and C_Spell.GetSpellInfo(db.spellID)) or nil

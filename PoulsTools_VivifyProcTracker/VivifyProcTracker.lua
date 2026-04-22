@@ -57,21 +57,21 @@ function VPT:OnInitialize()
     end
 
     -- Register icon with shmIcons; library owns the frame
-    shmIcons:Register(ADDON_NAME, "vivify", db, {
+    shmIcons:Register(ADDON_NAME, "Vivacious Vivification", db, {
         onResize = function(sq) db.size = sq end,
         onMove   = function(_db) end,
     })
-    shmIcons:SetIcon(ADDON_NAME, "vivify", C_Spell.GetSpellTexture(VIVIFY_SPELL_ID))
-    shmIcons:SetVisible(ADDON_NAME, "vivify", false)
+    shmIcons:SetIcon(ADDON_NAME, "Vivacious Vivification", C_Spell.GetSpellTexture(VIVIFY_SPELL_ID))
+    shmIcons:SetVisible(ADDON_NAME, "Vivacious Vivification", false)
 
     -- Hide this addon's icon when shmIcons are locked
     if shmIcons and shmIcons.RegisterLockCallback then
         shmIcons:RegisterLockCallback(function(locked)
             if locked then
-                shmIcons:SetVisible(ADDON_NAME, "vivify", false)
-                shmIcons:SetCooldownRaw(ADDON_NAME, "vivify", 0, 0)
-                shmIcons:SetGlow(ADDON_NAME, "vivify", false)
-            end
+                    shmIcons:SetVisible(ADDON_NAME, "Vivacious Vivification", false)
+                    shmIcons:SetCooldownRaw(ADDON_NAME, "Vivacious Vivification", 0, 0)
+                    shmIcons:SetGlow(ADDON_NAME, "Vivacious Vivification", false)
+                end
         end)
     end
 
@@ -101,31 +101,31 @@ function VPT:UNIT_SPELLCAST_SUCCEEDED(event, unit, castGUID, spellID)
 
     -- Trigger the Proc
     if (spellID == RSK_SPELL_ID or spellID == RWK_SPELL_ID) and hasTalent then
-        procActive = true
-        shmIcons:SetVisible(ADDON_NAME, "vivify", true)
-        shmIcons:SetCooldownRaw(ADDON_NAME, "vivify", GetTime(), PROC_DURATION)
-        shmIcons:SetGlow(ADDON_NAME, "vivify", false)
+    procActive = true
+    shmIcons:SetVisible(ADDON_NAME, "Vivacious Vivification", true)
+    shmIcons:SetCooldownRaw(ADDON_NAME, "Vivacious Vivification", GetTime(), PROC_DURATION)
+    shmIcons:SetGlow(ADDON_NAME, "Vivacious Vivification", false)
 
         if timerHandle then timerHandle:Cancel() end
-        timerHandle =  C_Timer.NewTimer(PROC_DURATION, function()
+            timerHandle =  C_Timer.NewTimer(PROC_DURATION, function()
             procActive = false
             if timerHandle then timerHandle:Cancel() end
             timerHandle = nil
-            shmIcons:SetVisible(ADDON_NAME, "vivify", false)
-            shmIcons:SetCooldownRaw(ADDON_NAME, "vivify", 0, 0)
-            shmIcons:SetGlow(ADDON_NAME, "vivify", false)
+            shmIcons:SetVisible(ADDON_NAME, "Vivacious Vivification", false)
+            shmIcons:SetCooldownRaw(ADDON_NAME, "Vivacious Vivification", 0, 0)
+            shmIcons:SetGlow(ADDON_NAME, "Vivacious Vivification", false)
         end)
 
     -- Handle Vivify Logic
     elseif spellID == VIVIFY_SPELL_ID then
-        if procActive then
+            if procActive then
             -- Proc consumed by this cast
             procActive = false
             if timerHandle then timerHandle:Cancel() end
             timerHandle = nil
-            shmIcons:SetVisible(ADDON_NAME, "vivify", false)
-            shmIcons:SetCooldownRaw(ADDON_NAME, "vivify", 0, 0)
-            shmIcons:SetGlow(ADDON_NAME, "vivify", false)
+            shmIcons:SetVisible(ADDON_NAME, "Vivacious Vivification", false)
+            shmIcons:SetCooldownRaw(ADDON_NAME, "Vivacious Vivification", 0, 0)
+            shmIcons:SetGlow(ADDON_NAME, "Vivacious Vivification", false)
             FireVivifyEvent("VIVIFY_PROC_CONSUMED")
         else
             FireVivifyEvent("VIVIFY_NORMAL_CAST")

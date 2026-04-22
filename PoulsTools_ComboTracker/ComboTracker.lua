@@ -30,10 +30,10 @@ local function ResetStreak()
     ComboStrikeStreak      = 0
     LastComboStrikeSpellID = 0
     timerHandle            = nil
-    shmIcons:SetVisible(ADDON_NAME, "combo", false)
-    shmIcons:SetCooldownRaw(ADDON_NAME, "combo", 0, 0)
-    shmIcons:SetStacks(ADDON_NAME, "combo", 0)
-    shmIcons:SetGlow(ADDON_NAME, "combo", false)
+    shmIcons:SetVisible(ADDON_NAME, "Hit Combo", false)
+    shmIcons:SetCooldownRaw(ADDON_NAME, "Hit Combo", 0, 0)
+    shmIcons:SetStacks(ADDON_NAME, "Hit Combo", 0)
+    shmIcons:SetGlow(ADDON_NAME, "Hit Combo", false)
 end
 
 local REQUIRED_CLASS = "MONK"
@@ -73,10 +73,10 @@ local function DisableAddon()
     if timerHandle then timerHandle:Cancel(); timerHandle = nil end
     ComboStrikeStreak = 0
     LastComboStrikeSpellID = 0
-    shmIcons:SetVisible(ADDON_NAME, "combo", false)
-    shmIcons:SetCooldownRaw(ADDON_NAME, "combo", 0, 0)
-    shmIcons:SetStacks(ADDON_NAME, "combo", 0)
-    shmIcons:SetGlow(ADDON_NAME, "combo", false)
+    shmIcons:SetVisible(ADDON_NAME, "Hit Combo", false)
+    shmIcons:SetCooldownRaw(ADDON_NAME, "Hit Combo", 0, 0)
+    shmIcons:SetStacks(ADDON_NAME, "Hit Combo", 0)
+    shmIcons:SetGlow(ADDON_NAME, "Hit Combo", false)
     --print("[" .. ADDON_NAME .. "] disabled (not Windwalker).")
 end
 
@@ -108,20 +108,20 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         local db = ComboTrackerDB
         db.locked = nil
         
-        shmIcons:Register(ADDON_NAME, "combo", db, {
+        shmIcons:Register(ADDON_NAME, "Hit Combo", db, {
             onResize = function(sq) db.size = sq end,
             onMove   = function(_db) end,
         })
-        shmIcons:SetIcon(ADDON_NAME, "combo", TRACKER_ICON)
-        shmIcons:SetVisible(ADDON_NAME, "combo", false)
+        shmIcons:SetIcon(ADDON_NAME, "Hit Combo", TRACKER_ICON)
+        shmIcons:SetVisible(ADDON_NAME, "Hit Combo", false)
         -- Hide this addon's icons when shmIcons are locked
         if shmIcons and shmIcons.RegisterLockCallback then
             shmIcons:RegisterLockCallback(function(locked)
                 if locked then
-                    shmIcons:SetVisible(ADDON_NAME, "combo", false)
-                    shmIcons:SetCooldownRaw(ADDON_NAME, "combo", 0, 0)
-                    shmIcons:SetStacks(ADDON_NAME, "combo", 0)
-                    shmIcons:SetGlow(ADDON_NAME, "combo", false)
+                    shmIcons:SetVisible(ADDON_NAME, "Hit Combo", false)
+                    shmIcons:SetCooldownRaw(ADDON_NAME, "Hit Combo", 0, 0)
+                    shmIcons:SetStacks(ADDON_NAME, "Hit Combo", 0)
+                    shmIcons:SetGlow(ADDON_NAME, "Hit Combo", false)
                 end
             end)
         end
@@ -157,24 +157,24 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         local _, _, spellID = ...
         if not comboStrikesAbilities[spellID] then return end
 
-        if spellID == LastComboStrikeSpellID then
+            if spellID == LastComboStrikeSpellID then
             -- Buzzer Logic: Same spell breaks the combo
             -- commented out for now but here is a print statement for debugging should I need it later. do not remove
             -- print("Combo Broken Spell:", LastComboStrikeSpellID)
             ComboStrikeStreak = 0
             PlaySound(847, "Master") -- Quest Failed Sound
-            shmIcons:SetVisible(ADDON_NAME, "combo", false)
-            shmIcons:SetCooldownRaw(ADDON_NAME, "combo", 0, 0)
-            shmIcons:SetStacks(ADDON_NAME, "combo", 0)
-            shmIcons:SetGlow(ADDON_NAME, "combo", false)
+            shmIcons:SetVisible(ADDON_NAME, "Hit Combo", false)
+            shmIcons:SetCooldownRaw(ADDON_NAME, "Hit Combo", 0, 0)
+            shmIcons:SetStacks(ADDON_NAME, "Hit Combo", 0)
+            shmIcons:SetGlow(ADDON_NAME, "Hit Combo", false)
             if timerHandle then timerHandle:Cancel() end
             timerHandle = nil
         else
             ComboStrikeStreak = math.min(5, ComboStrikeStreak + 1)
-            shmIcons:SetVisible(ADDON_NAME, "combo", true)
-            shmIcons:SetCooldownRaw(ADDON_NAME, "combo", GetTime(), 29)
-            shmIcons:SetStacks(ADDON_NAME, "combo", ComboStrikeStreak)
-            shmIcons:SetGlow(ADDON_NAME, "combo", false)
+            shmIcons:SetVisible(ADDON_NAME, "Hit Combo", true)
+            shmIcons:SetCooldownRaw(ADDON_NAME, "Hit Combo", GetTime(), 29)
+            shmIcons:SetStacks(ADDON_NAME, "Hit Combo", ComboStrikeStreak)
+            shmIcons:SetGlow(ADDON_NAME, "Hit Combo", false)
             if timerHandle then timerHandle:Cancel() end
             timerHandle = C_Timer.NewTimer(30, ResetStreak)
         end

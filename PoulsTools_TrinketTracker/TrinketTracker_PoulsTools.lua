@@ -141,14 +141,15 @@ local function OnBuildUI(parent)
                     row:SetSize(540, 26)
 
                     -- Glow toggle checkbox
-                    row.check = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
-                    row.check:SetPoint("LEFT", row, "LEFT", 0, 0)
-                    row.check:SetSize(22, 22)
+                    row.removeLeft = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                    row.removeLeft:SetPoint("LEFT", row, "LEFT", 0, 0)
+                    row.removeLeft:SetSize(26, 20)
+                    row.removeLeft:SetText("X")
 
                     -- Equipment slot icon
                     row.icon = row:CreateTexture(nil, "ARTWORK")
                     row.icon:SetSize(20, 20)
-                    row.icon:SetPoint("LEFT", row.check, "RIGHT", 6, 0)
+                    row.icon:SetPoint("LEFT", row.removeLeft, "RIGHT", 6, 0)
 
                     -- Slot name label
                     row.name = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -156,27 +157,27 @@ local function OnBuildUI(parent)
                     row.name:SetTextColor(unpack(W.colors.text))
 
                     -- Per-row Remove button
-                    row.remove = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-                    row.remove:SetSize(80, 20)
-                    row.remove:SetPoint("RIGHT", row, "RIGHT", -120, 0)
-                    row.remove:SetText("Remove")
-                    row.remove:SetScript("OnClick", function()
+                    row.glowBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                    row.glowBtn:SetSize(80, 20)
+                    row.glowBtn:SetPoint("RIGHT", row, "RIGHT", -120, 0)
+                    row.glowBtn:SetText("Glow")
+                    row.glowBtn:SetScript("OnClick", function()
                         local id = row.slotID
                         if not id then return end
-                        if type(TrinketTracker_Remove) == "function" then
-                            TrinketTracker_Remove(id)
+                        if row.db then row.db.glow_enabled = not row.db.glow_enabled end
+                        if type(TrinketTracker_ToggleGlow) == "function" then
+                            TrinketTracker_ToggleGlow(id)
                         end
                     end)
                 end
 
                 -- Update values
                 row.slotID = db.slotID
-                row.check:SetChecked(db.glow_enabled or false)
-                local capturedSlotID = db.slotID
-                row.check:SetScript("OnClick", function(self)
-                    db.glow_enabled = self:GetChecked()
-                    if type(TrinketTracker_ToggleGlow) == "function" then
-                        TrinketTracker_ToggleGlow(capturedSlotID)
+                row.removeLeft:SetScript("OnClick", function(self)
+                    local id = row.slotID
+                    if not id then return end
+                    if type(TrinketTracker_Remove) == "function" then
+                        TrinketTracker_Remove(id)
                     end
                 end)
 

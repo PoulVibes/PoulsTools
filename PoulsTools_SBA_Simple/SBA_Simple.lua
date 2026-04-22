@@ -2,7 +2,7 @@
 -- Displays the next suggested cast from C_AssistedCombat using shmIcons.
 
 local ADDON_NAME = "PoulsTools_SBA_Simple"
-local ICON_KEY   = "nextcast"
+local ICON_KEY   = "Suggested_Spell"
 
 SBA_SimpleDB = SBA_SimpleDB or {}
 

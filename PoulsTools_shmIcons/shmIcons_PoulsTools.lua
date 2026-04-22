@@ -130,49 +130,33 @@ local function OnBuildUI(parent)
                 end
             end
 
+            -- Display name derived from DB/localID; individual addons
+            -- should control the localID they register with so that
+            -- shmIcons simply shows what the registering addon provides.
+
             -- ---- Icon entry row ----
             local row = CreateFrame("Frame", nil, listContainer)
             row:SetSize(540, 26)
             row:SetPoint("TOPLEFT", listContainer, "TOPLEFT", 0, -rowY)
 
-            -- Glow toggle checkbox (left side)
-            local chk = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
-            chk:SetPoint("LEFT", row, "LEFT", 10, 0)
-            chk:SetSize(22, 22)
-            chk:SetChecked(db and db.glow_enabled or false)
-
-            -- Capture loop variables for use in closures
+            -- Left control: either an X remove button for registered (tracker) addons
+            -- or an enable/disable checkbox for external addons. The right-side
+            -- action will be a Glow button (created below).
             local capturedAddon = addonName
             local capturedID    = localID
             local capturedDB    = db
-            chk:SetScript("OnClick", function()
-                local enabled = shmIcons:ToggleGlowEnabled(capturedAddon, capturedID)
-                if capturedDB then capturedDB.glow_enabled = enabled end
-            end)
 
-            -- Spell / item icon texture
-            local iconTex = row:CreateTexture(nil, "ARTWORK")
-            iconTex:SetSize(20, 20)
-            iconTex:SetPoint("LEFT", chk, "RIGHT", 6, 0)
-            iconTex:SetTexture(
-                (icon and icon.iconTex and icon.iconTex:GetTexture()) or 134400)
-
-            -- Display name label
-            local nameLbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            nameLbl:SetPoint("LEFT", iconTex, "RIGHT", 6, 0)
-            nameLbl:SetText(displayName)
-            nameLbl:SetTextColor(unpack(W.colors.text))
-
-            -- Action button: either Remove (if addon has a PoulsTools submenu)
-            -- or Enable/Disable (for addons without a PoulsTools submenu).
-            -- Override: always show Enable/Disable for SBA_Simple.
+            local leftControl = nil
             local registry = (PoulsTools and PoulsTools.Menu and PoulsTools.Menu.registry) or {}
+            -- Registered addons normally get an X remove button; however SBA_Simple
+            -- should expose an enable/disable checkbox instead (special case).
             if registry[capturedAddon] and capturedAddon ~= "PoulsTools_SBA_Simple" then
-                local removeBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-                removeBtn:SetSize(80, 20)
-                removeBtn:SetPoint("RIGHT", row, "RIGHT", -120, 0)
-                removeBtn:SetText("Remove")
-                removeBtn:SetScript("OnClick", function()
+                -- Registered addon: show a small X remove button on the left
+                local rem = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                rem:SetPoint("LEFT", row, "LEFT", 10, 0)
+                rem:SetSize(26, 20)
+                rem:SetText("X")
+                rem:SetScript("OnClick", function()
                     if capturedAddon == "PoulsTools_CooldownTracker" then
                         local spellName = capturedDB and capturedDB.spellName
                         if spellName and type(CooldownTracker_Remove) == "function" then
@@ -189,27 +173,60 @@ local function OnBuildUI(parent)
                             TrinketTracker_Remove(slotNum)
                         end
                     else
-                        -- Generic fallback for unknown addons: unregister from shmIcons
-                        shmIcons:Unregister(capturedAddon, capturedID)
+                        -- Generic fallback: unregister from shmIcons
+                        if shmIcons and shmIcons.Unregister then
+                            shmIcons:Unregister(capturedAddon, capturedID)
+                        end
                     end
                     BuildIconList()
                 end)
+                leftControl = rem
             else
-                local actBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-                actBtn:SetSize(100, 20)
-                actBtn:SetPoint("RIGHT", row, "RIGHT", -120, 0)
-                local function UpdateActLabel()
-                    local enabled = shmIcons and shmIcons.IsEnabled and shmIcons:IsEnabled(capturedAddon, capturedID)
-                    actBtn:SetText(enabled and "Disable" or "Enable")
-                end
-                actBtn:SetScript("OnClick", function()
+                -- External addon OR SBA_Simple special case: show an enabled checkbox
+                -- that toggles visibility / enabled state.
+                local chk = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+                chk:SetPoint("LEFT", row, "LEFT", 10, 0)
+                chk:SetSize(22, 22)
+                local isEnabled = false
+                if shmIcons and shmIcons.IsEnabled then isEnabled = shmIcons:IsEnabled(capturedAddon, capturedID) end
+                chk:SetChecked(isEnabled)
+                chk:SetScript("OnClick", function(self)
                     if shmIcons and shmIcons.ToggleEnabled then
-                        shmIcons:ToggleEnabled(capturedAddon, capturedID)
-                        UpdateActLabel()
+                        local enabled = shmIcons:ToggleEnabled(capturedAddon, capturedID)
+                        if capturedDB then capturedDB.enabled = enabled end
+                    end
+                    -- If this is SBA_Simple, also make sure its own helper stays in sync
+                    if capturedAddon == "PoulsTools_SBA_Simple" and type(SBA_Simple_SetEnabled) == "function" then
+                        SBA_Simple_SetEnabled(capturedDB and capturedDB.enabled)
                     end
                 end)
-                UpdateActLabel()
+                leftControl = chk
             end
+
+            -- Spell / item icon texture
+            local iconTex = row:CreateTexture(nil, "ARTWORK")
+            iconTex:SetSize(20, 20)
+            iconTex:SetPoint("LEFT", leftControl, "RIGHT", 6, 0)
+            iconTex:SetTexture(
+                (icon and icon.iconTex and icon.iconTex:GetTexture()) or 134400)
+
+            -- Display name label
+            local nameLbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            nameLbl:SetPoint("LEFT", iconTex, "RIGHT", 6, 0)
+            nameLbl:SetText(displayName)
+            nameLbl:SetTextColor(unpack(W.colors.text))
+
+            -- Right-side action: Glow button (toggles glow for this icon)
+            local glowBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+            glowBtn:SetSize(80, 20)
+            glowBtn:SetPoint("RIGHT", row, "RIGHT", -120, 0)
+            glowBtn:SetText("Glow")
+            glowBtn:SetScript("OnClick", function()
+                if shmIcons and shmIcons.ToggleGlowEnabled then
+                    local enabled = shmIcons:ToggleGlowEnabled(capturedAddon, capturedID)
+                    if capturedDB then capturedDB.glow_enabled = enabled end
+                end
+            end)
 
             row:Show()
             table.insert(activeRows, row)

@@ -73,10 +73,10 @@ end
 local halfStep = (ICON_SIZE_DEFAULT / 2) + (GAP / 2)
 
 local SLOT_DEFS = {
-    { key = "bok", x = -halfStep,  y =  halfStep, iconSpellID = 100784, timerKey = "bok_proc_timer",  buffDuration = 15 },
-    { key = "sck", x =  halfStep,  y =  halfStep, iconSpellID = 101546, timerKey = "docj_proc_timer", buffDuration = 15 },
-    { key = "tod", x = -halfStep,  y = -halfStep, iconSpellID = 322109, timerKey = nil },
-    { key = "rwk", x =  halfStep,  y = -halfStep, iconSpellID = 468179, timerKey = "rwk_proc_timer",  buffDuration = 15 },
+    { key = "Black Out Kick!", x = -halfStep,  y =  halfStep, iconSpellID = 100784, timerKey = "bok_proc_timer",  buffDuration = 15 },
+    { key = "Dance of Chi-JI",  x =  halfStep,  y =  halfStep, iconSpellID = 101546, timerKey = "docj_proc_timer", buffDuration = 15 },
+    { key = "Touch of Death",   x = -halfStep,  y = -halfStep, iconSpellID = 322109, timerKey = nil },
+    { key = "Rushing Wind Kick",x =  halfStep,  y = -halfStep, iconSpellID = 468179, timerKey = "rwk_proc_timer",  buffDuration = 15 },
 }
 
 ------------------------------------------------------------------------
@@ -112,6 +112,14 @@ local tickerFrame = nil
 local iconObjs = {}   -- key -> shmIcons icon object
 
 local function RegisterIcons()
+    -- Migrate legacy short-key DB entries (bok/sck/tod/rwk) to
+    -- human-friendly keys so existing saved positions are preserved.
+    local _migrate = { bok = "Black Out Kick!", sck = "Dance of Chi-JI", tod = "Touch of Death", rwk = "Rushing Wind Kick" }
+    for oldKey, newKey in pairs(_migrate) do
+        if ProcViewerDB[oldKey] and not ProcViewerDB[newKey] then
+            ProcViewerDB[newKey] = ProcViewerDB[oldKey]
+        end
+    end
     for _, def in ipairs(SLOT_DEFS) do
         local k = def.key
         -- Ensure DB entry exists with correct defaults
@@ -208,10 +216,10 @@ end)
 -- Proc state registry
 ------------------------------------------------------------------------
 local PROC_REGISTRY = {
-    [100784] = { globalKey = "bok_proc_active",  key = "bok", timerKey = "bok_proc_timer",  buffDuration = 15, endTime = 0 },
-    [101546] = { globalKey = "docj_proc_active", key = "sck", timerKey = "docj_proc_timer", buffDuration = 15, endTime = 0 },
-    [322109] = { globalKey = "tod_proc_active",  key = "tod" },
-    [107428] = { globalKey = "rwk_proc_active",  key = "rwk", timerKey = "rwk_proc_timer",  buffDuration = 15, endTime = 0 },
+    [100784] = { globalKey = "bok_proc_active",  key = "Black Out Kick!",  timerKey = "bok_proc_timer",  buffDuration = 15, endTime = 0 },
+    [101546] = { globalKey = "docj_proc_active", key = "Dance of Chi-JI",   timerKey = "docj_proc_timer", buffDuration = 15, endTime = 0 },
+    [322109] = { globalKey = "tod_proc_active",  key = "Touch of Death" },
+    [107428] = { globalKey = "rwk_proc_active",  key = "Rushing Wind Kick", timerKey = "rwk_proc_timer",  buffDuration = 15, endTime = 0 },
 }
 
 -- Build timed-entries list for ticker (entries that have a timerKey)

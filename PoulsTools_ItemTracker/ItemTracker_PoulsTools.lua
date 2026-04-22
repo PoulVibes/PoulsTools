@@ -119,39 +119,43 @@ local function OnBuildUI(parent)
                     row = CreateFrame("Frame", nil, trackedContainer)
                     row:SetSize(540, 26)
 
-                    row.check = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
-                    row.check:SetPoint("LEFT", row, "LEFT", 0, 0)
-                    row.check:SetSize(22, 22)
+                    row.removeLeft = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                    row.removeLeft:SetPoint("LEFT", row, "LEFT", 0, 0)
+                    row.removeLeft:SetSize(26, 20)
+                    row.removeLeft:SetText("X")
 
                     row.icon = row:CreateTexture(nil, "ARTWORK")
                     row.icon:SetSize(20, 20)
-                    row.icon:SetPoint("LEFT", row.check, "RIGHT", 6, 0)
+                    row.icon:SetPoint("LEFT", row.removeLeft, "RIGHT", 6, 0)
 
                     row.name = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
                     row.name:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
                     row.name:SetTextColor(unpack(W.colors.text))
 
-                    row.remove = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-                    row.remove:SetSize(80, 20)
-                    row.remove:SetPoint("RIGHT", row, "RIGHT", -120, 0)
-                    row.remove:SetText("Remove")
-                    row.remove:SetScript("OnClick", function()
-                        local item = row.itemName
-                        if not item or item:trim() == "" then return end
-                        if type(ItemTracker_Remove) == "function" then
-                            ItemTracker_Remove(item)
-                        else
-                            if SlashCmdList and SlashCmdList["ITEMTRACKER"] then
-                                SlashCmdList["ITEMTRACKER"](item)
-                            end
+                    row.glowBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                    row.glowBtn:SetSize(80, 20)
+                    row.glowBtn:SetPoint("RIGHT", row, "RIGHT", -120, 0)
+                    row.glowBtn:SetText("Glow")
+                    row.glowBtn:SetScript("OnClick", function()
+                        local keyLocal = key
+                        if shmIcons and shmIcons.ToggleGlowEnabled then
+                            local enabled = shmIcons:ToggleGlowEnabled(ADDON_NAME, keyLocal)
+                            if row.db then row.db.glow_enabled = enabled end
                         end
                     end)
                 end
 
-                row.check:SetChecked(db.glow_enabled)
-                row.check:SetScript("OnClick", function(self)
-                    local enabled = shmIcons:ToggleGlowEnabled(ADDON_NAME, key)
-                    db.glow_enabled = enabled
+                -- left remove button removes the tracker
+                row.removeLeft:SetScript("OnClick", function()
+                    local item = row.itemName
+                    if not item or item:trim() == "" then return end
+                    if type(ItemTracker_Remove) == "function" then
+                        ItemTracker_Remove(item)
+                    else
+                        if SlashCmdList and SlashCmdList["ITEMTRACKER"] then
+                            SlashCmdList["ITEMTRACKER"](item)
+                        end
+                    end
                 end)
 
                 local name = db.itemName or tostring(db.itemID)
