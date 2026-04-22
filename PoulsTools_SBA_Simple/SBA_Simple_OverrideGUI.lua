@@ -426,6 +426,10 @@ local LEFT_W   = 388
 local RIGHT_W  = 268
 local PAD      = 6
 local ROW_H    = 72
+local GUI_MIN_W = 680
+local GUI_MIN_H = 560
+local MIN_LEFT_W = 320
+local MIN_RIGHT_W = 240
 
 local guiFrame     = nil   -- main frame (created once)
 local leftChild    = nil   -- scroll child for rule rows
@@ -441,16 +445,34 @@ local selectedCondIdx = nil  -- nil = adding new; number = editing existing cond
 local rowFrames        = {}    -- pool of rule-row frames
 local condRowPool      = {}    -- pool of condition-row frames in right panel
 local condJunctionPool = {}    -- pool of AND/OR junction toggles between condition rows
+local condGroupBoxPool = {}    -- pool of backdrop boxes for matched parenthesis groups
 
 -- Forward declarations
 local RefreshRuleList, RefreshRightPanel
+
+local function GetPanelWidths(totalWidth)
+    totalWidth = totalWidth or (guiFrame and guiFrame:GetWidth()) or GUI_W
+    local leftW = math.floor(totalWidth * (LEFT_W / GUI_W))
+    leftW = math.max(MIN_LEFT_W, math.min(leftW, totalWidth - MIN_RIGHT_W - PAD * 4))
+    local rightW = totalWidth - leftW - PAD * 4
+    return leftW, rightW
+end
+
+local function GetLeftPanelWidth()
+    return GetPanelWidths()
+end
+
+local function GetRightPanelWidth()
+    local _, rightW = GetPanelWidths()
+    return rightW
+end
 
 -------------------------------------------------------------------------------
 -- 9.  Rule-row frames
 -------------------------------------------------------------------------------
 local function CreateRowFrame(parent)
     local f = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    f:SetSize(LEFT_W - PAD * 2, ROW_H - 4)
+    f:SetSize(GetLeftPanelWidth() - PAD * 2, ROW_H - 4)
     SetBD(f, 0.06, 0.10, 0.16, 0.88, 0.14, 0.24, 0.40)
     f:EnableMouse(true)
 
@@ -531,8 +553,10 @@ local function CreateRowFrame(parent)
 end
 
 local function UpdateRowFrame(f, idx, rule)
+    local leftW = GetLeftPanelWidth()
     f._idx = idx
     f:ClearAllPoints()
+    f:SetSize(leftW - PAD * 2, ROW_H - 4)
     f:SetPoint("TOPLEFT", leftChild, "TOPLEFT", PAD, -PAD - (idx - 1) * ROW_H)
     f:Show()
 
@@ -542,7 +566,9 @@ local function UpdateRowFrame(f, idx, rule)
                 and C_Spell.GetSpellTexture(rule.spellID)
     f.iconTex:SetTexture(tex or "Interface\\Icons\\INV_Misc_QuestionMark")
     f.nameLabel:SetText(rule.name or "Unknown")
+    f.nameLabel:SetWidth(math.max(120, leftW - 186))
     f.idLabel:SetText("ID: " .. tostring(rule.spellID or 0))
+    f.condLabel:SetWidth(math.max(120, leftW - 130))
 
     local condCount = #(rule.conditions or {})
     if condCount == 0 then
@@ -606,6 +632,7 @@ end
 
 RefreshRuleList = function()
     local count = #workingRules
+    leftChild:SetWidth(GetLeftPanelWidth())
     for i = 1, count do
         if not rowFrames[i] then
             rowFrames[i] = CreateRowFrame(leftChild)
@@ -685,7 +712,7 @@ end
 -------------------------------------------------------------------------------
 local function CreateCondInputArea(parent)
     local f = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    f:SetSize(RIGHT_W - 10, 95)
+    f:SetSize(GetRightPanelWidth() - 10, 95)
     SetBD(f, 0.04, 0.07, 0.13, 0.97, 0.20, 0.40, 0.60)
 
     local selType           = nil
@@ -706,17 +733,17 @@ local function CreateCondInputArea(parent)
 
     -- ── Type selector ─────────────────────────────────────────────────────
     local typeBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-    typeBtn:SetSize(RIGHT_W - 18, 22)
+    typeBtn:SetSize(GetRightPanelWidth() - 18, 22)
     typeBtn:SetPoint("TOPLEFT", notCheck, "BOTTOMLEFT", 0, -4)
     typeBtn:SetText("Select condition type...")
 
     -- ── Spell toggle: This Spell / Other Spell ────────────────────────────
     local spellToggleFrame = CreateFrame("Frame", nil, f)
-    spellToggleFrame:SetSize(RIGHT_W - 18, 22)
+    spellToggleFrame:SetSize(GetRightPanelWidth() - 18, 22)
     spellToggleFrame:SetPoint("TOPLEFT", typeBtn, "BOTTOMLEFT", 0, -4)
     spellToggleFrame:Hide()
 
-    local halfW = math.floor((RIGHT_W - 22) / 2)
+    local halfW = math.floor((GetRightPanelWidth() - 22) / 2)
     local thisBtn = CreateFrame("Button", nil, spellToggleFrame, "UIPanelButtonTemplate")
     thisBtn:SetSize(halfW, 22)
     thisBtn:SetPoint("TOPLEFT", spellToggleFrame, "TOPLEFT")
@@ -729,12 +756,12 @@ local function CreateCondInputArea(parent)
 
     -- ── Other spell name input ────────────────────────────────────────────
     local otherFrame = CreateFrame("Frame", nil, f)
-    otherFrame:SetSize(RIGHT_W - 18, 38)
+    otherFrame:SetSize(GetRightPanelWidth() - 18, 38)
     otherFrame:SetPoint("TOPLEFT", spellToggleFrame, "BOTTOMLEFT", 0, -2)
     otherFrame:Hide()
 
     local otherNameBox = CreateFrame("EditBox", nil, otherFrame, "InputBoxTemplate")
-    otherNameBox:SetSize(RIGHT_W - 52, 20)
+    otherNameBox:SetSize(GetRightPanelWidth() - 52, 20)
     otherNameBox:SetPoint("TOPLEFT", otherFrame, "TOPLEFT")
     otherNameBox:SetAutoFocus(false)
     otherNameBox:SetMaxLetters(80)
@@ -746,7 +773,7 @@ local function CreateCondInputArea(parent)
 
     local otherResultLbl = otherFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     otherResultLbl:SetPoint("TOPLEFT", otherNameBox, "BOTTOMLEFT", 0, -2)
-    otherResultLbl:SetSize(RIGHT_W - 22, 14)
+    otherResultLbl:SetSize(GetRightPanelWidth() - 22, 14)
     otherResultLbl:SetJustifyH("LEFT")
 
     otherNameBox:SetScript("OnTextChanged", function()
@@ -772,7 +799,7 @@ local function CreateCondInputArea(parent)
 
     -- ── Resource type selector: Chi / Energy ──────────────────────────────
     local resourceFrame = CreateFrame("Frame", nil, f)
-    resourceFrame:SetSize(RIGHT_W - 18, 22)
+    resourceFrame:SetSize(GetRightPanelWidth() - 18, 22)
     resourceFrame:SetPoint("TOPLEFT", typeBtn, "BOTTOMLEFT", 0, -4)
     resourceFrame:Hide()
 
@@ -794,7 +821,7 @@ local function CreateCondInputArea(parent)
 
     -- ── Operator selector: >= / <= / == ──────────────────────────────────
     local operatorFrame = CreateFrame("Frame", nil, f)
-    operatorFrame:SetSize(RIGHT_W - 18, 22)
+    operatorFrame:SetSize(GetRightPanelWidth() - 18, 22)
     operatorFrame:SetPoint("TOPLEFT", resourceFrame, "BOTTOMLEFT", 0, -4)
     operatorFrame:Hide()
 
@@ -821,12 +848,12 @@ local function CreateCondInputArea(parent)
 
     -- ── Plugin / Proc selector ────────────────────────────────────────────
     local pluginFrame = CreateFrame("Frame", nil, f)
-    pluginFrame:SetSize(RIGHT_W - 18, 22)
+    pluginFrame:SetSize(GetRightPanelWidth() - 18, 22)
     pluginFrame:SetPoint("TOPLEFT", typeBtn, "BOTTOMLEFT", 0, -4)
     pluginFrame:Hide()
 
     local pluginBtn = CreateFrame("Button", nil, pluginFrame, "UIPanelButtonTemplate")
-    pluginBtn:SetSize(RIGHT_W - 18, 22)
+    pluginBtn:SetSize(GetRightPanelWidth() - 18, 22)
     pluginBtn:SetPoint("TOPLEFT", pluginFrame, "TOPLEFT")
     pluginBtn:SetText("Select plugin...")
     pluginBtn:SetScript("OnClick", function()
@@ -900,6 +927,34 @@ local function CreateCondInputArea(parent)
     gteBtn:SetScript("OnClick",    function() SetOpSel(">=")      end)
     lteBtn:SetScript("OnClick",    function() SetOpSel("<=")      end)
     eqBtn:SetScript("OnClick",     function() SetOpSel("==")      end)
+
+    local function RefreshSize()
+        local rightW = GetRightPanelWidth()
+        local contentW = rightW - 18
+        local spellHalfW = math.floor((contentW - 4) / 2)
+        local otherBoxW = math.max(120, contentW - 34)
+        local resBtnW = math.max(68, math.floor((contentW - 66) / 2))
+        local opBtnW = math.max(44, math.floor((contentW - 68) / 3))
+
+        f:SetWidth(rightW - 10)
+        typeBtn:SetWidth(contentW)
+        spellToggleFrame:SetWidth(contentW)
+        thisBtn:SetWidth(spellHalfW)
+        otherBtn:SetWidth(spellHalfW)
+        otherFrame:SetWidth(contentW)
+        otherNameBox:SetWidth(otherBoxW)
+        otherResultLbl:SetWidth(contentW - 4)
+        resourceFrame:SetWidth(contentW)
+        operatorFrame:SetWidth(contentW)
+        pluginFrame:SetWidth(contentW)
+        pluginBtn:SetWidth(contentW)
+        chiBtn:SetWidth(resBtnW)
+        energyBtn:SetWidth(resBtnW)
+        gteBtn:SetWidth(opBtnW)
+        lteBtn:SetWidth(opBtnW)
+        eqBtn:SetWidth(opBtnW)
+        UpdateLayout()
+    end
 
     -- ── Layout ────────────────────────────────────────────────────────────
     local function UpdateLayout()
@@ -1006,6 +1061,7 @@ local function CreateCondInputArea(parent)
         if spellSel == "this" then return "this" end
         return resolvedOtherID  -- number or nil if not yet resolved
     end
+    f.RefreshSize     = RefreshSize
 
     f.Reset = function()
         selType = nil; spellSel = "this"; resSel = "chi"; opSel = ">="
@@ -1077,7 +1133,85 @@ local function CreateCondInputArea(parent)
         UpdateLayout()
     end
 
+    RefreshSize()
+
     return f
+end
+
+local GROUP_BOX_COLORS = {
+    { 0.78, 0.66, 0.14, 0.08, 0.92, 0.76, 0.18, 0.95 },
+    { 0.18, 0.42, 0.72, 0.08, 0.28, 0.58, 0.90, 0.95 },
+    { 0.18, 0.58, 0.34, 0.08, 0.24, 0.82, 0.46, 0.95 },
+}
+
+local function AnalyzeParenGroups(conds)
+    local spans = {}
+    local unmatchedOpens  = {}
+    local unmatchedCloses = {}
+    local stack = {}
+
+    for i, cond in ipairs(conds) do
+        for _ = 1, (cond.lparen or 0) do
+            stack[#stack + 1] = { startIdx = i, depth = #stack + 1 }
+        end
+        for _ = 1, (cond.rparen or 0) do
+            local open = table.remove(stack)
+            if open then
+                spans[#spans + 1] = {
+                    startIdx = open.startIdx,
+                    endIdx   = i,
+                    depth    = open.depth,
+                }
+            else
+                unmatchedCloses[i] = (unmatchedCloses[i] or 0) + 1
+            end
+        end
+    end
+
+    for _, open in ipairs(stack) do
+        unmatchedOpens[open.startIdx] = (unmatchedOpens[open.startIdx] or 0) + 1
+    end
+
+    table.sort(spans, function(a, b)
+        local aLen = a.endIdx - a.startIdx
+        local bLen = b.endIdx - b.startIdx
+        if aLen ~= bLen then return aLen > bLen end
+        return a.depth < b.depth
+    end)
+
+    return spans, unmatchedOpens, unmatchedCloses
+end
+
+local function DrawConditionGroupBoxes(spans, rowYTops)
+    for _, box in ipairs(condGroupBoxPool) do
+        box:Hide()
+    end
+    if not rightPanel then return end
+
+    local panelLevel = rightPanel:GetFrameLevel()
+    for i, span in ipairs(spans) do
+        if not condGroupBoxPool[i] then
+            local box = CreateFrame("Frame", nil, rightPanel, "BackdropTemplate")
+            box:SetFrameStrata(rightPanel:GetFrameStrata())
+            condGroupBoxPool[i] = box
+        end
+
+        local topY = rowYTops[span.startIdx]
+        local endY = rowYTops[span.endIdx]
+        if topY and endY then
+            local inset = 2 + (span.depth - 1) * 4
+            local color = GROUP_BOX_COLORS[((span.depth - 1) % #GROUP_BOX_COLORS) + 1]
+            local box = condGroupBoxPool[i]
+            local height = (topY - (endY - 22)) + 4
+
+            box:ClearAllPoints()
+            box:SetPoint("TOPLEFT", rightPanel, "TOPLEFT", 4 + inset, topY + 2)
+            box:SetSize(rightPanel:GetWidth() - 8 - inset * 2, height)
+            box:SetFrameLevel(panelLevel + math.min(i - 1, 8))
+            SetBD(box, color[1], color[2], color[3], color[4], color[5], color[6], color[7])
+            box:Show()
+        end
+    end
 end
 
 -------------------------------------------------------------------------------
@@ -1090,6 +1224,7 @@ RefreshRightPanel = function()
     -- Hide all pooled condition rows and junction toggles
     for _, row in ipairs(condRowPool)      do row:Hide() end
     for _, jf  in ipairs(condJunctionPool) do jf:Hide()  end
+    for _, box in ipairs(condGroupBoxPool) do box:Hide() end
 
     local rule = workingRules[selectedIdx]
 
@@ -1102,10 +1237,13 @@ RefreshRightPanel = function()
 
     rightPanel.header:SetText((rule.name or tostring(rule.spellID or "?"))
                                .. " — Conditions")
+    rightPanel.header:SetWidth(GetRightPanelWidth() - 16)
 
     local conds  = rule.conditions or {}
+    local spans, unmatchedOpens, unmatchedCloses = AnalyzeParenGroups(conds)
     local yBase  = -28  -- below the header
     local rowIdx = 0
+    local rowYTops = {}
 
     for i, cond in ipairs(conds) do
         -- AND / OR junction toggle (shown between consecutive conditions)
@@ -1114,6 +1252,7 @@ RefreshRightPanel = function()
             if not condJunctionPool[jIdx] then
                 local jf = CreateFrame("Button", nil, rightPanel)
                 jf:SetSize(44, 14)
+                jf:SetFrameLevel(rightPanel:GetFrameLevel() + 20)
                 local jbg = jf:CreateTexture(nil, "BACKGROUND")
                 jbg:SetAllPoints() jbg:SetColorTexture(0.08, 0.12, 0.22, 0.7)
                 jf._bg = jbg
@@ -1152,6 +1291,7 @@ RefreshRightPanel = function()
         if not condRowPool[rowIdx] then
             local row = CreateFrame("Frame", nil, rightPanel, "BackdropTemplate")
             row:SetSize(RIGHT_W - 12, 22)
+            row:SetFrameLevel(rightPanel:GetFrameLevel() + 20)
             SetBD(row, 0.07, 0.11, 0.18, 0.85, 0.12, 0.22, 0.36)
 
             -- Left paren column button
@@ -1201,7 +1341,9 @@ RefreshRightPanel = function()
 
         local row = condRowPool[rowIdx]
         row:ClearAllPoints()
+        row:SetSize(GetRightPanelWidth() - 12, 22)
         row:SetPoint("TOPLEFT", rightPanel, "TOPLEFT", 6, yBase)
+        rowYTops[i] = yBase
         row._lbl:SetText(CondSummaryText(cond, rule.spellID))
         row._lbl:SetTextColor(cond.negate and 1 or 0.78, cond.negate and 0.38 or 0.90, cond.negate and 0.38 or 1, 1)
         -- Capture index and condition ref for closures
@@ -1210,23 +1352,27 @@ RefreshRightPanel = function()
 
         local function UpdateLPBtn()
             local n = capturedCond.lparen or 0
+            local hasError = (unmatchedOpens[capturedI] or 0) > 0
             if n == 0 then
                 row._lpLbl:SetText("(")
-                row._lpLbl:SetTextColor(0.28, 0.36, 0.52, 1)
+                row._lpLbl:SetTextColor(hasError and 1.0 or 0.28, hasError and 0.30 or 0.36, hasError and 0.30 or 0.52, 1)
             else
                 row._lpLbl:SetText(string.rep("(", n))
-                row._lpLbl:SetTextColor(1.0, 0.88, 0.30, 1)
+                row._lpLbl:SetTextColor(hasError and 1.0 or 1.0, hasError and 0.30 or 0.88, hasError and 0.30 or 0.30, 1)
             end
+            row._lpBtn._bg:SetColorTexture(hasError and 0.42 or 0.08, hasError and 0.08 or 0.12, hasError and 0.08 or 0.22, hasError and 0.85 or 0.7)
         end
         local function UpdateRPBtn()
             local n = capturedCond.rparen or 0
+            local hasError = (unmatchedCloses[capturedI] or 0) > 0
             if n == 0 then
                 row._rpLbl:SetText(")")
-                row._rpLbl:SetTextColor(0.28, 0.36, 0.52, 1)
+                row._rpLbl:SetTextColor(hasError and 1.0 or 0.28, hasError and 0.30 or 0.36, hasError and 0.30 or 0.52, 1)
             else
                 row._rpLbl:SetText(string.rep(")", n))
-                row._rpLbl:SetTextColor(1.0, 0.88, 0.30, 1)
+                row._rpLbl:SetTextColor(hasError and 1.0 or 1.0, hasError and 0.30 or 0.88, hasError and 0.30 or 0.30, 1)
             end
+            row._rpBtn._bg:SetColorTexture(hasError and 0.42 or 0.08, hasError and 0.08 or 0.12, hasError and 0.08 or 0.22, hasError and 0.85 or 0.7)
         end
         UpdateLPBtn()
         UpdateRPBtn()
@@ -1236,7 +1382,7 @@ RefreshRightPanel = function()
             else
                 capturedCond.lparen = ((capturedCond.lparen or 0) + 1) % 4
             end
-            UpdateLPBtn()
+            RefreshRightPanel()
             RefreshRuleList()
         end)
         row._rpBtn:SetScript("OnClick", function(_, btn)
@@ -1245,7 +1391,7 @@ RefreshRightPanel = function()
             else
                 capturedCond.rparen = ((capturedCond.rparen or 0) + 1) % 4
             end
-            UpdateRPBtn()
+            RefreshRightPanel()
             RefreshRuleList()
         end)
         row._xb:SetScript("OnClick", function()
@@ -1274,7 +1420,10 @@ RefreshRightPanel = function()
         yBase = yBase - 26
     end
 
+    DrawConditionGroupBoxes(spans, rowYTops)
+
     -- Add Condition button
+    rightPanel.addCondBtn:SetWidth(GetRightPanelWidth() - 12)
     rightPanel.addCondBtn:ClearAllPoints()
     rightPanel.addCondBtn:SetPoint("TOPLEFT", rightPanel, "TOPLEFT", 6, yBase - 4)
     rightPanel.addCondBtn:Show()
@@ -1337,6 +1486,7 @@ RefreshRightPanel = function()
             RefreshRuleList()
         end)
         condInputArea:ClearAllPoints()
+        if condInputArea.RefreshSize then condInputArea.RefreshSize() end
         condInputArea:SetPoint("TOPLEFT", rightPanel, "TOPLEFT", 6, yBase - 4)
         if selectedCondIdx then
             local r = workingRules[selectedIdx]
@@ -1363,9 +1513,15 @@ local function CreateGUI()
     f:SetSize(GUI_W, GUI_H)
     f:SetPoint("CENTER")
     f:SetMovable(true)
+    f:SetResizable(true)
     f:SetClampedToScreen(true)
     f:SetToplevel(true)
     f:SetFrameStrata("HIGH")
+    if f.SetResizeBounds then
+        f:SetResizeBounds(GUI_MIN_W, GUI_MIN_H)
+    elseif f.SetMinResize then
+        f:SetMinResize(GUI_MIN_W, GUI_MIN_H)
+    end
     f:EnableMouse(true)
     f:SetScript("OnMouseDown", function(self, btn)
         if btn == "LeftButton" then self:StartMoving() end
@@ -1390,6 +1546,23 @@ local function CreateGUI()
     local closeBtn = CreateFrame("Button", nil, f, "UIPanelCloseButton")
     closeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -4, -4)
     closeBtn:SetScript("OnClick", function() f:Hide() end)
+
+    local resizeGrip = CreateFrame("Button", nil, f)
+    resizeGrip:SetSize(16, 16)
+    resizeGrip:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -4, 4)
+    resizeGrip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    resizeGrip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    resizeGrip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    resizeGrip:SetScript("OnMouseDown", function()
+        f:StartSizing("BOTTOMRIGHT")
+        f.isSizing = true
+    end)
+    resizeGrip:SetScript("OnMouseUp", function()
+        if f.isSizing then
+            f:StopMovingOrSizing()
+            f.isSizing = false
+        end
+    end)
 
     -- ── Left panel: priority list ──────────────────────────────────────────
     local leftHdr = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -1498,14 +1671,19 @@ local function CreateGUI()
     previewBtn:SetText("Preview Code")
     previewBtn:SetScript("OnClick", function()
         local code = GenerateCode(workingRules) or "-- (no rules defined)"
-        -- Push into the text editor if it exists, then show it
-        local eb = _G["SBAS_OverrideEditBox"]
-        local of = _G["SBAS_OverrideFrame"]
-        if eb and of then
-            eb:SetText(code)
-            of:Show()
+        -- Open raw override editor in temporary preview mode (non-persistent).
+        if type(SBA_Simple_ShowOverridePreview) == "function" then
+            SBA_Simple_ShowOverridePreview(code, editSpecID, GetSpecName(editSpecID))
         else
-            print("|cff00ccffSBAS Preview:|r\n" .. code)
+            -- Fallback for older SBA_Simple versions where preview API isn't available.
+            local eb = _G["SBAS_OverrideEditBox"]
+            local of = _G["SBAS_OverrideFrame"]
+            if eb and of then
+                eb:SetText(code)
+                of:Show()
+            else
+                print("|cff00ccffSBAS Preview:|r\n" .. code)
+            end
         end
     end)
 
@@ -1520,6 +1698,29 @@ local function CreateGUI()
         RefreshRuleList()
         RefreshRightPanel()
     end)
+
+    local function LayoutGUI()
+        local leftW, rightW = GetPanelWidths(f:GetWidth())
+        leftSF:SetSize(leftW, f:GetHeight() - 136)
+        lc:SetWidth(leftW)
+        addSpellBtn:SetWidth(leftW)
+        rp:SetSize(rightW, f:GetHeight() - 110)
+        rpHdr:SetWidth(rightW - 16)
+        addCondBtn:SetWidth(rightW - 12)
+        if condInputArea and condInputArea.RefreshSize then
+            condInputArea.RefreshSize()
+        end
+        if f:IsShown() then
+            RefreshRuleList()
+            RefreshRightPanel()
+        end
+    end
+
+    f:SetScript("OnSizeChanged", function()
+        LayoutGUI()
+    end)
+
+    LayoutGUI()
 
     guiFrame = f
 end

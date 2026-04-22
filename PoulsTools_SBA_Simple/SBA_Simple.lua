@@ -52,6 +52,8 @@ local overrideChunk = nil  -- compiled function, rebuilt when code is saved
 -- target spec we're editing via the override editor (nil -> current spec)
 local overrideEditorTargetSpec = nil
 local overrideEditorTargetName = nil
+local overrideEditorPreviewCode = nil
+local overrideEditorPreviewMode = false
 
 local function CompileOverride(code)
     if not code or code:match("^%s*$") then
@@ -391,7 +393,9 @@ local function CreateOverrideFrame()
 
     scroll:SetScrollChild(editBox)
 
-    -- Populate editbox with any previously saved code on show, restore position/size, then focus it
+    -- Populate editbox on show.
+    -- In preview mode we show temporary code that is not persisted unless
+    -- the user explicitly clicks "Override Logic".
     f:SetScript("OnShow", function()
         local db = GetDB()
         -- restore saved position/size if present
@@ -408,13 +412,25 @@ local function CreateOverrideFrame()
 
         local specID = overrideEditorTargetSpec or GetCurrentSpecID()
         local specDB = GetSpecDB(specID)
-        editBox:SetText(specDB.overrideCode or "")
+        if overrideEditorPreviewMode and overrideEditorPreviewCode ~= nil then
+            editBox:SetText(overrideEditorPreviewCode)
+        else
+            editBox:SetText(specDB.overrideCode or "")
+        end
         editBox:SetFocus()
         if overrideEditorTargetName then
-            title:SetText("SBA Simple — Override Logic: " .. overrideEditorTargetName)
+            local suffix = overrideEditorPreviewMode and " (Preview)" or ""
+            title:SetText("SBA Simple — Override Logic: " .. overrideEditorTargetName .. suffix)
         else
-            title:SetText("SBA Simple — Override Logic")
+            local suffix = overrideEditorPreviewMode and " (Preview)" or ""
+            title:SetText("SBA Simple — Override Logic" .. suffix)
         end
+    end)
+
+    -- Closing without pressing Override should discard any preview buffer.
+    f:SetScript("OnHide", function()
+        overrideEditorPreviewCode = nil
+        overrideEditorPreviewMode = false
     end)
 
     -- Cursor position display (Line X, Col Y)
@@ -478,6 +494,8 @@ local function CreateOverrideFrame()
         end
         overrideEditorTargetSpec = nil
         overrideEditorTargetName = nil
+        overrideEditorPreviewCode = nil
+        overrideEditorPreviewMode = false
         f:Hide()
     end)
 
@@ -490,6 +508,18 @@ local overrideFrame = CreateOverrideFrame()
 function SBA_Simple_ShowOverrideForSpec(specID, displayName)
     overrideEditorTargetSpec = specID
     overrideEditorTargetName = displayName
+    overrideEditorPreviewCode = nil
+    overrideEditorPreviewMode = false
+    if overrideFrame then overrideFrame:Show() end
+end
+
+-- Open the override editor with temporary preview code that is not saved
+-- unless the user clicks "Override Logic".
+function SBA_Simple_ShowOverridePreview(code, specID, displayName)
+    overrideEditorTargetSpec = specID
+    overrideEditorTargetName = displayName
+    overrideEditorPreviewCode = code or ""
+    overrideEditorPreviewMode = true
     if overrideFrame then overrideFrame:Show() end
 end
 
