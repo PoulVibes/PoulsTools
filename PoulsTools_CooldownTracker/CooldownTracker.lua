@@ -74,9 +74,25 @@ local function GetSpellDB(specID, key)
             size         = DEFAULT_SIZE,
             enabled      = true,
             glow_enabled = false,
+            -- Sound to play when this spell first becomes available (nil for none).
+            ready_sound  = nil,
         }
     end
     return spells[key]
+end
+
+local function PlayReadySound(db)
+    if not db or not db.ready_sound then return end
+    local s = db.ready_sound
+    if type(s) == "number" then
+        if C_Sound and C_Sound.PlaySound then
+            pcall(C_Sound.PlaySound, s)
+        else
+            pcall(PlaySound, s, "Master")
+        end
+    elseif type(s) == "string" then
+        pcall(PlaySoundFile, s, "Master")
+    end
 end
 
 -- ============================================================
@@ -132,15 +148,38 @@ local function UpdateTracker(key)
         shmIcons:SetRange(ADDON_NAME, key, nil)
     end
     shmIcons:SetUsable(ADDON_NAME, key, C_Spell.IsSpellUsable(entry.spellID))
+    -- For charge spells, watch the charge `isActive` flag and play when it
+    -- transitions from true -> false (i.e. fully charged / max stacks).
+    -- For non-charge spells, play when cooldown becomes inactive (available).
+    if isChargeSpell then
+        local chargeActive = nil
+        if chargeInfo and chargeInfo.isActive ~= nil then chargeActive = chargeInfo.isActive end
+        if tracked[key].lastChargeActive == nil then
+            tracked[key].lastChargeActive = chargeActive
+        else
+            if tracked[key].lastChargeActive and (chargeActive == false) then
+                local db = GetSpecSpells(currentSpecID)[key]
+                if db and db.ready_sound then PlayReadySound(db) end
+            end
+            tracked[key].lastChargeActive = chargeActive
+        end
+    else
+        local available = not (cdInfo and cdInfo.isActive)
+        if tracked[key].lastAvailable == nil then
+            tracked[key].lastAvailable = available
+        else
+            if not tracked[key].lastAvailable and available then
+                local db = GetSpecSpells(currentSpecID)[key]
+                if db and db.ready_sound then PlayReadySound(db) end
+            end
+            tracked[key].lastAvailable = available
+        end
+    end
 end
 
 local function UpdateAllTrackers()
     for key in pairs(tracked) do UpdateTracker(key) end
 end
-
--- ============================================================
--- Add / remove tracker
--- ============================================================
 
 local function AddTracker(spellName, specID)
     specID = specID or currentSpecID
@@ -318,7 +357,8 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
         LoadSpec(GetCurrentSpecID())
 
     elseif event == "PLAYER_TARGET_CHANGED"
-        or  event == "SPELL_UPDATE_COOLDOWN" then
+        or  event == "SPELL_UPDATE_COOLDOWN"
+        or  event == "SPELL_UPDATE_CHARGES" then
         UpdateAllTrackers()
     end
 end)
@@ -328,6 +368,7 @@ eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 eventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+eventFrame:RegisterEvent("SPELL_UPDATE_CHARGES")
 
 -- Public API wrappers for PoulsTools UI and other integrations
 function CooldownTracker_Add(spellName, specID)

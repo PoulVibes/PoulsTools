@@ -72,6 +72,16 @@ local function OnBuildUI(parent)
     local trackedRows = {}
     local actionsHeaderFrame = nil
 
+    local function FindSoundNameForValue(val)
+        if not val then return "None" end
+        if type(SOUNDKIT) == "table" then
+            for name, id in pairs(SOUNDKIT) do
+                if id == val then return name end
+            end
+        end
+        return tostring(val)
+    end
+
     local function BuildTrackedList()
         local specIndex = GetSpecialization()
         local specID = 0
@@ -125,12 +135,59 @@ local function OnBuildUI(parent)
                     row.remove = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
                     row.remove:SetSize(80, 20)
                     -- align the remove column closer to the abilities (fixed column)
-                    row.remove:SetPoint("RIGHT", row, "RIGHT", -120, 0)
+                    row.remove:SetPoint("RIGHT", row, "RIGHT", -220, 0)
                     row.remove:SetText("Remove")
                     row.remove:SetScript("OnClick", function(self)
                         local spell = row.spellName
                         if not spell or spell:trim() == "" then return end
                         if type(CooldownTracker_Remove) == "function" then CooldownTracker_Remove(spell) end
+                    end)
+                    -- per-row sound dropdown (right-most column) — curated simple sounds
+                    row.soundDrop = CreateFrame("Frame", nil, row, "UIDropDownMenuTemplate")
+                    row.soundDrop:SetPoint("RIGHT", row, "RIGHT", -16, 0)
+                    UIDropDownMenu_SetWidth(row.soundDrop, 160)
+                    UIDropDownMenu_Initialize(row.soundDrop, function(self, level)
+                        local items = {}
+                        table.insert(items, { text = "None", value = nil })
+                        if type(SOUNDKIT) == "table" then
+                            -- Prioritize loud attention sounds: gongs, bells, alarms, sirens, tolls
+                            local patterns = { "GONG", "BELL", "ALARM", "SIREN", "TOLL", "BONG", "ALERT", "WARNING", "LOUD", "BEEP", "TONE", "CHIME" }
+                            local added = {}
+                            for _, pat in ipairs(patterns) do
+                                for name, id in pairs(SOUNDKIT) do
+                                    if type(name) == "string" and type(id) == "number" then
+                                        local uname = name:upper()
+                                        if not added[id] and uname:find(pat) and not (uname:find("MUSIC") or uname:find("BACKGROUND") or uname:find("BGM")) then
+                                            table.insert(items, { text = name, value = id })
+                                            added[id] = true
+                                        end
+                                    end
+                                end
+                            end
+                        else
+                            table.insert(items, { text = "Quest Failed (847)", value = 847 })
+                        end
+
+                        for _, item in ipairs(items) do
+                            local info = UIDropDownMenu_CreateInfo()
+                            info.text = item.text
+                            info.value = item.value
+                            info.checked = (row.db and row.db.ready_sound == item.value)
+                            info.func = function(btn)
+                                if row.db then row.db.ready_sound = btn.value end
+                                UIDropDownMenu_SetSelectedValue(row.soundDrop, btn.value)
+                                UIDropDownMenu_SetText(row.soundDrop, btn.text)
+                                -- Play immediately for testing selection
+                                if btn.value then
+                                    if C_Sound and C_Sound.PlaySound then
+                                        pcall(C_Sound.PlaySound, btn.value)
+                                    else
+                                        pcall(PlaySound, btn.value, "Master")
+                                    end
+                                end
+                            end
+                            UIDropDownMenu_AddButton(info, level)
+                        end
                     end)
                 end
 
@@ -144,7 +201,13 @@ local function OnBuildUI(parent)
                 local sInfo = (db.spellID and C_Spell.GetSpellInfo(db.spellID)) or nil
                 row.icon:SetTexture((sInfo and sInfo.iconID) or 134400)
                 row.spellName = db.spellName
+                row.db = db
                 row.name:SetText(db.spellName)
+
+                if row.soundDrop then
+                    UIDropDownMenu_SetSelectedValue(row.soundDrop, db.ready_sound)
+                    UIDropDownMenu_SetText(row.soundDrop, FindSoundNameForValue(db.ready_sound))
+                end
 
                 row:SetPoint("TOPLEFT", trackedContainer, "TOPLEFT", 0, -(count - 1) * 26)
                 row:Show()
@@ -152,6 +215,7 @@ local function OnBuildUI(parent)
                 used[key] = true
             end
         end
+        -- (dropdowns are created per-row inside the loop)
 
         -- hide rows that are no longer present
         for k, r in pairs(trackedRows) do
