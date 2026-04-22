@@ -112,10 +112,10 @@ local function UpdateTracker(key, updateStacks)
     if isChargeSpell then
         local curCharges = (chargeInfo and chargeInfo.currentCharges)
         -- Show recharge timer for the next charge when available
-        if chargeDuration and chargeInfo and chargeInfo.isActive then
-            shmIcons:SetCooldown(ADDON_NAME, key, chargeDuration)
-        elseif durationObject and cdInfo and cdInfo.isActive then
+        if durationObject and cdInfo and cdInfo.isActive then
             shmIcons:SetCooldown(ADDON_NAME, key, durationObject)
+        elseif chargeDuration and chargeInfo and chargeInfo.isActive then
+            shmIcons:SetCooldown(ADDON_NAME, key, chargeDuration)
         else
             shmIcons:SetCooldown(ADDON_NAME, key, nil)
         end
@@ -131,8 +131,8 @@ local function UpdateTracker(key, updateStacks)
         shmIcons:SetGlow(ADDON_NAME, key, glowWanted)
 
         --if updateStacks then
-            if cdInfo and (not cdInfo.isActive or tracked[key].isOnGCD) then
-                shmIcons:SetStacks(ADDON_NAME, key, curCharges)
+            if cdInfo and (not cdInfo.isActive or cdInfo.isOnGCD) then
+                shmIcons:SetStacks(ADDON_NAME, key, chargeInfo.currentCharges)
             else
                 shmIcons:SetStacks(ADDON_NAME, key, 0)
             end

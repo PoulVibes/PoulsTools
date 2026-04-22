@@ -126,7 +126,7 @@ function SBA_Simple_SetSize(size)
     RegisterIcon()
 end
 
-local reasoncd = 2
+--local reasoncd = 2
 -- ── Per-frame update ──────────────────────────────────────────────────────
 local ticker = CreateFrame("Frame")
 ticker:SetScript("OnUpdate", function()
@@ -172,21 +172,23 @@ ticker:SetScript("OnUpdate", function()
        if isChargeSpell then
             if durationObject and cdInfo and cdInfo.isActive then
                 shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, durationObject)
-                if(reasoncd ~= 0) then print ("0") reasoncd = 0 end
+                --if(reasoncd ~= 0) then print ("0") reasoncd = 0 end
             elseif chargeDuration and chargeInfo and chargeInfo.isActive then
                 shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, chargeDuration)
-                if(reasoncd ~= 1) then print ("1") reasoncd = 1 end
+                --if(reasoncd ~= 1) then print ("1") reasoncd = 1 end
                 --shmIcons:SetGlow(ADDON_NAME, ICON_KEY, false)
             else
                 --if spellID == 121253 then print("3") end
-                if(reasoncd ~= 2) then print ("2") reasoncd = 2 end
+                --if(reasoncd ~= 2) then print ("2") reasoncd = 2 end
                 shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, nil)
                 --shmIcons:SetGlow(ADDON_NAME, ICON_KEY, true)
             end
-            if (cdInfo and not cdInfo.isActive or cdInfo.isOnGCD) then
-                shmIcons:SetStacks(ADDON_NAME, key, curCharges)
+            
+            --if (chargeInfo and not chargeInfo.isActive) or (cdInfo and cdInfo.isOnGCD) then
+            if cdInfo and (not cdInfo.isActive or cdInfo.isOnGCD) then
+                shmIcons:SetStacks(ADDON_NAME, ICON_KEY, chargeInfo.currentCharges)
             else
-                shmIcons:SetStacks(ADDON_NAME, key, 0)
+                shmIcons:SetStacks(ADDON_NAME, ICON_KEY, 0)
             end
         else
             --shmIcons:SetChargeCooldown(ADDON_NAME, ICON_KEY, nil)
