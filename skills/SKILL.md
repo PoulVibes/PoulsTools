@@ -50,3 +50,14 @@ Any time you add or change a `LUA` file, be sure to roll the minor version numbe
 - **[../PoulsTools_shmIcons/shmIconsIntegrationSkill.md](../PoulsTools_shmIcons/shmIconsIntegrationSkill.md)** — Read when integrating with `shmIcons`: registering icon frames, pushing cooldown/stack/glow updates, TOC dependencies, and the full public API.
 - **[../PoulsTools/README.md](../PoulsTools/README.md)** — Read when integrating a sub-addon into the PoulsTools settings hub; covers installation, slash commands, and the `PoulsTools.Menu:RegisterAddon()` API.
 
+### SBAS Override GUI — Summary
+
+Brief summary and pointer to the full agent notes: [SBAS_override_agent.md](PoulsTools_SBA_Simple/SBAS_override_agent.md)
+
+- Purpose: graphical priority-list builder for SBA overrides.
+- Primary files: `PoulsTools_SBA_Simple/SBA_Simple_OverrideGUI.lua`, `PoulsTools_SBA_Simple/SBA_Simple.lua`.
+- Data model: rules stored in `SBA_SimpleDB.gui[specID]`; generated code in `SBA_SimpleDB.specs[specID].overrideCode`.
+- UI: resizable frame with left rule list and right condition editor; condition registry in `COND_TYPES`; parenthesis grouping visualization; preview vs save flow.
+
+Refer to the linked file for full details and step-by-step editing guidance.
+
