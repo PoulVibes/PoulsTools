@@ -3,7 +3,7 @@
 ## Notes: Centered HUD proc icons with spell activation glow.
 ## LoadOnDemand: 1
 ## Author: Poul
-## Version: 0.1.9
+## Version: 0.1.11
 ## RequiredDeps: PoulsTools_shmIcons
 ## IconTexture: Interface\Icons\inv_misc_book_08
 ## Category-enUS: PoulsTools

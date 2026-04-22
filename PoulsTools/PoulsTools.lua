@@ -70,6 +70,10 @@ SLASH_POULSTOOLS2 = "/poulstools"
 SlashCmdList["POULSTOOLS"] = function(msg)
     msg = msg and msg:lower():trim() or ""
     if msg == "" or msg == "options" or msg == "config" then
+        if InCombatLockdown() then
+            print("|cFFFF4444PoulsTools:|r Cannot open settings during combat.")
+            return
+        end
         if PT.Menu.mainCategory then
             Settings.OpenToCategory(PT.Menu.mainCategory:GetID())
         else

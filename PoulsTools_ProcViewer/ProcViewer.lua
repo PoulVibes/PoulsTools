@@ -32,6 +32,7 @@ local GAP               = 8
 local WINDWALKER_SPEC_ID = 269
 local iconsRegistered = false
 local addonEnabled = false
+local lockCallbackRegistered = false
 local procViewerInitialized = false
 
 ------------------------------------------------------------------------
@@ -153,8 +154,9 @@ local function RegisterIcons()
 
     iconsRegistered = true
     shmIcons:RestoreSnapGroups()
-    -- Hide all ProcViewer icons when shmIcons are locked
-    if shmIcons and shmIcons.RegisterLockCallback then
+    -- Register the lock callback only once across spec swaps
+    if not lockCallbackRegistered and shmIcons and shmIcons.RegisterLockCallback then
+        lockCallbackRegistered = true
         shmIcons:RegisterLockCallback(function(locked)
             if locked then
                 for _, def in ipairs(SLOT_DEFS) do
@@ -267,9 +269,14 @@ local function DisableAddon()
     addonEnabled = false
     eventFrame:UnregisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_SHOW")
     eventFrame:UnregisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_HIDE")
-    for _, def in ipairs(SLOT_DEFS) do
-        shmIcons:SetGlow(ADDON, def.key, false)
-        shmIcons:SetVisible(ADDON, def.key, false)
+    -- Unregister icons from shmIcons so the frames are fully removed
+    if iconsRegistered then
+        for _, def in ipairs(SLOT_DEFS) do
+            shmIcons:Unregister(ADDON, def.key)
+            timerTexts[def.key] = nil
+            iconObjs[def.key]   = nil
+        end
+        iconsRegistered = false
     end
     _G["bok_proc_active"] = false
     _G["docj_proc_active"] = false
@@ -321,7 +328,6 @@ local function InitializeProcViewer()
         return
     end
     procViewerInitialized = true
-    if not iconsRegistered then RegisterIcons() end
     _G["bok_proc_timer"]  = 0
     _G["docj_proc_timer"] = 0
     _G["rwk_proc_timer"]  = 0
@@ -337,7 +343,16 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
         InitializeProcViewer()
 
     elseif event == "PLAYER_LOGIN" then
-        InitializeProcViewer()
+        -- Spec is guaranteed valid at PLAYER_LOGIN. Call UpdateEnabledState
+        -- directly (bypassing the procViewerInitialized guard) so that a
+        -- stale/nil GetSpecialization() value at ADDON_LOADED time cannot
+        -- leave icons registered for the wrong spec.
+        local _, classToken = UnitClass("player")
+        if classToken ~= "MONK" then
+            eventFrame:UnregisterAllEvents()
+            return
+        end
+        UpdateEnabledState()
 
     elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
         if arg1 == "player" then

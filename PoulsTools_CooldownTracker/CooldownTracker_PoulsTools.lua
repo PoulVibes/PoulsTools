@@ -72,8 +72,29 @@ local function OnBuildUI(parent)
     local trackedRows = {}
     local actionsHeaderFrame = nil
 
+    -- Curated sound choices for the per-row dropdown (ordered)
+    local SOUND_CHOICES = {
+        { id = 3081, text = "Tell Message" },
+        { id = 120, text = "Loot Window Coin Sound" },
+        { id = 8960, text = "Ready Check" },
+        { id = 888, text = "Level Up" },
+        { id = 8959, text = "Raid Warning" },
+        { id = 12197, text = "Raid Boss Emote Warning" },
+        { id = 5274, text = "Auction Window Open" },
+        { id = 11461, text = "Horde PvP Warning" },
+        { id = 8446, text = "A Thing" },
+        { id = 11773, text = "PVP Flag Taken" },
+        { id = 12889, text = "Alarm Clock Warning" },
+        { id = 74437, text = "Keystone Upgrade" },
+        { id = 278769, text = "Event Scheduler Chime" },
+    }
+
+    local SOUND_NAME_BY_ID = {}
+    for _, s in ipairs(SOUND_CHOICES) do SOUND_NAME_BY_ID[s.id] = s.text end
+
     local function FindSoundNameForValue(val)
         if not val then return "None" end
+        if SOUND_NAME_BY_ID[val] then return SOUND_NAME_BY_ID[val] end
         if type(SOUNDKIT) == "table" then
             for name, id in pairs(SOUNDKIT) do
                 if id == val then return name end
@@ -151,23 +172,8 @@ local function OnBuildUI(parent)
                     UIDropDownMenu_Initialize(row.soundDrop, function(self, level)
                         local items = {}
                         table.insert(items, { text = "None", value = nil })
-                        if type(SOUNDKIT) == "table" then
-                            -- Prioritize loud attention sounds: gongs, bells, alarms, sirens, tolls
-                            local patterns = { "GONG", "BELL", "ALARM", "SIREN", "TOLL", "BONG", "ALERT", "WARNING", "LOUD", "BEEP", "TONE", "CHIME" }
-                            local added = {}
-                            for _, pat in ipairs(patterns) do
-                                for name, id in pairs(SOUNDKIT) do
-                                    if type(name) == "string" and type(id) == "number" then
-                                        local uname = name:upper()
-                                        if not added[id] and uname:find(pat) and not (uname:find("MUSIC") or uname:find("BACKGROUND") or uname:find("BGM")) then
-                                            table.insert(items, { text = name, value = id })
-                                            added[id] = true
-                                        end
-                                    end
-                                end
-                            end
-                        else
-                            table.insert(items, { text = "Quest Failed (847)", value = 847 })
+                        for _, s in ipairs(SOUND_CHOICES) do
+                            table.insert(items, { text = s.text, value = s.id })
                         end
 
                         for _, item in ipairs(items) do

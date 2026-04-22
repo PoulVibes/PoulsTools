@@ -2,7 +2,7 @@
 ## Title: |cFF00CCFFPouls|r|cFFFFFFFFTools|r
 ## Notes: Central addon management hub. Provides a Settings menu with submenus for your other addons.
 ## Author: Poul
-## Version: 1.0.2
+## Version: 1.0.3
 ## SavedVariables: PoulsToolsDB
 ## IconTexture: Interface\Icons\ui_profession_inscription
 ## Category-enUS: PoulsTools

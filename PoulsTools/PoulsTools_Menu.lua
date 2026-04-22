@@ -281,6 +281,10 @@ function Menu:CreateAddonListRow(parent, info, index, isChild)
 
     -- Click to open submenu
     row:SetScript("OnClick", function()
+        if InCombatLockdown() then
+            print("|cFFFF4444PoulsTools:|r Cannot open settings during combat.")
+            return
+        end
         local reg = Menu.registry[info.id]
         if reg and reg._category then
             Settings.OpenToCategory(reg._category:GetID())

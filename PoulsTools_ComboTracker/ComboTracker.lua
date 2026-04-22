@@ -39,6 +39,8 @@ end
 local REQUIRED_CLASS = "MONK"
 local REQUIRED_SPEC_ID = 269
 local addonEnabled = false
+local iconsRegistered = false
+local lockCallbackRegistered = false
 
 -- Create event frame early so helpers can register/unregister safely
 local eventFrame = CreateFrame("Frame")
@@ -59,9 +61,34 @@ local function IsPlayerWindwalkerSpec()
     return specID == REQUIRED_SPEC_ID
 end
 
+local function RegisterComboIcons()
+    if iconsRegistered then return end
+    local db = ComboTrackerDB
+    shmIcons:Register(ADDON_NAME, "Hit Combo", db, {
+        onResize = function(sq) db.size = sq end,
+        onMove   = function(_db) end,
+    })
+    shmIcons:SetIcon(ADDON_NAME, "Hit Combo", TRACKER_ICON)
+    shmIcons:SetVisible(ADDON_NAME, "Hit Combo", false)
+    -- Register lock callback only once across spec swaps
+    if not lockCallbackRegistered and shmIcons and shmIcons.RegisterLockCallback then
+        lockCallbackRegistered = true
+        shmIcons:RegisterLockCallback(function(locked)
+            if locked then
+                shmIcons:SetVisible(ADDON_NAME, "Hit Combo", false)
+                shmIcons:SetCooldownRaw(ADDON_NAME, "Hit Combo", 0, 0)
+                shmIcons:SetStacks(ADDON_NAME, "Hit Combo", 0)
+                shmIcons:SetGlow(ADDON_NAME, "Hit Combo", false)
+            end
+        end)
+    end
+    iconsRegistered = true
+end
+
 local function EnableAddon()
     if addonEnabled then return end
     addonEnabled = true
+    if not iconsRegistered then RegisterComboIcons() end
     eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
     --print("[" .. ADDON_NAME .. "] enabled (Windwalker).")
 end
@@ -73,10 +100,10 @@ local function DisableAddon()
     if timerHandle then timerHandle:Cancel(); timerHandle = nil end
     ComboStrikeStreak = 0
     LastComboStrikeSpellID = 0
-    shmIcons:SetVisible(ADDON_NAME, "Hit Combo", false)
-    shmIcons:SetCooldownRaw(ADDON_NAME, "Hit Combo", 0, 0)
-    shmIcons:SetStacks(ADDON_NAME, "Hit Combo", 0)
-    shmIcons:SetGlow(ADDON_NAME, "Hit Combo", false)
+    if iconsRegistered then
+        shmIcons:Unregister(ADDON_NAME, "Hit Combo")
+        iconsRegistered = false
+    end
     --print("[" .. ADDON_NAME .. "] disabled (not Windwalker).")
 end
 
@@ -105,27 +132,10 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             glow_enabled = false,
         }
         -- Migrate legacy locked field
-        local db = ComboTrackerDB
-        db.locked = nil
-        
-        shmIcons:Register(ADDON_NAME, "Hit Combo", db, {
-            onResize = function(sq) db.size = sq end,
-            onMove   = function(_db) end,
-        })
-        shmIcons:SetIcon(ADDON_NAME, "Hit Combo", TRACKER_ICON)
-        shmIcons:SetVisible(ADDON_NAME, "Hit Combo", false)
-        -- Hide this addon's icons when shmIcons are locked
-        if shmIcons and shmIcons.RegisterLockCallback then
-            shmIcons:RegisterLockCallback(function(locked)
-                if locked then
-                    shmIcons:SetVisible(ADDON_NAME, "Hit Combo", false)
-                    shmIcons:SetCooldownRaw(ADDON_NAME, "Hit Combo", 0, 0)
-                    shmIcons:SetStacks(ADDON_NAME, "Hit Combo", 0)
-                    shmIcons:SetGlow(ADDON_NAME, "Hit Combo", false)
-                end
-            end)
-        end
-        -- After initialization, enable/disable based on class/spec
+        ComboTrackerDB.locked = nil
+        -- Update enabled state; handles LoadOnDemand case where PLAYER_LOGIN
+        -- has already fired. Spec may be nil here on first load -- PLAYER_LOGIN
+        -- will correct it if so.
         UpdateEnabledState()
 
     elseif event == "PLAYER_LOGIN" then
