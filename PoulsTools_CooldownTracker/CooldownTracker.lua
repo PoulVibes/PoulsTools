@@ -99,7 +99,7 @@ end
 -- Cooldown + icon update for one spell
 -- ============================================================
 
-local function UpdateTracker(key)
+local function UpdateTracker(key, updateStacks)
     local entry = tracked[key]
     if not entry then return end
     local spellInfo = C_Spell.GetSpellInfo(entry.spellID)
@@ -112,9 +112,9 @@ local function UpdateTracker(key)
     if isChargeSpell then
         local curCharges = (chargeInfo and chargeInfo.currentCharges)
         -- Show recharge timer for the next charge when available
-        if chargeDuration then
+        if chargeDuration and chargeInfo and chargeInfo.isActive then
             shmIcons:SetCooldown(ADDON_NAME, key, chargeDuration)
-        elseif durationObject then
+        elseif durationObject and cdInfo and cdInfo.isActive then
             shmIcons:SetCooldown(ADDON_NAME, key, durationObject)
         else
             shmIcons:SetCooldown(ADDON_NAME, key, nil)
@@ -130,9 +130,15 @@ local function UpdateTracker(key)
         end
         shmIcons:SetGlow(ADDON_NAME, key, glowWanted)
 
-        shmIcons:SetStacks(ADDON_NAME, key, curCharges)
+        --if updateStacks then
+            if cdInfo and (not cdInfo.isActive or tracked[key].isOnGCD) then
+                shmIcons:SetStacks(ADDON_NAME, key, curCharges)
+            else
+                shmIcons:SetStacks(ADDON_NAME, key, 0)
+            end
+        --end
     else
-        shmIcons:SetChargeCooldown(ADDON_NAME, key, nil)
+        --shmIcons:SetChargeCooldown(ADDON_NAME, key, nil)
         if durationObject and cdInfo and cdInfo.isActive then
             shmIcons:SetCooldown(ADDON_NAME, key, durationObject)
             shmIcons:SetGlow(ADDON_NAME, key, false)
@@ -140,7 +146,9 @@ local function UpdateTracker(key)
             shmIcons:SetCooldown(ADDON_NAME, key, nil)
             shmIcons:SetGlow(ADDON_NAME, key, true)
         end
-        shmIcons:SetStacks(ADDON_NAME, key, 0)
+        if updateStacks then
+            shmIcons:SetStacks(ADDON_NAME, key, 0)
+        end
     end
     if UnitExists("target") then
         shmIcons:SetRange(ADDON_NAME, key, C_Spell.IsSpellInRange(entry.spellID, "target"))
@@ -177,8 +185,8 @@ local function UpdateTracker(key)
     end
 end
 
-local function UpdateAllTrackers()
-    for key in pairs(tracked) do UpdateTracker(key) end
+local function UpdateAllTrackers(updateStacks)
+    for key in pairs(tracked) do UpdateTracker(key, updateStacks) end
 end
 
 local function AddTracker(spellName, specID)
@@ -203,7 +211,7 @@ local function AddTracker(spellName, specID)
     })
 
     tracked[key] = { spellName = spellName, spellID = spellID }
-    UpdateTracker(key)
+    UpdateTracker(key, true)
     -- notify any UI listeners so they can refresh lists
     NotifyChangeListeners()
 end
@@ -356,10 +364,16 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
     elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
         LoadSpec(GetCurrentSpecID())
 
-    elseif event == "PLAYER_TARGET_CHANGED"
-        or  event == "SPELL_UPDATE_COOLDOWN"
-        or  event == "SPELL_UPDATE_CHARGES" then
+    elseif event == "SPELL_UPDATE_COOLDOWN" then
+        for key, entry in pairs(tracked) do
+            local cd = C_Spell.GetSpellCooldown(entry.spellID)
+            tracked[key].isOnGCD = cd and cd.isOnGCD or false
+        end
         UpdateAllTrackers()
+    elseif event == "PLAYER_TARGET_CHANGED" then
+        UpdateAllTrackers()
+    elseif event == "SPELL_UPDATE_CHARGES" then
+        UpdateAllTrackers(true)
     end
 end)
 

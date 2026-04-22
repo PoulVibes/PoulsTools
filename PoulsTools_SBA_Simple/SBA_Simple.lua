@@ -4,6 +4,13 @@
 local ADDON_NAME = "PoulsTools_SBA_Simple"
 local ICON_KEY   = "Suggested_Spell"
 
+-- spellID -> isOnGCD; populated for every spell that has been shown in the icon.
+-- Updated on SPELL_UPDATE_COOLDOWN so SetStacks can ignore GCD-only lockouts.
+local spellGCDState = {}
+
+-- The spellID currently shown in the icon; used by SPELL_UPDATE_CHARGES.
+local currentDisplayedSpellID = nil
+
 SBA_SimpleDB = SBA_SimpleDB or {}
 
 -- ── Default DB schema (shmIcons will write x/y/size back on move/resize) ──
@@ -119,11 +126,31 @@ function SBA_Simple_SetSize(size)
     RegisterIcon()
 end
 
+local reasoncd = 2
 -- ── Per-frame update ──────────────────────────────────────────────────────
 local ticker = CreateFrame("Frame")
 ticker:SetScript("OnUpdate", function()
     -- Override() takes priority over the assisted combat suggestion
     local spellID = Override() or C_AssistedCombat.GetNextCastSpell()
+
+    -- Register new spell IDs for GCD tracking (value filled on SPELL_UPDATE_COOLDOWN).
+    -- SetStacks is called at "creation time": first sight of a spell, or whenever
+    -- the suggested spell changes. After that, only SPELL_UPDATE_CHARGES updates it.
+    if spellID then
+        if spellGCDState[spellID] == nil then
+            spellGCDState[spellID] = false
+            local ci = C_Spell.GetSpellCharges(spellID)
+            if ci and ci.maxCharges and ci.maxCharges > 1 then
+                shmIcons:SetStacks(ADDON_NAME, ICON_KEY, ci.currentCharges)
+            end
+        elseif spellID ~= currentDisplayedSpellID then
+            local ci = C_Spell.GetSpellCharges(spellID)
+            if ci and ci.maxCharges and ci.maxCharges > 1 then
+                shmIcons:SetStacks(ADDON_NAME, ICON_KEY, ci.currentCharges)
+            end
+        end
+    end
+    currentDisplayedSpellID = spellID
 
     -- ── Icon texture ─────────────────────────────────────────────────────
     if spellID then
@@ -140,35 +167,42 @@ ticker:SetScript("OnUpdate", function()
         local chargeInfo     = C_Spell.GetSpellCharges(spellID)
         local isChargeSpell  = chargeInfo and chargeInfo.maxCharges and chargeInfo.maxCharges > 1
         local chargeDuration = C_Spell.GetSpellChargeDuration(spellID)
-
+        shmIcons:SetGlow(ADDON_NAME, ICON_KEY, false) --TODO: Fix glow logic for SBAS
+        
        if isChargeSpell then
-            if chargeDuration then
-                shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, chargeDuration)
-                shmIcons:SetGlow(ADDON_NAME, ICON_KEY, false)
-            elseif durationObject then
-                shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, durationObject)
-                if cdInfo.isActive then
-                    shmIcons:SetGlow(ADDON_NAME, ICON_KEY, true)
-                else
-                    shmIcons:SetGlow(ADDON_NAME, ICON_KEY, false)
-                end
-            else
-                shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, nil)
-                shmIcons:SetGlow(ADDON_NAME, ICON_KEY, true)
-            end
-            shmIcons:SetStacks(ADDON_NAME, ICON_KEY, chargeInfo.currentCharges)
-        else
-            shmIcons:SetChargeCooldown(ADDON_NAME, ICON_KEY, nil)
             if durationObject and cdInfo and cdInfo.isActive then
                 shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, durationObject)
-                shmIcons:SetGlow(ADDON_NAME, ICON_KEY, false)
+                if(reasoncd ~= 0) then print ("0") reasoncd = 0 end
+            elseif chargeDuration and chargeInfo and chargeInfo.isActive then
+                shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, chargeDuration)
+                if(reasoncd ~= 1) then print ("1") reasoncd = 1 end
+                --shmIcons:SetGlow(ADDON_NAME, ICON_KEY, false)
             else
+                --if spellID == 121253 then print("3") end
+                if(reasoncd ~= 2) then print ("2") reasoncd = 2 end
                 shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, nil)
-                shmIcons:SetGlow(ADDON_NAME, ICON_KEY, true)
+                --shmIcons:SetGlow(ADDON_NAME, ICON_KEY, true)
+            end
+            if (cdInfo and not cdInfo.isActive or cdInfo.isOnGCD) then
+                shmIcons:SetStacks(ADDON_NAME, key, curCharges)
+            else
+                shmIcons:SetStacks(ADDON_NAME, key, 0)
+            end
+        else
+            --shmIcons:SetChargeCooldown(ADDON_NAME, ICON_KEY, nil)
+            if durationObject and cdInfo and cdInfo.isActive then
+                --if spellID == 121253 then print("4") end
+                shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, durationObject)
+                --shmIcons:SetGlow(ADDON_NAME, ICON_KEY, false)
+            else
+                --if spellID == 121253 then print("5") end
+                shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, nil)
+                --shmIcons:SetGlow(ADDON_NAME, ICON_KEY, true)
             end
             shmIcons:SetStacks(ADDON_NAME, ICON_KEY, 0)
         end
 
+        
         -- ── Range ─────────────────────────────────────────────────────────
         if UnitExists("target") then
             shmIcons:SetRange(ADDON_NAME, ICON_KEY, C_Spell.IsSpellInRange(spellID, "target"))
@@ -180,7 +214,7 @@ ticker:SetScript("OnUpdate", function()
         shmIcons:SetUsable(ADDON_NAME, ICON_KEY, C_Spell.IsSpellUsable(spellID))
     else
         shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, nil)
-        shmIcons:SetChargeCooldown(ADDON_NAME, ICON_KEY, nil)
+        --shmIcons:SetChargeCooldown(ADDON_NAME, ICON_KEY, nil)
         shmIcons:SetStacks(ADDON_NAME, ICON_KEY, 0)
         shmIcons:SetRange(ADDON_NAME, ICON_KEY, nil)
         shmIcons:SetUsable(ADDON_NAME, ICON_KEY, true)
@@ -216,7 +250,16 @@ end
 local events = CreateFrame("Frame")
 events:RegisterEvent("PLAYER_ENTERING_WORLD")
 events:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+events:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+--events:RegisterEvent("SPELL_UPDATE_CHARGES")
 events:SetScript("OnEvent", function(_, event)
+    if event == "SPELL_UPDATE_COOLDOWN" then
+        for sid in pairs(spellGCDState) do
+            local cd = C_Spell.GetSpellCooldown(sid)
+            spellGCDState[sid] = cd and cd.isOnGCD or false
+        end
+        return
+    end
     if event == "PLAYER_ENTERING_WORLD" then
         LoadMonkAddons()
     end

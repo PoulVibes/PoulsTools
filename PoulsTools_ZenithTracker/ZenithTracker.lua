@@ -10,6 +10,7 @@ frame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
 local REQUIRED_CLASS = "MONK"
 local REQUIRED_SPEC_ID = 269
 local addonEnabled = false
+local iconFrame
 
 local function IsPlayerClass(token)
     local _, classToken = UnitClass("player")
@@ -65,7 +66,7 @@ local ZENITH_IDS = {
 }
 
 -- Create the Visual Icon
-local iconFrame = CreateFrame("Frame", "ZenithIconFrame", UIParent)
+iconFrame = CreateFrame("Frame", "ZenithIconFrame", UIParent)
 iconFrame:SetSize(64, 64)
 iconFrame:SetPoint("CENTER", 0, 0)
 iconFrame:Hide()

@@ -877,7 +877,7 @@ function shmIcons:SetChargeCooldown(addonName, id, durationObject)
     if not icon then return end
     if durationObject then
         icon.cd2:SetCooldownFromDurationObject(durationObject)
-        icon.cd2:Show()
+        icon.cd2:Hide()
     else
         icon.cd2:Clear()
     end
@@ -909,7 +909,7 @@ function shmIcons:SetStacks(addonName, id, count)
     local drawStacks
     if issecretvalue(count) then
         if icon.db and icon.db.spellID then
-            drawStacks = not C_Spell.GetSpellCooldown(icon.db.spellID).isActive
+            drawStacks = true --not C_Spell.GetSpellCooldown(icon.db.spellID).isActive
         else
             drawStacks = false
         end
