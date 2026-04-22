@@ -908,11 +908,7 @@ function shmIcons:SetStacks(addonName, id, count)
 
     local drawStacks
     if issecretvalue(count) then
-        --if icon.db and icon.db.spellID then
-            drawStacks = true --not C_Spell.GetSpellCooldown(icon.db.spellID).isActive
-        --else
-        --    drawStacks = false
-       -- end
+            drawStacks = true -- Setting this to 0 is handled by the calling app so always draw the secret value stacks
     else
         drawStacks = count and count > 0
     end

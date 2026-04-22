@@ -216,6 +216,11 @@ local function AddTracker(spellName, specID)
     NotifyChangeListeners()
 end
 
+local ticker = CreateFrame("Frame")
+ticker:SetScript("OnUpdate", function()
+    UpdateAllTrackers()
+end)
+
 local function RemoveTracker(key)
     shmIcons:Unregister(ADDON_NAME, key)
     tracked[key] = nil
