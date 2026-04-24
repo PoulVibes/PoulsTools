@@ -159,6 +159,7 @@ local function GenerateCode(rules)
     L[#L+1] = "local spellID = C_AssistedCombat.GetNextCastSpell()"
     L[#L+1] = "local chi = UnitPower(\"player\", Enum.PowerType.Chi)"
     L[#L+1] = ""
+    local hasUnconditional = false
     for i, rule in ipairs(rules) do
         if (rule.spellID or 0) > 0 then
             local parts     = {}
@@ -184,12 +185,16 @@ local function GenerateCode(rules)
             else
                 -- No conditions: unconditional (this blocks everything below it)
                 L[#L+1] = ("return %d  -- unconditional"):format(rule.spellID)
+                hasUnconditional = true
             end
             L[#L+1] = ""
+            if hasUnconditional then break end
         end
     end
-    L[#L+1] = "-- Fallback: SBA assisted-combat suggestion"
-    L[#L+1] = "return spellID"
+    if not hasUnconditional then
+        L[#L+1] = "-- Fallback: SBA assisted-combat suggestion"
+        L[#L+1] = "return spellID"
+    end
     return table.concat(L, "\n")
 end
 
@@ -228,7 +233,15 @@ end
 -- 6.  Condition-type picker popup
 --     A floating popup listing all condition types as clickable buttons.
 -------------------------------------------------------------------------------
-local condPicker = nil
+local condPicker    = nil
+local pluginPicker  = nil   -- forward-declared so CloseAllPopups can reference it
+local addSpellPopup = nil   -- forward-declared so CloseAllPopups can reference it
+
+local function CloseAllPopups()
+    if condPicker   and condPicker:IsShown()   then condPicker:Hide()   end
+    if pluginPicker and pluginPicker:IsShown() then pluginPicker:Hide() end
+    if addSpellPopup and addSpellPopup:IsShown() then addSpellPopup:Hide() end
+end
 
 local function CreateCondPicker()
     local f = CreateFrame("Frame", "SBAS_GUI_CondPicker", UIParent, "BackdropTemplate")
@@ -310,8 +323,6 @@ end
 -- 7.  "Add Spell" popup
 --     Enter a spell ID, see name/icon, confirm to add to the priority list.
 -------------------------------------------------------------------------------
-local addSpellPopup = nil
-
 local function CreateAddSpellPopup()
     local f = CreateFrame("Frame", "SBAS_GUI_AddSpell", UIParent, "BackdropTemplate")
     f:SetSize(320, 130)
@@ -438,6 +449,7 @@ local condInputArea= nil   -- "add condition" sub-frame inside rightPanel
 
 local workingRules = {}    -- deep-copy being edited
 local editSpecID   = 0
+local sessionRules = {}    -- in-session cache: specID -> workingRules table (survives close/reopen)
 local selectedIdx  = 0     -- 1-based; 0 = none
 local isAddingCond = false
 local selectedCondIdx = nil  -- nil = adding new; number = editing existing cond at that index
@@ -449,6 +461,10 @@ local condGroupBoxPool = {}    -- pool of backdrop boxes for matched parenthesis
 
 -- Forward declarations
 local RefreshRuleList, RefreshRightPanel
+-- Drag-infrastructure forward declarations (defined in section 11)
+local ruleDrag      -- assigned in section 11 initialiser block
+local dragIconFrame, dragCatcher
+local EnsureDragIcon, EnsureDragCatcher
 
 local function GetPanelWidths(totalWidth)
     totalWidth = totalWidth or (guiFrame and guiFrame:GetWidth()) or GUI_W
@@ -518,25 +534,43 @@ local function CreateRowFrame(parent)
     f.removeBtn:SetSize(20, 20)
     f.removeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -2, -2)
 
-    f.downBtn = CreateFrame("Button", nil, f)
-    f.downBtn:SetSize(18, 18)
-    f.downBtn:SetPoint("RIGHT", f.removeBtn, "LEFT", -3, 0)
-    f.downBtn:SetNormalTexture("Interface\\Buttons\\Arrow-Down-Up")
-    f.downBtn:SetPushedTexture("Interface\\Buttons\\Arrow-Down-Down")
-    f.downBtn:SetHighlightTexture("Interface\\Buttons\\Arrow-Down-Up")
-    f.downBtn:GetHighlightTexture():SetVertexColor(0.8, 0.9, 1, 0.5)
-
-    f.upBtn = CreateFrame("Button", nil, f)
-    f.upBtn:SetSize(18, 18)
-    f.upBtn:SetPoint("RIGHT", f.downBtn, "LEFT", -3, 0)
-    f.upBtn:SetNormalTexture("Interface\\Buttons\\Arrow-Up-Up")
-    f.upBtn:SetPushedTexture("Interface\\Buttons\\Arrow-Up-Down")
-    f.upBtn:SetHighlightTexture("Interface\\Buttons\\Arrow-Up-Up")
-    f.upBtn:GetHighlightTexture():SetVertexColor(0.8, 0.9, 1, 0.5)
-
-    f:SetScript("OnMouseDown", function(self)
-        if self._idx then selectedIdx = self._idx; isAddingCond = false
-            RefreshRuleList(); RefreshRightPanel() end
+    f:SetScript("OnMouseDown", function(self, mouseBtn)
+        if mouseBtn ~= "LeftButton" then return end
+        if not self._idx then return end
+        -- Select the rule
+        selectedIdx  = self._idx
+        isAddingCond = false
+        RefreshRuleList()
+        RefreshRightPanel()
+        -- Begin a *pending* drag — the visual only activates once the cursor
+        -- moves more than 8 px, so normal clicks produce no floating icon.
+        EnsureDragIcon()
+        EnsureDragCatcher()
+        local cx, cy = GetCursorPosition()
+        local s = UIParent:GetEffectiveScale()
+        ruleDrag.pending  = true
+        ruleDrag.fromIdx  = self._idx
+        ruleDrag.pendingX = cx / s
+        ruleDrag.pendingY = cy / s
+        -- Pre-load the icon texture so it's ready the moment drag activates
+        local rule = workingRules[self._idx]
+        if rule and dragIconFrame then
+            local tex = rule.spellID and C_Spell and C_Spell.GetSpellTexture
+                        and C_Spell.GetSpellTexture(rule.spellID)
+            dragIconFrame._tex:SetTexture(tex or "Interface\\Icons\\INV_Misc_QuestionMark")
+        end
+        -- Show catcher with mouse DISABLED so it doesn't block clicks;
+        -- EnableMouse is turned on once the threshold is crossed.
+        dragCatcher:EnableMouse(false)
+        dragCatcher:Show()
+    end)
+    f:SetScript("OnMouseUp", function(self, mouseBtn)
+        -- Cancel a pending drag that never crossed the movement threshold
+        if mouseBtn == "LeftButton" and ruleDrag.pending then
+            ruleDrag.pending = false
+            ruleDrag.fromIdx = nil
+            if dragCatcher then dragCatcher:Hide() end
+        end
     end)
     f:SetScript("OnEnter", function(self)
         if self._idx ~= selectedIdx then
@@ -602,22 +636,6 @@ local function UpdateRowFrame(f, idx, rule)
         f:SetBackdropBorderColor(0.14, 0.24, 0.40, 1)
     end
 
-    f.upBtn:SetEnabled(idx > 1)
-    f.upBtn:SetScript("OnClick", function()
-        local r = table.remove(workingRules, idx)
-        table.insert(workingRules, idx - 1, r)
-        selectedIdx = idx - 1
-        RefreshRuleList(); RefreshRightPanel()
-    end)
-
-    f.downBtn:SetEnabled(idx < #workingRules)
-    f.downBtn:SetScript("OnClick", function()
-        local r = table.remove(workingRules, idx)
-        table.insert(workingRules, idx + 1, r)
-        selectedIdx = idx + 1
-        RefreshRuleList(); RefreshRightPanel()
-    end)
-
     f.removeBtn:SetScript("OnClick", function()
         table.remove(workingRules, idx)
         if selectedIdx == idx then
@@ -648,8 +666,6 @@ end
 -------------------------------------------------------------------------------
 -- 6b. Plugin / Proc picker popup
 -------------------------------------------------------------------------------
-local pluginPicker = nil
-
 local function CreatePluginPicker()
     local f = CreateFrame("Frame", "SBAS_GUI_PluginPicker", UIParent, "BackdropTemplate")
     f:SetSize(200, #PLUGIN_OPTS * 22 + 28)
@@ -857,6 +873,8 @@ local function CreateCondInputArea(parent)
     pluginBtn:SetPoint("TOPLEFT", pluginFrame, "TOPLEFT")
     pluginBtn:SetText("Select plugin...")
     pluginBtn:SetScript("OnClick", function()
+        if pluginPicker and pluginPicker:IsShown() then CloseAllPopups(); return end
+        CloseAllPopups()
         ShowPluginPicker(pluginBtn, function(opt)
             selPlugin = opt
             pluginBtn:SetText(opt.label)
@@ -928,6 +946,8 @@ local function CreateCondInputArea(parent)
     lteBtn:SetScript("OnClick",    function() SetOpSel("<=")      end)
     eqBtn:SetScript("OnClick",     function() SetOpSel("==")      end)
 
+    local UpdateLayout  -- forward declaration so RefreshSize can call it
+
     local function RefreshSize()
         local rightW = GetRightPanelWidth()
         local contentW = rightW - 18
@@ -957,7 +977,7 @@ local function CreateCondInputArea(parent)
     end
 
     -- ── Layout ────────────────────────────────────────────────────────────
-    local function UpdateLayout()
+    UpdateLayout = function()
         local above = typeBtn
         if selType and selType.needsSpell then
             above = (spellSel == "other") and otherFrame or spellToggleFrame
@@ -1008,7 +1028,8 @@ local function CreateCondInputArea(parent)
     otherBtn:SetScript("OnClick", function() SetSpellSel("other") end)
 
     typeBtn:SetScript("OnClick", function()
-        if condPicker and condPicker:IsShown() then condPicker:Hide(); return end
+        if condPicker and condPicker:IsShown() then CloseAllPopups(); return end
+        CloseAllPopups()
         ShowCondPicker(typeBtn, function(ct)
             selType = ct
             typeBtn:SetText(ct.label)
@@ -1506,6 +1527,777 @@ RefreshRightPanel = function()
 end
 
 -------------------------------------------------------------------------------
+-- 11b. Spellbook slide-out panel + drag-to-priority system
+--
+--  A tab button (spellbook icon) is attached to the left edge of the main
+--  GUI frame.  Clicking it opens a 224-px-wide panel showing all active-spec
+--  and general class spells pulled from the player's spellbook.
+--
+--  Interaction:
+--    Left-click  a spell row → appends the spell to the bottom of the list.
+--    Left-drag   a spell row → shows a floating icon; releasing over a rule
+--                              row inserts the spell BEFORE that rule;
+--                              releasing over the empty list area appends it.
+-------------------------------------------------------------------------------
+local sbasDrag = { active = false, spellID = nil, spellName = nil }
+-- Assign into the forward-declared upvalues so CreateRowFrame closures can see them
+ruleDrag      = { active = false, fromIdx = nil, pending = false, pendingX = 0, pendingY = 0 }
+dragIconFrame = nil
+dragCatcher   = nil
+local dropIndicator = nil   -- horizontal line shown between rows while reordering
+
+-- Forward declaration so CreateSpellbookPanel can call it for the reset button.
+local ResetSeenCastsForCurrentSpec
+
+-- Spells seen via successful player casts, persisted per spec in SavedVariables.
+-- Only records spells that are overrides of a class ability (e.g. Rushing Wind Kick).
+local seenCastSpells = {}
+do
+    local function CastsDB()
+        SBA_SimpleDB           = SBA_SimpleDB or {}
+        SBA_SimpleDB.castsSeen = SBA_SimpleDB.castsSeen or {}
+        return SBA_SimpleDB.castsSeen
+    end
+
+    local function LoadCastsForSpec()
+        local specIdx = GetSpecialization and GetSpecialization()
+        wipe(seenCastSpells)
+        if not specIdx then return end
+        local saved = CastsDB()[specIdx]
+        if saved then
+            for spellID, entry in pairs(saved) do
+                seenCastSpells[spellID] = entry
+            end
+        end
+    end
+
+    ResetSeenCastsForCurrentSpec = function()
+        local specIdx = GetSpecialization and GetSpecialization()
+        wipe(seenCastSpells)
+        if specIdx then
+            CastsDB()[specIdx] = {}
+        end
+    end
+
+    local castTrackFrame = CreateFrame("Frame")
+    castTrackFrame:RegisterEvent("PLAYER_LOGIN")
+    castTrackFrame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+    castTrackFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+    castTrackFrame:SetScript("OnEvent", function(_, event, ...)
+        if event == "PLAYER_LOGIN" then
+            LoadCastsForSpec()
+        elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
+            local unit, _, spellID = ...
+            if unit ~= "player" or not spellID or seenCastSpells[spellID] then return end
+            -- FindBaseSpellByID returns the spell this one overrides.
+            -- If it returns a different ID, spellID is an override spell.
+            local baseID = C_SpellBook.FindBaseSpellByID and C_SpellBook.FindBaseSpellByID(spellID)
+            if not baseID or baseID == spellID then
+                return
+            end
+            -- Confirm the base spell is actually a class/player ability
+            if not IsPlayerSpell(baseID) then
+                return
+            end
+            local isPassive = C_Spell.IsSpellPassive and C_Spell.IsSpellPassive(spellID)
+            if isPassive then return end
+            local info = C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(spellID)
+            if not info or not info.name then return end
+            local tex = C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(spellID)
+            local entry = {
+                name    = info.name,
+                spellID = spellID,
+                texture = tex or "Interface\\Icons\\INV_Misc_QuestionMark",
+            }
+            seenCastSpells[spellID] = entry
+            local curSpec = GetSpecialization and GetSpecialization()
+            if curSpec then
+                local db = CastsDB()
+                db[curSpec]          = db[curSpec] or {}
+                db[curSpec][spellID] = entry
+            end
+        elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
+            LoadCastsForSpec()
+        end
+    end)
+end
+
+-- Returns a sorted list of {name, spellID, texture} for the player's active
+-- spec plus general lines.
+-- Excludes: off-spec lines, guild, flyouts, FutureSpell slots, and passives.
+local function GetClassSpells()
+    if not (C_SpellBook and C_SpellBook.GetNumSpellBookSkillLines) then return {} end
+    local spells, seen = {}, {}
+    local isFlyoutType = Enum.SpellBookItemType and Enum.SpellBookItemType.Flyout
+    local isFutureType = Enum.SpellBookItemType and Enum.SpellBookItemType.FutureSpell
+    -- Primary tabs: class, active spec, racial — spells included freely (minus passives without icons)
+    local primaryTabs = {}
+    primaryTabs[UnitClass("player")] = true                        -- e.g. "Monk"
+    primaryTabs[UnitRace("player")]  = true                        -- e.g. "Pandaren"
+    local specIdx = GetSpecialization and GetSpecialization()
+    if specIdx then
+        local specName = select(2, GetSpecializationInfo(specIdx)) -- e.g. "Windwalker"
+        if specName then primaryTabs[specName] = true end
+    end
+    local numLines = C_SpellBook.GetNumSpellBookSkillLines()
+    for lineIdx = 1, numLines do
+        local info = C_SpellBook.GetSpellBookSkillLineInfo(lineIdx)
+        -- Visit all non-guild, non-offSpec tabs (includes General tab)
+        if info and not info.isGuild and not info.offSpecID then
+            local isPrimaryTab = primaryTabs[info.name]
+            local offset = info.itemIndexOffset
+            local count  = info.numSpellBookItems
+            for j = offset + 1, offset + count do
+                local name, subName =
+                    C_SpellBook.GetSpellBookItemName(j, Enum.SpellBookSpellBank.Player)
+                local itemType, spellID =
+                    C_SpellBook.GetSpellBookItemType(j, Enum.SpellBookSpellBank.Player)
+                if name and spellID and spellID ~= 0 then
+                    local isPassive = C_Spell.IsSpellPassive  and C_Spell.IsSpellPassive(spellID)
+                    -- Non-primary tabs (e.g. General): only include if subtext contains "Racial"
+                    local subtext   = (not isPrimaryTab) and C_Spell.GetSpellSubtext
+                                      and C_Spell.GetSpellSubtext(spellID) or nil
+                    local skip = (isFlyoutType and itemType == isFlyoutType)
+                              or (isFutureType and itemType == isFutureType)
+                              or (not isPrimaryTab and not (subtext and subtext:find("Racial")))
+                              or (isPassive)   -- passives without an icon are excluded
+                              or seen[spellID]
+                    if not skip then
+                        seen[spellID] = true
+                        local spellTex = C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(spellID)
+                        spells[#spells + 1] = {
+                            name    = name,
+                            spellID = spellID,
+                            texture = spellTex or "Interface\\Icons\\INV_Misc_QuestionMark",
+                        }
+                        -- Include the active override for this spell (e.g. Rushing Wind Kick overriding Rising Sun Kick)
+                        if C_SpellBook.FindSpellOverrideByID then
+                            local overID = C_SpellBook.FindSpellOverrideByID(spellID)
+                            if overID and overID ~= spellID and not seen[overID] then
+                                local isOverPassive = C_Spell.IsSpellPassive and C_Spell.IsSpellPassive(overID)
+                                if not isOverPassive then
+                                    local overInfo = C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(overID)
+                                    local overName = overInfo and overInfo.name
+                                    if overName then
+                                        seen[overID] = true
+                                        local overTex = C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(overID)
+                                        spells[#spells + 1] = {
+                                            name    = overName,
+                                            spellID = overID,
+                                            texture = overTex or "Interface\\Icons\\INV_Misc_QuestionMark",
+                                        }
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    -- Build a name-index of spells already added from the spellbook so we can
+    -- suppress seenCast entries that share a name (spellbook version takes precedence).
+    local seenNames = {}
+    for _, sp in ipairs(spells) do
+        seenNames[sp.name] = true
+    end
+    -- Merge spells captured via successful casts (override spells, proc abilities, etc.)
+    -- Skip any whose name duplicates a spellbook entry; keep them in seenCastSpells storage.
+    for castID, entry in pairs(seenCastSpells) do
+        if not seen[castID] and not seenNames[entry.name] then
+            seen[castID] = true
+            spells[#spells + 1] = entry
+        end
+    end
+    table.sort(spells, function(a, b) return a.name < b.name end)
+    return spells
+end
+
+EnsureDragIcon = function()
+    if dragIconFrame then return end
+    dragIconFrame = CreateFrame("Frame", "SBAS_SpellDragIcon", UIParent)
+    dragIconFrame:SetSize(38, 38)
+    dragIconFrame:SetFrameStrata("TOOLTIP")
+    dragIconFrame:Hide()
+    local tex = dragIconFrame:CreateTexture(nil, "ARTWORK")
+    tex:SetAllPoints()
+    tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    dragIconFrame._tex = tex
+    local glow = dragIconFrame:CreateTexture(nil, "OVERLAY")
+    glow:SetAllPoints()
+    glow:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
+    glow:SetBlendMode("ADD")
+    dragIconFrame:SetScript("OnUpdate", function(self)
+        local x, y = GetCursorPosition()
+        local s = UIParent:GetEffectiveScale()
+        self:ClearAllPoints()
+        self:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x / s, y / s)
+    end)
+end
+
+EnsureDragCatcher = function()
+    if dragCatcher then return end
+    dragCatcher = CreateFrame("Frame", "SBAS_SpellDragCatcher", UIParent)
+    dragCatcher:SetAllPoints(UIParent)
+    dragCatcher:SetFrameStrata("DIALOG")
+    dragCatcher:EnableMouse(true)
+    dragCatcher:Hide()
+
+    -- Drop indicator: a bright horizontal line shown between rows during reorder
+    dropIndicator = CreateFrame("Frame", "SBAS_DropIndicator", UIParent)
+    dropIndicator:SetSize(1, 3)
+    dropIndicator:SetFrameStrata("TOOLTIP")
+    dropIndicator:Hide()
+    local diTex = dropIndicator:CreateTexture(nil, "ARTWORK")
+    diTex:SetAllPoints()
+    diTex:SetColorTexture(0.3, 0.85, 1, 1)
+
+    -- Helper: find which "slot" (1 = before row1, 2 = before row2, ..., n+1 = after last)
+    -- the cursor is closest to, for the drop indicator.
+    local function GetRuleDropSlot(mx, my)
+        local best, bestDist = 1, math.huge
+        for i, rf in ipairs(rowFrames) do
+            if rf:IsShown() then
+                local rt = rf:GetTop()
+                if rt then
+                    local d = math.abs(my - rt)
+                    if d < bestDist then bestDist = d; best = i end
+                end
+            end
+        end
+        -- Also check below the last visible row
+        local lastVisible = 0
+        for i, rf in ipairs(rowFrames) do if rf:IsShown() then lastVisible = i end end
+        if lastVisible > 0 then
+            local rb = rowFrames[lastVisible]:GetBottom()
+            if rb and math.abs(my - rb) < bestDist then best = lastVisible + 1 end
+        end
+        return best
+    end
+
+    -- Shared drop-logic extracted so both OnUpdate (release-to-drop) and
+    -- OnMouseUp (fallback) can call it without duplication.
+    local function FinishRuleDrop()
+        local fromIdx = ruleDrag.fromIdx
+        ruleDrag.active  = false
+        ruleDrag.fromIdx = nil
+        if dragIconFrame then dragIconFrame:Hide() end
+        if dropIndicator then dropIndicator:Hide() end
+        dragCatcher:Hide()
+
+        -- Restore borders
+        for _, rf in ipairs(rowFrames) do
+            if rf:IsShown() then
+                if rf._idx and rf._idx == selectedIdx then
+                    rf:SetBackdropBorderColor(0.28, 0.58, 0.90, 1)
+                else
+                    rf:SetBackdropBorderColor(0.14, 0.24, 0.40, 1)
+                end
+            end
+        end
+
+        local mx, my = GetCursorPosition()
+        local s = UIParent:GetEffectiveScale()
+        mx, my = mx / s, my / s
+        local slot = GetRuleDropSlot(mx, my)
+        slot = math.max(1, math.min(slot, #workingRules + 1))
+        if slot ~= fromIdx and slot ~= fromIdx + 1 then
+            local rule = table.remove(workingRules, fromIdx)
+            local toIdx = (slot > fromIdx) and (slot - 1) or slot
+            table.insert(workingRules, toIdx, rule)
+            selectedIdx = toIdx
+            isAddingCond = false
+            RefreshRuleList()
+            RefreshRightPanel()
+        end
+    end
+
+    local function FinishSpellDrop()
+        sbasDrag.active = false
+        if dragIconFrame then dragIconFrame:Hide() end
+        dragCatcher:Hide()
+
+        -- Restore row border colours
+        for _, rf in ipairs(rowFrames) do
+            if rf:IsShown() then
+                if rf._idx and rf._idx == selectedIdx then
+                    rf:SetBackdropBorderColor(0.28, 0.58, 0.90, 1)
+                else
+                    rf:SetBackdropBorderColor(0.14, 0.24, 0.40, 1)
+                end
+            end
+        end
+
+        if not sbasDrag.spellID then return end
+
+        local mx, my = GetCursorPosition()
+        local s = UIParent:GetEffectiveScale()
+        mx, my = mx / s, my / s
+
+        local insertIdx = nil
+        for i, rf in ipairs(rowFrames) do
+            if rf:IsShown() then
+                local rl, rr = rf:GetLeft(),  rf:GetRight()
+                local rt, rb = rf:GetTop(),   rf:GetBottom()
+                if rl and rr and rt and rb
+                   and mx >= rl and mx <= rr and my >= rb and my <= rt then
+                    insertIdx = i
+                    break
+                end
+            end
+        end
+        if not insertIdx and guiFrame and guiFrame._leftSF then
+            local sf = guiFrame._leftSF
+            local ll, lr = sf:GetLeft(),  sf:GetRight()
+            local lt, lb = sf:GetTop(),   sf:GetBottom()
+            if ll and lr and lt and lb
+               and mx >= ll and mx <= lr and my >= lb and my <= lt then
+                insertIdx = #workingRules + 1
+            end
+        end
+
+        if insertIdx then
+            local id   = sbasDrag.spellID
+            local name = sbasDrag.spellName
+            if insertIdx > #workingRules then
+                workingRules[#workingRules + 1] = { spellID = id, name = name, conditions = {} }
+                selectedIdx = #workingRules
+            else
+                table.insert(workingRules, insertIdx, { spellID = id, name = name, conditions = {} })
+                selectedIdx = insertIdx
+            end
+            isAddingCond = false
+            RefreshRuleList()
+            RefreshRightPanel()
+        end
+
+        sbasDrag.spellID   = nil
+        sbasDrag.spellName = nil
+    end
+
+    -- Highlight row under cursor while dragging
+    dragCatcher:SetScript("OnUpdate", function()
+        -- ── Pending drag: wait for 8-px movement before activating ─────────
+        if ruleDrag.pending then
+            if not IsMouseButtonDown("LeftButton") then
+                -- Mouse released before threshold — cancel cleanly
+                ruleDrag.pending = false
+                ruleDrag.fromIdx = nil
+                dragCatcher:Hide()
+                return
+            end
+            local cx, cy = GetCursorPosition()
+            local s = UIParent:GetEffectiveScale()
+            cx, cy = cx / s, cy / s
+            local dx = cx - ruleDrag.pendingX
+            local dy = cy - ruleDrag.pendingY
+            if dx * dx + dy * dy > 64 then   -- 8-pixel threshold
+                ruleDrag.pending = false
+                ruleDrag.active  = true
+                dragCatcher:EnableMouse(true)
+                if dragIconFrame then dragIconFrame:Show() end
+            end
+            return
+        end
+        if not sbasDrag.active and not ruleDrag.active then return end
+        local mx, my = GetCursorPosition()
+        local s = UIParent:GetEffectiveScale()
+        mx, my = mx / s, my / s
+        if ruleDrag.active then
+            -- ── Drop as soon as the mouse button is released ─────────────
+            if not IsMouseButtonDown("LeftButton") then
+                FinishRuleDrop()
+                return
+            end
+            -- Show drop indicator line between rows
+            local slot = GetRuleDropSlot(mx, my)
+            local indY = nil
+            if slot <= #rowFrames and rowFrames[slot] and rowFrames[slot]:IsShown() then
+                indY = rowFrames[slot]:GetTop()
+            elseif slot > 1 and rowFrames[slot-1] and rowFrames[slot-1]:IsShown() then
+                indY = rowFrames[slot-1]:GetBottom()
+            end
+            if indY and rowFrames[1] and rowFrames[1]:IsShown() then
+                local rowW = rowFrames[1]:GetWidth()
+                local rowL = rowFrames[1]:GetLeft()
+                dropIndicator:ClearAllPoints()
+                dropIndicator:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", rowL, indY)
+                dropIndicator:SetWidth(rowW)
+                dropIndicator:Show()
+            end
+            -- Dim the row being dragged
+            for i, rf in ipairs(rowFrames) do
+                if rf:IsShown() then
+                    if i == ruleDrag.fromIdx then
+                        rf:SetBackdropBorderColor(0.4, 0.4, 0.4, 0.5)
+                    else
+                        rf:SetBackdropBorderColor(0.14, 0.24, 0.40, 1)
+                    end
+                end
+            end
+            return
+        end
+        -- sbasDrag: drop on release, otherwise highlight drop target row
+        if not IsMouseButtonDown("LeftButton") then
+            FinishSpellDrop()
+            return
+        end
+        for _, rf in ipairs(rowFrames) do
+            if rf:IsShown() then
+                local rl, rr = rf:GetLeft(),  rf:GetRight()
+                local rt, rb = rf:GetTop(),   rf:GetBottom()
+                if rl and rr and rt and rb
+                   and mx >= rl and mx <= rr and my >= rb and my <= rt then
+                    rf:SetBackdropBorderColor(0.50, 0.88, 0.25, 1)
+                else
+                    if rf._idx and rf._idx == selectedIdx then
+                        rf:SetBackdropBorderColor(0.28, 0.58, 0.90, 1)
+                    else
+                        rf:SetBackdropBorderColor(0.14, 0.24, 0.40, 1)
+                    end
+                end
+            end
+        end
+    end)
+
+    -- Finalise the drag on mouse-up (fallback; OnUpdate handles rule reorder
+    -- via release detection, but spell-drop still needs this path)
+    dragCatcher:SetScript("OnMouseUp", function(self, btn)
+        -- Cancel a pending drag that never crossed the movement threshold
+        if ruleDrag.pending then
+            ruleDrag.pending = false
+            ruleDrag.fromIdx = nil
+            self:Hide()
+            return
+        end
+        if btn ~= "LeftButton" then return end
+
+        -- Rule reorder is handled by OnUpdate polling; call shared finish
+        -- only if OnUpdate somehow missed it (e.g. very fast release)
+        if ruleDrag.active then
+            FinishRuleDrop()
+            return
+        end
+
+        if not sbasDrag.active then self:Hide(); return end
+        -- OnUpdate handles release-to-drop; this is just a fallback
+        FinishSpellDrop()
+    end)
+end
+
+local function CreateSpellbookPanel(f, leftSF)
+    EnsureDragIcon()
+    EnsureDragCatcher()
+    f._leftSF = leftSF
+
+    -- ── Slide-out spellbook panel ─────────────────────────────────────────
+    -- The panel is parented to the main frame and positioned to its left.
+    local PANEL_W = 264
+    local panel   = CreateFrame("Frame", "SBAS_SpellbookPanel", f, "BackdropTemplate")
+    panel:SetSize(PANEL_W, f:GetHeight())
+    panel:SetPoint("TOPRIGHT", f, "TOPLEFT", -1, 0)
+    panel:SetFrameLevel(f:GetFrameLevel() + 1)
+    panel:Hide()
+    SetBD(panel, 0.04, 0.06, 0.12, 0.97, 0.24, 0.44, 0.64)
+
+    -- ── Tab button ────────────────────────────────────────────────────────
+    -- Parented to the PANEL so it flies out with it when the panel shows.
+    -- Positioned on the panel's RIGHT edge near the top so it peeks out
+    -- against the main frame's left border.
+    local TAB_W, TAB_H = 54, 56   -- taller to fit icon + label
+    local tabBtn = CreateFrame("Button", nil, panel, "BackdropTemplate")
+    tabBtn:SetSize(TAB_W, TAB_H)
+    tabBtn:SetFrameLevel(panel:GetFrameLevel() + 2)
+    -- RIGHT edge of tab = LEFT edge of panel (tab peeks out to the far left)
+    tabBtn:SetPoint("TOPRIGHT", panel, "TOPLEFT", 0, -14)
+    SetBD(tabBtn, 0.05, 0.08, 0.14, 0.95, 0.24, 0.44, 0.64)
+
+    -- Book icon above the label
+    local tabIcon = tabBtn:CreateTexture(nil, "ARTWORK")
+    tabIcon:SetSize(28, 28)
+    tabIcon:SetPoint("TOP", tabBtn, "TOP", 0, -5)
+    tabIcon:SetTexture("Interface\\Icons\\inv_misc_book_09")
+    tabIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+    -- "Spells" label below the icon
+    local tabLbl = tabBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    tabLbl:SetPoint("BOTTOM", tabBtn, "BOTTOM", 0, 6)
+    tabLbl:SetJustifyH("CENTER")
+    tabLbl:SetText("Spells")
+    tabLbl:SetTextColor(0.65, 0.85, 1, 1)
+
+    tabBtn:SetScript("OnEnter", function()
+        tabIcon:SetVertexColor(0.5, 0.85, 1, 1)
+        tabLbl:SetTextColor(0.5, 0.85, 1, 1)
+        GameTooltip:SetOwner(tabBtn, "ANCHOR_LEFT")
+        GameTooltip:SetText("Spells")
+        GameTooltip:AddLine("Click to add  ·  Drag to insert at position", 0.7, 0.85, 1, true)
+        GameTooltip:Show()
+    end)
+    tabBtn:SetScript("OnLeave", function()
+        tabIcon:SetVertexColor(1, 1, 1, 1)
+        tabLbl:SetTextColor(0.65, 0.85, 1, 1)
+        GameTooltip:Hide()
+    end)
+
+    -- When the panel is hidden the tab still needs to be clickable to reopen.
+    -- We achieve this by keeping the panel's tab visible at all times and
+    -- hooking the panel OnHide to show just the tab stub on the main frame.
+    -- Simpler: keep a separate stub button parented to the main frame that
+    -- is shown only when the panel is hidden.
+    local stubBtn = CreateFrame("Button", nil, f, "BackdropTemplate")
+    stubBtn:SetSize(TAB_W, TAB_H)
+    stubBtn:SetFrameLevel(f:GetFrameLevel() + 3)
+    stubBtn:SetPoint("TOPLEFT", f, "TOPLEFT", -TAB_W, -14)
+    SetBD(stubBtn, 0.05, 0.08, 0.14, 0.95, 0.24, 0.44, 0.64)
+
+    local stubIcon = stubBtn:CreateTexture(nil, "ARTWORK")
+    stubIcon:SetSize(28, 28)
+    stubIcon:SetPoint("TOP", stubBtn, "TOP", 0, -5)
+    stubIcon:SetTexture("Interface\\Icons\\inv_misc_book_09")
+    stubIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+    local stubLbl = stubBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    stubLbl:SetPoint("BOTTOM", stubBtn, "BOTTOM", 0, 6)
+    stubLbl:SetJustifyH("CENTER")
+    stubLbl:SetText("Spells")
+    stubLbl:SetTextColor(0.65, 0.85, 1, 1)
+
+    stubBtn:SetScript("OnEnter", function()
+        stubIcon:SetVertexColor(0.5, 0.85, 1, 1)
+        stubLbl:SetTextColor(0.5, 0.85, 1, 1)
+        GameTooltip:SetOwner(stubBtn, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Spells")
+        GameTooltip:AddLine("Click to add  ·  Drag to insert at position", 0.7, 0.85, 1, true)
+        GameTooltip:Show()
+    end)
+    stubBtn:SetScript("OnLeave", function()
+        stubIcon:SetVertexColor(1, 1, 1, 1)
+        stubLbl:SetTextColor(0.65, 0.85, 1, 1)
+        GameTooltip:Hide()
+    end)
+
+    local phdr = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    phdr:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -12)
+    phdr:SetText("Spells")
+    phdr:SetTextColor(0.38, 0.74, 1, 1)
+
+    -- Reset button: clears the persisted seen-spells list for the current spec
+    local resetBtn = CreateFrame("Button", nil, panel, "BackdropTemplate")
+    resetBtn:SetSize(52, 16)
+    resetBtn:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -6, -10)
+    SetBD(resetBtn, 0.28, 0.05, 0.05, 0.90, 0.65, 0.18, 0.18)
+    local resetLbl = resetBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    resetLbl:SetAllPoints()
+    resetLbl:SetJustifyH("CENTER")
+    resetLbl:SetText("Reset")
+    resetLbl:SetTextColor(1, 0.55, 0.55, 1)
+    resetBtn:SetScript("OnEnter", function(self)
+        resetLbl:SetTextColor(1, 0.8, 0.8, 1)
+        GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+        GameTooltip:SetText("Reset Seen Spells", 1, 0.6, 0.6)
+        GameTooltip:AddLine("Clears the list of spells tracked\nfrom successful casts for this spec.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    resetBtn:SetScript("OnLeave", function()
+        resetLbl:SetTextColor(1, 0.55, 0.55, 1)
+        GameTooltip:Hide()
+    end)
+    -- OnClick wired up below, after RefreshSpellbookPanel is defined.
+
+    local searchBox = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
+    searchBox:SetSize(PANEL_W - 16, 22)
+    searchBox:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -32)
+    searchBox:SetAutoFocus(false)
+    searchBox:SetMaxLetters(64)
+    searchBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+
+    local divLine = panel:CreateTexture(nil, "ARTWORK")
+    divLine:SetSize(PANEL_W - 8, 1)
+    divLine:SetPoint("TOPLEFT", searchBox, "BOTTOMLEFT", -4, -4)
+    divLine:SetColorTexture(0.25, 0.40, 0.60, 0.6)
+
+    local hintLbl = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    hintLbl:SetPoint("TOPLEFT", divLine, "BOTTOMLEFT", 4, -3)
+    hintLbl:SetSize(PANEL_W - 16, 24)
+    hintLbl:SetJustifyH("LEFT")
+    hintLbl:SetText("Click to add  ·  Drag to insert at position")
+    hintLbl:SetTextColor(0.48, 0.62, 0.72, 1)
+
+    local panelSF = CreateFrame("ScrollFrame", nil, panel)
+    panelSF:SetPoint("TOPLEFT",     panel, "TOPLEFT",     4, -92)
+    panelSF:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -4,  4)
+    panelSF:EnableMouseWheel(true)
+    panelSF:SetScript("OnMouseWheel", function(self, d)
+        local v = self:GetVerticalScroll()
+        local m = self:GetVerticalScrollRange()
+        self:SetVerticalScroll(math.min(math.max(v - d * 28, 0), m))
+    end)
+
+    local panelContent = CreateFrame("Frame", nil, panelSF)
+    panelContent:SetSize(PANEL_W - 8, 100)
+    panelSF:SetScrollChild(panelContent)
+
+    local spellRowPool  = {}
+    local currentSpells = {}
+    local SPELL_ROW_H   = 30
+
+    local function CreateSpellEntry(parent)
+        local row = CreateFrame("Button", nil, parent)
+        row:SetSize(PANEL_W - 8, SPELL_ROW_H - 2)
+        row:EnableMouse(true)
+        row:RegisterForDrag("LeftButton")
+        row:RegisterForClicks("LeftButtonUp")
+
+        local bg = row:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        bg:SetColorTexture(0, 0, 0, 0)
+        row._bg = bg
+
+        local iconBg = row:CreateTexture(nil, "BACKGROUND")
+        iconBg:SetSize(24, 24)
+        iconBg:SetPoint("LEFT", row, "LEFT", 4, 0)
+        iconBg:SetColorTexture(0, 0, 0, 0.45)
+
+        local iconTex = row:CreateTexture(nil, "ARTWORK")
+        iconTex:SetSize(22, 22)
+        iconTex:SetPoint("CENTER", iconBg, "CENTER")
+        iconTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        row._icon = iconTex
+
+        local nameLbl = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        nameLbl:SetPoint("LEFT",  iconBg, "RIGHT", 6, 0)
+        nameLbl:SetPoint("RIGHT", row,    "RIGHT", -4, 0)
+        nameLbl:SetJustifyH("LEFT")
+        nameLbl:SetTextColor(0.88, 0.92, 1, 1)
+        row._nameLbl = nameLbl
+
+        row:SetScript("OnEnter", function(self)
+            self._bg:SetColorTexture(0.16, 0.28, 0.48, 0.70)
+            if self._spellID then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetSpellByID(self._spellID)
+                GameTooltip:Show()
+            end
+        end)
+        row:SetScript("OnLeave", function(self)
+            self._bg:SetColorTexture(0, 0, 0, 0)
+            GameTooltip:Hide()
+        end)
+
+        -- Left-click: append to end of priority list
+        row:SetScript("OnClick", function(self)
+            if not self._spellID then return end
+            workingRules[#workingRules + 1] = {
+                spellID    = self._spellID,
+                name       = self._spellName,
+                conditions = {},
+            }
+            selectedIdx  = #workingRules
+            isAddingCond = false
+            RefreshRuleList()
+            RefreshRightPanel()
+        end)
+
+        -- Left-drag: drag to a specific position in the priority list
+        row:SetScript("OnDragStart", function(self)
+            if not self._spellID then return end
+            sbasDrag.active    = true
+            sbasDrag.spellID   = self._spellID
+            sbasDrag.spellName = self._spellName
+            dragIconFrame._tex:SetTexture(self._icon:GetTexture())
+            dragIconFrame:Show()
+            dragCatcher:Show()
+        end)
+
+        return row
+    end
+
+    local function PopulatePanel(filterText)
+        local filter = (filterText or ""):lower()
+        local shown  = 0
+        for _, spell in ipairs(currentSpells) do
+            if filter == "" or spell.name:lower():find(filter, 1, true) then
+                shown = shown + 1
+                if not spellRowPool[shown] then
+                    spellRowPool[shown] = CreateSpellEntry(panelContent)
+                end
+                local row = spellRowPool[shown]
+                row._spellID   = spell.spellID
+                row._spellName = spell.name
+                row._icon:SetTexture(spell.texture)
+                row._nameLbl:SetText(spell.name)
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", panelContent, "TOPLEFT", 0, -(shown - 1) * SPELL_ROW_H)
+                row:Show()
+            end
+        end
+        for i = shown + 1, #spellRowPool do
+            if spellRowPool[i] then spellRowPool[i]:Hide() end
+        end
+        panelContent:SetHeight(math.max(shown * SPELL_ROW_H + 4, 100))
+    end
+
+    local function RefreshSpellbookPanel()
+        currentSpells = GetClassSpells()
+        PopulatePanel(searchBox:GetText())
+    end
+
+    -- Wire up the reset button now that RefreshSpellbookPanel is in scope.
+    resetBtn:SetScript("OnClick", function()
+        ResetSeenCastsForCurrentSpec()
+        RefreshSpellbookPanel()
+    end)
+
+    searchBox:SetScript("OnTextChanged", function(self)
+        PopulatePanel(self:GetText())
+    end)
+
+    local function OpenPanel()
+        RefreshSpellbookPanel()
+        stubBtn:Hide()
+        panel:Show()
+    end
+
+    local function ClosePanel()
+        panel:Hide()
+        stubBtn:Show()
+    end
+
+    tabBtn:SetScript("OnClick",  function() ClosePanel() end)
+    stubBtn:SetScript("OnClick", function() OpenPanel()  end)
+
+    -- Start with the stub visible (panel closed)
+    stubBtn:Show()
+
+    -- Keep panel height in sync with the main frame
+    f:HookScript("OnSizeChanged", function(self)
+        panel:SetHeight(self:GetHeight())
+    end)
+
+    -- ── Rebuild spell list on talent/spec change ──────────────────────────
+    local eventFrame = CreateFrame("Frame")
+    eventFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
+    eventFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
+    eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+    eventFrame:SetScript("OnEvent", function()
+        if panel:IsShown() then
+            RefreshSpellbookPanel()
+        else
+            -- Mark stale so the next open rebuilds automatically
+            currentSpells = nil
+        end
+    end)
+
+    -- Rebuild when panel opens if the list was marked stale
+    panel:HookScript("OnShow", function()
+        if currentSpells == nil then
+            RefreshSpellbookPanel()
+        end
+    end)
+end
+
+-------------------------------------------------------------------------------
 -- 12. Main GUI frame
 -------------------------------------------------------------------------------
 local function CreateGUI()
@@ -1547,6 +2339,28 @@ local function CreateGUI()
     closeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -4, -4)
     closeBtn:SetScript("OnClick", function() f:Hide() end)
 
+    f:HookScript("OnHide", function()
+        CloseAllPopups()
+        -- Auto-save rule structure to the same store as the explicit Save button so
+        -- rules survive close/reopen within a session and across /reload.  The compiled
+        -- override code is NOT regenerated here — that still requires "Save & Apply".
+        if editSpecID and editSpecID ~= 0 then
+            sessionRules[editSpecID]    = workingRules          -- in-session reference
+            GuiDB()[editSpecID]         = DeepCopyRules(workingRules) -- persisted storage
+        end
+    end)
+
+    -- Belt-and-suspenders: also save on PLAYER_LOGOUT/PLAYER_QUITING so that
+    -- a /reload where OnHide may not fire still persists the working rules.
+    local logoutFrame = CreateFrame("Frame")
+    logoutFrame:RegisterEvent("PLAYER_LOGOUT")
+    logoutFrame:RegisterEvent("PLAYER_QUITING")
+    logoutFrame:SetScript("OnEvent", function()
+        if editSpecID and editSpecID ~= 0 then
+            GuiDB()[editSpecID] = DeepCopyRules(workingRules)
+        end
+    end)
+
     local resizeGrip = CreateFrame("Button", nil, f)
     resizeGrip:SetSize(16, 16)
     resizeGrip:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -4, 4)
@@ -1580,6 +2394,7 @@ local function CreateGUI()
         local m = self:GetVerticalScrollRange()
         self:SetVerticalScroll(math.min(math.max(v - d * ROW_H, 0), m))
     end)
+    f._leftSF = leftSF   -- stored for drag-drop drop-zone detection
 
     local lc = CreateFrame("Frame", nil, leftSF)
     lc:SetSize(LEFT_W, 100)
@@ -1592,6 +2407,8 @@ local function CreateGUI()
     addSpellBtn:SetPoint("TOPLEFT", leftSF, "BOTTOMLEFT", 0, -4)
     addSpellBtn:SetText("+ Add Spell")
     addSpellBtn:SetScript("OnClick", function()
+        if addSpellPopup and addSpellPopup:IsShown() then CloseAllPopups(); return end
+        CloseAllPopups()
         if not addSpellPopup then
             addSpellPopup = CreateAddSpellPopup()
         end
@@ -1647,6 +2464,8 @@ local function CreateGUI()
     saveBtn:SetScript("OnClick", function()
         -- Persist GUI rules
         GuiDB()[editSpecID] = DeepCopyRules(workingRules)
+        -- Keep the session cache in sync
+        sessionRules[editSpecID] = workingRules
 
         -- Generate and save override code
         local code = GenerateCode(workingRules) or ""
@@ -1722,6 +2541,8 @@ local function CreateGUI()
 
     LayoutGUI()
 
+    CreateSpellbookPanel(f, leftSF)
+
     guiFrame = f
 end
 
@@ -1731,11 +2552,27 @@ end
 local function OpenGUI(specID)
     if not guiFrame then CreateGUI() end
 
-    editSpecID   = specID or CurrentSpecID()
-    local saved  = GetGuiRules(editSpecID)
-    workingRules = DeepCopyRules(saved)
-    selectedIdx  = (#workingRules > 0) and 1 or 0
-    isAddingCond = false
+    local targetSpec = specID or CurrentSpecID()
+    -- If the API can't determine the spec yet, keep whatever is loaded
+    if targetSpec == 0 then targetSpec = editSpecID end
+
+    if targetSpec ~= editSpecID then
+        editSpecID = targetSpec
+        if sessionRules[editSpecID] then
+            -- Already seen this spec this session — reuse the live in-memory table
+            workingRules = sessionRules[editSpecID]
+        else
+            -- First time opening this spec this session: load from persistent storage
+            workingRules = DeepCopyRules(GetGuiRules(editSpecID))
+        end
+        selectedIdx  = (#workingRules > 0) and 1 or 0
+        isAddingCond = false
+    end
+    -- Same spec: workingRules unchanged — all unsaved edits are still in memory.
+    -- Seed the session cache if this is the very first open.
+    if not sessionRules[editSpecID] then
+        sessionRules[editSpecID] = workingRules
+    end
 
     guiFrame.title:SetText("SBA Override Builder — " .. GetSpecName(editSpecID))
     guiFrame:Show()
