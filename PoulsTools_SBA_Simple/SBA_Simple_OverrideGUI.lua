@@ -61,7 +61,7 @@ local COND_TYPES = {
           if c.plugin == "bok_proc"   then return "bok_proc_active" end
           if c.plugin == "rwk_proc"   then return "rwk_proc_active" end
           if c.plugin == "docj_proc"  then return "docj_proc_active" end
-          if c.plugin == "docj_timer" then return ("docj_proc_timer < %d"):format(c.value or 4) end
+          if c.plugin == "docj_timer" then return ("docj_proc_timer %s %d"):format(c.operator or "<", c.value or 4) end
           return "false"
       end },
 }
@@ -75,7 +75,7 @@ local PLUGIN_OPTS = {
     { id = "bok_proc",   label = "BOK Proc Active"  },
     { id = "rwk_proc",   label = "RWK Proc Active"  },
     { id = "docj_proc",  label = "DOCJ Proc Active" },
-    { id = "docj_timer", label = "DOCJ Timer <", needsValue = true, default = 4 },
+    { id = "docj_timer", label = "DOCJ Timer", needsValue = true, needsOperator = true, default = 4 },
 }
 
 -------------------------------------------------------------------------------
@@ -147,11 +147,11 @@ local function CondSummaryText(cond, ruleSpellID)
             bok_proc   = "BOK Proc",
             rwk_proc   = "RWK Proc",
             docj_proc  = "DOCJ Proc",
-            docj_timer = "DOCJ Timer <",
+            docj_timer = "DOCJ Timer",
         }
         local pLabel = PLUGIN_LABELS[cond.plugin] or (cond.plugin or "?")
         t = (cond.plugin == "docj_timer")
-            and (pLabel .. " " .. tostring(cond.value or 4))
+            and (pLabel .. " " .. (cond.operator or "<") .. " " .. tostring(cond.value or 4))
             or  pLabel
     else
         if def.needsSpell then
@@ -187,11 +187,20 @@ local function GenerateCode(rules)
     L[#L+1] = "local spellID = C_AssistedCombat.GetNextCastSpell()"
     L[#L+1] = "local chi = UnitPower(\"player\", Enum.PowerType.Chi)"
     L[#L+1] = ""
-    local hasUnconditional = false
+
+    -- Pre-pass: build all condition fragments for every rule so we can count
+    -- how many times each C_Spell.GetSpellCooldown(N) call appears across the
+    -- entire output.  IDs that appear more than once across ANY rule will be
+    -- hoisted into a single top-level local so no duplicate declarations are
+    -- emitted when multiple rules reference the same spell's cooldown.
+    local allRuleParts = {}   -- allRuleParts[i] = {parts=..., junctions=...}
     for i, rule in ipairs(rules) do
         if (rule.spellID or 0) > 0 then
-            local parts     = {}
-            local junctions = {}
+            local parts        = {}
+            local junctions    = {}
+            local prevJunction = nil   -- junction stored on the PREVIOUS processed condition;
+                                       -- cond.junction means "connect me to the NEXT condition",
+                                       -- so it becomes the junction BEFORE the next part.
             for ci, cond in ipairs(rule.conditions or {}) do
                 local def = COND_BY_ID[cond.type]
                 if def then
@@ -200,20 +209,70 @@ local function GenerateCode(rules)
                     local lp = (cond.lparen or 0) > 0 and string.rep("(", cond.lparen) or ""
                     local rp = (cond.rparen or 0) > 0 and string.rep(")", cond.rparen) or ""
                     parts[#parts+1]         = lp .. frag .. rp
-                    junctions[#junctions+1] = (ci > 1) and (cond.junction or "and") or nil
+                    junctions[#junctions+1] = prevJunction   -- junction leading INTO this part
+                    prevJunction            = cond.junction or "and"  -- junction leading OUT of this part
                 end
             end
+            allRuleParts[i] = { parts = parts, junctions = junctions }
+        else
+            allRuleParts[i] = false
+        end
+    end
 
-            -- Hoist repeated C_Spell.GetSpellCooldown(N) calls into locals.
-            -- Count how many times each spell-ID argument appears across all parts.
+    -- Count total occurrences of each spell-ID across all rules.
+    local cdTotalCount = {}
+    for _, rp in ipairs(allRuleParts) do
+        if rp then
+            for _, part in ipairs(rp.parts) do
+                for id in part:gmatch("C_Spell%.GetSpellCooldown%((%d+)%)") do
+                    cdTotalCount[id] = (cdTotalCount[id] or 0) + 1
+                end
+            end
+        end
+    end
+
+    -- Emit one top-level local for each spell ID that appears more than once,
+    -- then substitute the variable name into every part that references it.
+    local hoisted = {}   -- set of IDs already emitted as top-level locals
+    for id, count in pairs(cdTotalCount) do
+        if count > 1 then
+            local varName = "cd_" .. id
+            L[#L+1] = ("local %s = C_Spell.GetSpellCooldown(%s)"):format(varName, id)
+            hoisted[id] = varName
+        end
+    end
+    if next(hoisted) then L[#L+1] = "" end
+
+    -- Substitute hoisted variable names into all pre-built parts.
+    for _, rp in ipairs(allRuleParts) do
+        if rp then
+            for id, varName in pairs(hoisted) do
+                local pattern = "C_Spell%.GetSpellCooldown%(" .. id .. "%)"
+                for pi, part in ipairs(rp.parts) do
+                    rp.parts[pi] = part:gsub(pattern, varName)
+                end
+            end
+        end
+    end
+
+    local hasUnconditional = false
+    for i, rule in ipairs(rules) do
+        local rp = allRuleParts[i]
+        if rp then
+            local parts     = rp.parts
+            local junctions = rp.junctions
+
+            -- Within a single rule, hoist any cooldown calls that repeat
+            -- more than once inside that rule alone (not already hoisted globally).
             if #parts > 1 then
                 local cdCount = {}
                 for _, part in ipairs(parts) do
                     for id in part:gmatch("C_Spell%.GetSpellCooldown%((%d+)%)") do
-                        cdCount[id] = (cdCount[id] or 0) + 1
+                        if not hoisted[id] then
+                            cdCount[id] = (cdCount[id] or 0) + 1
+                        end
                     end
                 end
-                -- For each ID used more than once, emit a local and substitute.
                 for id, count in pairs(cdCount) do
                     if count > 1 then
                         local varName = "cd_" .. id
@@ -222,6 +281,7 @@ local function GenerateCode(rules)
                         for pi, part in ipairs(parts) do
                             parts[pi] = part:gsub(pattern, varName)
                         end
+                        hoisted[id] = varName  -- prevent re-hoisting in later rules
                     end
                 end
             end
@@ -295,11 +355,13 @@ end
 local condPicker    = nil
 local pluginPicker  = nil   -- forward-declared so CloseAllPopups can reference it
 local addSpellPopup = nil   -- forward-declared so CloseAllPopups can reference it
+local opDropdownPopups = {} -- all MakeOpDropdown popup frames, closed by CloseAllPopups
 
 local function CloseAllPopups()
     if condPicker   and condPicker:IsShown()   then condPicker:Hide()   end
     if pluginPicker and pluginPicker:IsShown() then pluginPicker:Hide() end
     if addSpellPopup and addSpellPopup:IsShown() then addSpellPopup:Hide() end
+    for _, p in ipairs(opDropdownPopups) do if p:IsShown() then p:Hide() end end
 end
 
 local function CreateCondPicker()
@@ -770,7 +832,7 @@ local function UpdateRowFrame(f, idx, rule)
                         end
                     end
                     if cond.plugin == "docj_timer" then
-                        label = pLabel .. " " .. tostring(cond.value or 4)
+                        label = pLabel .. " " .. (cond.operator or "<") .. " " .. tostring(cond.value or 4)
                     else
                         label = pLabel
                     end
@@ -1005,6 +1067,118 @@ local function SearchTalentTreeByName(input)
     return nil
 end
 
+-------------------------------------------------------------------------------
+-- Comparison operator options (shared by resource and DOCJ timer dropdowns)
+-------------------------------------------------------------------------------
+local OP_LIST = {
+    { id = ">=", label = ">=" },
+    { id = "<=", label = "<=" },
+    { id = "==", label = "==" },
+    { id = ">",  label = ">"  },
+    { id = "<",  label = "<"  },
+}
+
+-- Creates a compact dropdown button that opens a popup list of options.
+-- ops:   array of { id, label }
+-- Returns a Frame container with methods:
+--   :SetSelected(id)    – select an option by id and update button text
+--   :GetSelected()      – return the currently selected id
+--   :UpdateWidth(w)     – resize the button, popup, and all rows to w
+--   :SetOnChange(fn)    – register a callback fn(id) fired on selection
+local function MakeOpDropdown(parent, ops)
+    local container = CreateFrame("Frame", nil, parent)
+    container:SetSize(80, 22)
+
+    local popup = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+    popup:SetFrameStrata("TOOLTIP")
+    popup:SetToplevel(true)
+    popup:SetSize(80, #ops * 22 + 6)
+    popup:Hide()
+    SetBD(popup, 0.04, 0.06, 0.11, 0.98, 0.28, 0.48, 0.68)
+
+    -- Register so CloseAllPopups() can reach it.
+    opDropdownPopups[#opDropdownPopups + 1] = popup
+
+    local btn = CreateFrame("Button", nil, container, "UIPanelButtonTemplate")
+    btn:SetAllPoints()
+
+    local rows = {}
+    local selected = ops[1].id
+    local onChange = nil
+
+    for i, op in ipairs(ops) do
+        local row = CreateFrame("Button", nil, popup)
+        row:SetSize(80, 22)
+        row:SetPoint("TOPLEFT", popup, "TOPLEFT", 0, -3 - (i - 1) * 22)
+        rows[i] = row
+
+        local rowBg = row:CreateTexture(nil, "BACKGROUND")
+        rowBg:SetAllPoints()
+        rowBg:SetColorTexture(0, 0, 0, 0)
+
+        local rowLbl = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        rowLbl:SetAllPoints()
+        rowLbl:SetJustifyH("CENTER")
+        rowLbl:SetText(op.label)
+        rowLbl:SetTextColor(0.82, 0.9, 1, 1)
+
+        local opRef = op
+        row:SetScript("OnClick", function()
+            popup:Hide()
+            selected = opRef.id
+            btn:SetText(opRef.label)
+            if onChange then onChange(opRef.id) end
+        end)
+        row:SetScript("OnEnter", function()
+            rowBg:SetColorTexture(0.14, 0.28, 0.50, 0.7)
+            rowLbl:SetTextColor(1, 1, 1, 1)
+        end)
+        row:SetScript("OnLeave", function()
+            rowBg:SetColorTexture(0, 0, 0, 0)
+            rowLbl:SetTextColor(0.82, 0.9, 1, 1)
+        end)
+    end
+
+    btn:SetScript("OnClick", function()
+        if popup:IsShown() then
+            popup:Hide()
+        else
+            CloseAllPopups()
+            popup:ClearAllPoints()
+            popup:SetPoint("TOPLEFT", btn, "BOTTOMLEFT", 0, -2)
+            popup:Show()
+            local bot = popup:GetBottom()
+            if bot and bot < 0 then
+                popup:ClearAllPoints()
+                popup:SetPoint("BOTTOMLEFT", btn, "TOPLEFT", 0, 2)
+            end
+        end
+    end)
+
+    -- Initialize button text to first option.
+    btn:SetText(ops[1].label)
+
+    container.SetSelected = function(self, id)
+        for _, op in ipairs(ops) do
+            if op.id == id then
+                selected = id
+                btn:SetText(op.label)
+                return
+            end
+        end
+    end
+    container.GetSelected  = function(self) return selected end
+    container.UpdateWidth  = function(self, w)
+        container:SetWidth(w)
+        btn:SetWidth(w)
+        popup:SetWidth(w)
+        for _, row in ipairs(rows) do row:SetWidth(w) end
+    end
+    container.SetOnChange  = function(self, fn) onChange = fn end
+
+    return container
+end
+
 local function CreateCondInputArea(parent)
     local f = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     f:SetSize(GetRightPanelWidth() - 10, 95)
@@ -1015,7 +1189,16 @@ local function CreateCondInputArea(parent)
     local resolvedOtherID   = nil
     local resolvedOtherName = nil
     local resSel            = "chi"    -- "chi" or "energy"
-    local opSel             = ">="     -- ">=", "<=", "=="
+    local opSel             = ">="     -- resource operator (>=, <=, ==, >, <)
+    local timerOpSel        = "<"      -- DOCJ timer operator
+    local opDropdown        = nil      -- assigned after operatorFrame is built
+    local timerOpDropdown   = nil      -- assigned after timerOpFrame is built
+    -- Forward-declare so closures defined before their creation can capture them.
+    local timerOpFrame
+    local valLbl
+    local valBox
+    local selPlugin = nil
+    local UpdateLayout  -- assigned below; forward-declared so all closures share it
 
     -- ── NOT checkbox ──────────────────────────────────────────────────────
     local notCheck = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
@@ -1127,7 +1310,7 @@ local function CreateCondInputArea(parent)
     energyBtn:SetPoint("LEFT", chiBtn, "RIGHT", 2, 0)
     energyBtn:SetText("Energy")
 
-    -- ── Operator selector: >= / <= / == ──────────────────────────────────
+    -- ── Operator selector: dropdown (>=, <=, ==, >, <) ──────────────────
     local operatorFrame = CreateFrame("Frame", nil, f)
     operatorFrame:SetSize(GetRightPanelWidth() - 18, 22)
     operatorFrame:SetPoint("TOPLEFT", resourceFrame, "BOTTOMLEFT", 0, -4)
@@ -1139,20 +1322,10 @@ local function CreateCondInputArea(parent)
     opLabel:SetText("Operator:")
     opLabel:SetTextColor(0.55, 0.72, 0.88, 1)
 
-    local gteBtn = CreateFrame("Button", nil, operatorFrame, "UIPanelButtonTemplate")
-    gteBtn:SetSize(56, 22)
-    gteBtn:SetPoint("LEFT", opLabel, "RIGHT", 4, 0)
-    gteBtn:SetText(">=")
-
-    local lteBtn = CreateFrame("Button", nil, operatorFrame, "UIPanelButtonTemplate")
-    lteBtn:SetSize(56, 22)
-    lteBtn:SetPoint("LEFT", gteBtn, "RIGHT", 2, 0)
-    lteBtn:SetText("<=")
-
-    local eqBtn = CreateFrame("Button", nil, operatorFrame, "UIPanelButtonTemplate")
-    eqBtn:SetSize(56, 22)
-    eqBtn:SetPoint("LEFT", lteBtn, "RIGHT", 2, 0)
-    eqBtn:SetText("==")
+    opDropdown = MakeOpDropdown(operatorFrame, OP_LIST)
+    opDropdown:SetPoint("LEFT", opLabel, "RIGHT", 4, 0)
+    opDropdown:SetSelected(">=")
+    opDropdown:SetOnChange(function(id) opSel = id end)
 
     -- ── Plugin / Proc selector ────────────────────────────────────────────
     local pluginFrame = CreateFrame("Frame", nil, f)
@@ -1170,6 +1343,13 @@ local function CreateCondInputArea(parent)
         ShowPluginPicker(pluginBtn, function(opt)
             selPlugin = opt
             pluginBtn:SetText(opt.label)
+            if opt.needsOperator then
+                timerOpFrame:Show()
+                timerOpSel = "<"
+                if timerOpDropdown then timerOpDropdown:SetSelected("<") end
+            else
+                timerOpFrame:Hide()
+            end
             if opt.needsValue then
                 valLbl:SetText("Seconds:")
                 valLbl:Show()
@@ -1182,12 +1362,29 @@ local function CreateCondInputArea(parent)
         end)
     end)
 
-    local valLbl = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    -- ── DOCJ Timer operator selector (shown only for docj_timer plugin) ───
+    timerOpFrame = CreateFrame("Frame", nil, f)
+    timerOpFrame:SetSize(GetRightPanelWidth() - 18, 22)
+    timerOpFrame:SetPoint("TOPLEFT", pluginFrame, "BOTTOMLEFT", 0, -4)
+    timerOpFrame:Hide()
+
+    local timerOpLabel = timerOpFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    timerOpLabel:SetPoint("LEFT", timerOpFrame, "LEFT", 0, 0)
+    timerOpLabel:SetWidth(60)
+    timerOpLabel:SetText("Operator:")
+    timerOpLabel:SetTextColor(0.55, 0.72, 0.88, 1)
+
+    timerOpDropdown = MakeOpDropdown(timerOpFrame, OP_LIST)
+    timerOpDropdown:SetPoint("LEFT", timerOpLabel, "RIGHT", 4, 0)
+    timerOpDropdown:SetSelected("<")
+    timerOpDropdown:SetOnChange(function(id) timerOpSel = id end)
+
+    valLbl = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     valLbl:SetPoint("TOPLEFT", typeBtn, "BOTTOMLEFT", 0, -6)
     valLbl:SetTextColor(0.55, 0.72, 0.88, 1)
     valLbl:Hide()
 
-    local valBox = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
+    valBox = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
     valBox:SetSize(72, 22)
     valBox:SetPoint("LEFT", valLbl, "RIGHT", 6, 0)
     valBox:SetAutoFocus(false)
@@ -1227,18 +1424,16 @@ local function CreateCondInputArea(parent)
 
     local function SetOpSel(mode)
         opSel = mode
-        HlBtn(gteBtn, mode == ">=")
-        HlBtn(lteBtn, mode == "<=")
-        HlBtn(eqBtn,  mode == "==")
+        if opDropdown then opDropdown:SetSelected(mode) end
+    end
+
+    local function SetTimerOpSel(mode)
+        timerOpSel = mode
+        if timerOpDropdown then timerOpDropdown:SetSelected(mode) end
     end
 
     chiBtn:SetScript("OnClick",    function() SetResSel("chi")    end)
     energyBtn:SetScript("OnClick", function() SetResSel("energy") end)
-    gteBtn:SetScript("OnClick",    function() SetOpSel(">=")      end)
-    lteBtn:SetScript("OnClick",    function() SetOpSel("<=")      end)
-    eqBtn:SetScript("OnClick",     function() SetOpSel("==")      end)
-
-    local UpdateLayout  -- forward declaration so RefreshSize can call it
 
     local function RefreshSize()
         local rightW = GetRightPanelWidth()
@@ -1246,7 +1441,7 @@ local function CreateCondInputArea(parent)
         local spellHalfW = math.floor((contentW - 4) / 2)
         local otherBoxW = math.max(120, contentW - 34)
         local resBtnW = math.max(68, math.floor((contentW - 66) / 2))
-        local opBtnW = math.max(44, math.floor((contentW - 68) / 3))
+        local opDropdownW = math.max(60, contentW - 64)   -- 64 = label 60 + gap 4
 
         f:SetWidth(rightW - 10)
         typeBtn:SetWidth(contentW)
@@ -1259,12 +1454,12 @@ local function CreateCondInputArea(parent)
         resourceFrame:SetWidth(contentW)
         operatorFrame:SetWidth(contentW)
         pluginFrame:SetWidth(contentW)
+        timerOpFrame:SetWidth(contentW)
         pluginBtn:SetWidth(contentW)
         chiBtn:SetWidth(resBtnW)
         energyBtn:SetWidth(resBtnW)
-        gteBtn:SetWidth(opBtnW)
-        lteBtn:SetWidth(opBtnW)
-        eqBtn:SetWidth(opBtnW)
+        if opDropdown      then opDropdown:UpdateWidth(opDropdownW)      end
+        if timerOpDropdown then timerOpDropdown:UpdateWidth(opDropdownW) end
         UpdateLayout()
     end
 
@@ -1276,7 +1471,7 @@ local function CreateCondInputArea(parent)
         elseif selType and selType.needsResource then
             above = operatorFrame
         elseif selType and selType.needsPlugin then
-            above = pluginFrame
+            above = (selPlugin and selPlugin.needsOperator) and timerOpFrame or pluginFrame
         end
         local showVal = selType and (
             selType.needsValue or selType.needsResource or
@@ -1296,6 +1491,9 @@ local function CreateCondInputArea(parent)
         end
         if selType and selType.needsPlugin then
             h = h + 22 + 4   -- plugin selector row
+            if selPlugin and selPlugin.needsOperator then
+                h = h + 22 + 4  -- timer operator row
+            end
         end
         if showVal then h = h + 22 + 4 end
         h = h + 24 + 8                  -- buttons + bottom pad
@@ -1328,7 +1526,7 @@ local function CreateCondInputArea(parent)
             -- Hide all optional sections first
             spellToggleFrame:Hide(); otherFrame:Hide()
             resourceFrame:Hide(); operatorFrame:Hide()
-            pluginFrame:Hide()
+            pluginFrame:Hide(); timerOpFrame:Hide()
             valLbl:Hide(); valBox:Hide()
             selPlugin = nil
             if ct.needsSpell then
@@ -1378,6 +1576,7 @@ local function CreateCondInputArea(parent)
     f.GetNegate       = function() return notCheck:GetChecked() and true or false end
     f.GetResource     = function() return resSel end
     f.GetOperator     = function() return opSel end
+    f.GetTimerOperator= function() return timerOpSel end
     f.GetPlugin       = function() return selPlugin and selPlugin.id or nil end
     f.GetSpell        = function()
         if not selType or not selType.needsSpell then return nil end
@@ -1388,15 +1587,18 @@ local function CreateCondInputArea(parent)
 
     f.Reset = function()
         selType = nil; spellSel = "this"; resSel = "chi"; opSel = ">="
+        timerOpSel = "<"
         selPlugin = nil
         resolvedOtherID = nil; resolvedOtherName = nil
         notCheck:SetChecked(false)
         typeBtn:SetText("Select condition type...")
         spellToggleFrame:Hide(); otherFrame:Hide()
         resourceFrame:Hide(); operatorFrame:Hide()
-        pluginFrame:Hide(); pluginBtn:SetText("Select plugin...")
+        pluginFrame:Hide(); timerOpFrame:Hide(); pluginBtn:SetText("Select plugin...")
         otherNameBox:SetText(""); otherResultLbl:SetText(""); otherIcon:Hide()
         valLbl:Hide(); valBox:SetText(""); valBox:Hide()
+        if opDropdown      then opDropdown:SetSelected(">=") end
+        if timerOpDropdown then timerOpDropdown:SetSelected("<") end
         f:SetHeight(95)
     end
 
@@ -1447,6 +1649,12 @@ local function CreateCondInputArea(parent)
                 if opt.id == cond.plugin then
                     selPlugin = opt
                     pluginBtn:SetText(opt.label)
+                    if opt.needsOperator then
+                        timerOpFrame:Show()
+                        local savedOp = cond.operator or "<"
+                        timerOpSel = savedOp
+                        if timerOpDropdown then timerOpDropdown:SetSelected(savedOp) end
+                    end
                     if opt.needsValue then
                         valLbl:SetText("Seconds:")
                         valLbl:Show()
@@ -1825,7 +2033,8 @@ RefreshRightPanel = function()
                 end
                 newCond.plugin = pid
                 if pid == "docj_timer" then
-                    newCond.value = condInputArea.GetValue() or 4
+                    newCond.value    = condInputArea.GetValue() or 4
+                    newCond.operator = condInputArea.GetTimerOperator()
                 end
             end
             if ct.needsSpell then
@@ -2747,7 +2956,18 @@ local function CreateGUI()
     f:Hide()
     SetBD(f, 0.03, 0.05, 0.09, 0.97, 0.24, 0.44, 0.64)
 
-    table.insert(UISpecialFrames, "SBAS_OverrideGUI_Frame")
+    -- Do NOT add to UISpecialFrames — that table is iterated by CloseAllWindows()
+    -- which WoW calls when the Settings window closes via Escape, causing the GUI
+    -- to be hidden as an unintended side-effect.  Instead, handle Escape directly.
+    f:EnableKeyboard(true)
+    f:SetScript("OnKeyDown", function(self, key)
+        if key == "ESCAPE" then
+            self:Hide()
+            self:SetPropagateKeyboardInput(false)
+        else
+            self:SetPropagateKeyboardInput(true)
+        end
+    end)
 
     -- Title
     f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
