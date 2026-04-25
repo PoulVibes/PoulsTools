@@ -36,7 +36,7 @@ local function OnBuildUI(parent)
 
     -- track all spec buttons so we can enable/disable and refresh their colors
     local specButtons = {}
-    local ACTION_BTN_W = 120
+    local ACTION_BTN_W = 160
 
     anchor = W:Checkbox(parent, anchor, y,
         "Enabled",
@@ -244,15 +244,10 @@ local function OnBuildUI(parent)
                     gy = gy - 18
 
                     local actionDefs = {
-                        { "Override Tool", function()
+                        { "Override", function()
                             for _, se in ipairs(specButtons) do for _, sb in ipairs(se.btns or {}) do sb:Disable() end end
                             if _G.SBAS_OpenOverrideGUI then _G.SBAS_OpenOverrideGUI(targetID, cname .. " — " .. displayName) end
                         end },
-                        { "Override Code", function()
-                            for _, se in ipairs(specButtons) do for _, sb in ipairs(se.btns or {}) do sb:Disable() end end
-                            SBA_Simple_ShowOverrideForSpec(targetID, cname .. " — " .. displayName)
-                        end },
-                        { "Recommended",   function() end },
                         { "Clear Override", function()
                             SBA_SimpleDB = SBA_SimpleDB or {}
                             SBA_SimpleDB.specs = SBA_SimpleDB.specs or {}
