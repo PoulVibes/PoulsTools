@@ -117,170 +117,185 @@ local function OnBuildUI(parent)
         end)
     end
 
-    -- Try preferred API: GetNumSpecializationsForClassID / GetSpecializationInfoForClassID
-    if type(GetNumSpecializationsForClassID) == "function" and type(GetSpecializationInfoForClassID) == "function" and type(GetClassInfo) == "function" then
+    -- Build class/spec data from API (if available)
+    local orderedClasses = {}   -- sorted list of { name, classID }
+    local classSpecData  = {}   -- cname -> { specs = [{id, displayName, apiKnown}] }
+
+    if type(GetNumSpecializationsForClassID) == "function"
+    and type(GetSpecializationInfoForClassID) == "function"
+    and type(GetClassInfo) == "function" then
         for classID = 1, 13 do
             local cname = select(1, GetClassInfo(classID))
             if cname then
-                local classLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-                classLabel:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 0, y)
-                classLabel:SetText(cname .. ":")
-                classLabel:SetTextColor(unpack(PoulsTools.Widgets.colors.text))
-                y = y - 18
+                orderedClasses[#orderedClasses + 1] = { name = cname, classID = classID }
+                classSpecData[cname] = { specs = {} }
 
                 local num = GetNumSpecializationsForClassID(classID) or 0
-                -- Build mappings: specID -> name and name(lower) -> specID (fallback)
-                local apiSpecByID = {}
-                local apiSpecNameByID = {}
-                local apiSpecByNameLower = {}
+                local apiSpecByID      = {}
+                local apiSpecNameByID  = {}
+                local apiSpecByNameLow = {}
                 for si = 1, num do
                     local specID, specName = GetSpecializationInfoForClassID(si, classID)
                     if specID and specName then
-                        apiSpecByID[specID] = true
-                        apiSpecNameByID[specID] = specName
-                        apiSpecByNameLower[specName:lower()] = specID
+                        apiSpecByID[specID]               = true
+                        apiSpecNameByID[specID]           = specName
+                        apiSpecByNameLow[specName:lower()] = specID
                     end
                 end
 
-                -- Prefer authoritative static list from the detailed reference when available
                 local expected = staticClassSpecs[cname]
                 if expected and type(expected) == "table" then
-                        for _, expectedSpec in ipairs(expected) do
-                            local expectedName = (type(expectedSpec) == "table" and expectedSpec.name) or expectedSpec
-                            local expectedID = (type(expectedSpec) == "table" and expectedSpec.id) or nil
-                            local matchingID = nil
-
-                            -- Prefer authoritative ID matching (avoids localization issues)
-                            if expectedID and apiSpecByID[expectedID] then
-                                matchingID = expectedID
-                            else
-                                -- Fallback to name (case-insensitive)
-                                if expectedName and apiSpecByNameLower[expectedName:lower()] then
-                                    matchingID = apiSpecByNameLower[expectedName:lower()]
-                                end
-                            end
-
-                            -- Always enable button: choose target ID (prefer matching, else expected)
-                            local targetID = matchingID or expectedID
-                            local displayName = (targetID and apiSpecNameByID[targetID]) or expectedName
-
-                            -- determine initial color (gray if no per-spec entry or empty override)
-                            local db = SBA_SimpleDB or {}
-                            local hasText = false
-                            if targetID and db.specs and db.specs[targetID] and db.specs[targetID].overrideCode and not db.specs[targetID].overrideCode:match("^%s*$") then
-                                hasText = true
-                            end
-
-                            -- Spec name label (colored by override state)
-                            local specLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-                            specLabel:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 14, y)
-                            specLabel:SetText(displayName)
-                            if hasText then specLabel:SetTextColor(unpack(W.colors.warning)) else specLabel:SetTextColor(unpack(W.colors.textMuted)) end
-                            y = y - 18
-
-                            -- 4 action buttons: Override Tool | Override Code | Recommended | Clear Override
-                            local actionDefs = {
-                                { "Override Tool", function()
-                                    for _, se in ipairs(specButtons) do for _, sb in ipairs(se.btns or {}) do sb:Disable() end end
-                                    if _G.SBAS_OpenOverrideGUI then _G.SBAS_OpenOverrideGUI(targetID, cname .. " — " .. displayName) end
-                                end },
-                                { "Override Code", function()
-                                    for _, se in ipairs(specButtons) do for _, sb in ipairs(se.btns or {}) do sb:Disable() end end
-                                    SBA_Simple_ShowOverrideForSpec(targetID, cname .. " — " .. displayName)
-                                end },
-                                { "Recommended",   function() end },
-                                { "Clear Override", function()
-                                    SBA_SimpleDB = SBA_SimpleDB or {}
-                                    SBA_SimpleDB.specs = SBA_SimpleDB.specs or {}
-                                    SBA_SimpleDB.specs[targetID] = SBA_SimpleDB.specs[targetID] or {}
-                                    SBA_SimpleDB.specs[targetID].overrideCode = ""
-                                    specLabel:SetTextColor(unpack(W.colors.textMuted))
-                                end },
-                            }
-                            local actionBtns = {}
-                            for i, def in ipairs(actionDefs) do
-                                local ab = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-                                ab:SetSize(ACTION_BTN_W, 22)
-                                ab:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 12 + (i - 1) * ACTION_BTN_W, y)
-                                ab:SetText(def[1])
-                                ab:SetScript("OnClick", def[2])
-                                actionBtns[i] = ab
-                            end
-
-                            -- If the client API doesn't report this spec ID, show an explanatory tooltip
-                            if targetID and not apiSpecByID[targetID] then
-                                for _, ab in ipairs(actionBtns) do
-                                    ab:SetScript("OnEnter", function(self)
-                                        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                                        GameTooltip:SetText("Spec not reported by this client API; id: " .. tostring(targetID), 1, 1, 1)
-                                        GameTooltip:Show()
-                                    end)
-                                    ab:SetScript("OnLeave", function() GameTooltip:Hide() end)
-                                end
-                            end
-
-                            -- store label + action buttons for enable/disable and color refresh
-                            table.insert(specButtons, { btns = actionBtns, label = specLabel, id = targetID })
-                            y = y - 26
+                    for _, expectedSpec in ipairs(expected) do
+                        local expectedName = (type(expectedSpec) == "table" and expectedSpec.name) or expectedSpec
+                        local expectedID   = (type(expectedSpec) == "table" and expectedSpec.id)   or nil
+                        local matchingID   = nil
+                        if expectedID and apiSpecByID[expectedID] then
+                            matchingID = expectedID
+                        elseif expectedName and apiSpecByNameLow[expectedName:lower()] then
+                            matchingID = apiSpecByNameLow[expectedName:lower()]
                         end
+                        local targetID   = matchingID or expectedID
+                        local dName      = (targetID and apiSpecNameByID[targetID]) or expectedName
+                        classSpecData[cname].specs[#classSpecData[cname].specs + 1] = {
+                            id = targetID, displayName = dName,
+                            apiKnown = targetID and apiSpecByID[targetID] and true or false,
+                        }
+                    end
                 else
-                    -- Fallback: enumerate API-provided specs if no static list
                     for si = 1, num do
                         local specID, specName = GetSpecializationInfoForClassID(si, classID)
-                        if specName then
-                            -- determine initial color based on saved DB
-                            local db = SBA_SimpleDB or {}
-                            local hasText = false
-                            if specID and db.specs and db.specs[specID] and db.specs[specID].overrideCode and not db.specs[specID].overrideCode:match("^%s*$") then
-                                hasText = true
-                            end
-
-                            local specLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-                            specLabel:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 14, y)
-                            specLabel:SetText(specName)
-                            if hasText then specLabel:SetTextColor(unpack(W.colors.warning)) else specLabel:SetTextColor(unpack(W.colors.textMuted)) end
-                            y = y - 18
-
-                            local actionDefs = {
-                                { "Override Tool", function()
-                                    for _, se in ipairs(specButtons) do for _, sb in ipairs(se.btns or {}) do sb:Disable() end end
-                                    if _G.SBAS_OpenOverrideGUI then _G.SBAS_OpenOverrideGUI(specID, cname .. " — " .. specName) end
-                                end },
-                                { "Override Code", function()
-                                    for _, se in ipairs(specButtons) do for _, sb in ipairs(se.btns or {}) do sb:Disable() end end
-                                    SBA_Simple_ShowOverrideForSpec(specID, cname .. " — " .. specName)
-                                end },
-                                { "Recommended",   function() end },
-                                { "Clear Override", function()
-                                    SBA_SimpleDB = SBA_SimpleDB or {}
-                                    SBA_SimpleDB.specs = SBA_SimpleDB.specs or {}
-                                    SBA_SimpleDB.specs[specID] = SBA_SimpleDB.specs[specID] or {}
-                                    SBA_SimpleDB.specs[specID].overrideCode = ""
-                                    specLabel:SetTextColor(unpack(W.colors.textMuted))
-                                end },
+                        if specID and specName then
+                            classSpecData[cname].specs[#classSpecData[cname].specs + 1] = {
+                                id = specID, displayName = specName, apiKnown = true,
                             }
-                            local actionBtns = {}
-                            for i, def in ipairs(actionDefs) do
-                                local ab = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-                                ab:SetSize(ACTION_BTN_W, 22)
-                                ab:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 12 + (i - 1) * ACTION_BTN_W, y)
-                                ab:SetText(def[1])
-                                ab:SetScript("OnClick", def[2])
-                                actionBtns[i] = ab
-                            end
-                            table.insert(specButtons, { btns = actionBtns, label = specLabel, id = specID })
-                            y = y - 26
                         end
                     end
                 end
             end
         end
+        table.sort(orderedClasses, function(a, b) return a.name < b.name end)
+    end
+
+    if #orderedClasses > 0 then
+        -- Detect player's current class as the default dropdown selection
+        local defaultClass = orderedClasses[1].name
+        if UnitClass then
+            local localizedClass = select(1, UnitClass("player"))
+            if localizedClass and classSpecData[localizedClass] then
+                defaultClass = localizedClass
+            end
+        end
+        local selectedClass = defaultClass
+
+        -- class group frames, keyed by class name
+        local classGroupFrames = {}
+
+        -- Show only the selected class group, hide all others
+        local function showClassGroup(cname)
+            for c, gf in pairs(classGroupFrames) do
+                if c == cname then gf:Show() else gf:Hide() end
+            end
+        end
+
+        -- Build class dropdown
+        local dropdownItems = {}
+        for _, cd in ipairs(orderedClasses) do
+            dropdownItems[#dropdownItems + 1] = { text = cd.name, value = cd.name }
+        end
+        local classDropRow = W:Dropdown(parent, listAnchor, y,
+            "Class",
+            dropdownItems,
+            function() return selectedClass end,
+            function(val)
+                selectedClass = val
+                showClassGroup(val)
+            end
+        )
+        y = -8
+
+        -- Build a per-class group frame; all anchored to same point below the dropdown
+        for _, cd in ipairs(orderedClasses) do
+            local cname = cd.name
+            local data  = classSpecData[cname]
+            if data and #data.specs > 0 then
+                local group = CreateFrame("Frame", nil, parent)
+                group:SetPoint("TOPLEFT", classDropRow, "BOTTOMLEFT", 0, y)
+                group:SetSize(540, 1)
+                classGroupFrames[cname] = group
+
+                local gy = 0
+                for _, spec in ipairs(data.specs) do
+                    local targetID   = spec.id
+                    local displayName = spec.displayName
+
+                    local db = SBA_SimpleDB or {}
+                    local hasText = false
+                    if targetID and db.specs and db.specs[targetID]
+                    and db.specs[targetID].overrideCode
+                    and not db.specs[targetID].overrideCode:match("^%s*$") then
+                        hasText = true
+                    end
+
+                    local specLabel = group:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+                    specLabel:SetPoint("TOPLEFT", group, "TOPLEFT", 14, gy)
+                    specLabel:SetText(displayName)
+                    if hasText then specLabel:SetTextColor(unpack(W.colors.warning))
+                    else             specLabel:SetTextColor(unpack(W.colors.textMuted)) end
+                    gy = gy - 18
+
+                    local actionDefs = {
+                        { "Override Tool", function()
+                            for _, se in ipairs(specButtons) do for _, sb in ipairs(se.btns or {}) do sb:Disable() end end
+                            if _G.SBAS_OpenOverrideGUI then _G.SBAS_OpenOverrideGUI(targetID, cname .. " — " .. displayName) end
+                        end },
+                        { "Override Code", function()
+                            for _, se in ipairs(specButtons) do for _, sb in ipairs(se.btns or {}) do sb:Disable() end end
+                            SBA_Simple_ShowOverrideForSpec(targetID, cname .. " — " .. displayName)
+                        end },
+                        { "Recommended",   function() end },
+                        { "Clear Override", function()
+                            SBA_SimpleDB = SBA_SimpleDB or {}
+                            SBA_SimpleDB.specs = SBA_SimpleDB.specs or {}
+                            SBA_SimpleDB.specs[targetID] = SBA_SimpleDB.specs[targetID] or {}
+                            SBA_SimpleDB.specs[targetID].overrideCode = ""
+                            specLabel:SetTextColor(unpack(W.colors.textMuted))
+                        end },
+                    }
+                    local actionBtns = {}
+                    for i, def in ipairs(actionDefs) do
+                        local ab = CreateFrame("Button", nil, group, "UIPanelButtonTemplate")
+                        ab:SetSize(ACTION_BTN_W, 22)
+                        ab:SetPoint("TOPLEFT", group, "TOPLEFT", 12 + (i - 1) * ACTION_BTN_W, gy)
+                        ab:SetText(def[1])
+                        ab:SetScript("OnClick", def[2])
+                        actionBtns[i] = ab
+                    end
+
+                    if not spec.apiKnown then
+                        for _, ab in ipairs(actionBtns) do
+                            ab:SetScript("OnEnter", function(self)
+                                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                                GameTooltip:SetText("Spec not reported by this client API; id: " .. tostring(targetID), 1, 1, 1)
+                                GameTooltip:Show()
+                            end)
+                            ab:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                        end
+                    end
+
+                    table.insert(specButtons, { btns = actionBtns, label = specLabel, id = targetID })
+                    gy = gy - 26
+                end
+                group:SetHeight(-gy + 4)
+                group:Hide()  -- showClassGroup will reveal the correct one
+            end
+        end
+
+        showClassGroup(selectedClass)
     else
         local lbl = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         lbl:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 0, y)
         lbl:SetText("Class/spec enumeration not available on this client.")
         lbl:SetTextColor(unpack(PoulsTools.Widgets.colors.text))
-        y = y - 18
     end
 
     -- Manage spec buttons: re-enable and refresh label colors when any editor closes

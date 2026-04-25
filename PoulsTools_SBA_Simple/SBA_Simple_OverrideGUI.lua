@@ -1969,11 +1969,48 @@ do
     end)
 end
 
--- Returns a sorted list of {name, spellID, texture} for the player's active
--- spec plus general lines.
+-- Returns a sorted list of {name, spellID, texture} for the spec being edited.
+-- When editing the player's current spec: scans the live spellbook, persists it
+-- to SavedVariables, then merges any runtime-captured cast spells.
+-- When editing a different spec: returns only the stored spells for that spec
+-- (seeded on a prior session when you played that spec).
 -- Excludes: off-spec lines, guild, flyouts, FutureSpell slots, and passives.
 local function GetClassSpells()
-    if not (C_SpellBook and C_SpellBook.GetNumSpellBookSkillLines) then return {} end
+    local curSpec    = CurrentSpecID()
+    local targetSpec = (editSpecID ~= 0) and editSpecID or curSpec
+
+    -- ── Cross-spec: skip live scan, just return stored spells for that spec ──
+    if targetSpec ~= curSpec then
+        local result, seenIDs = {}, {}
+        local srcDB = SBA_SimpleDB and SBA_SimpleDB.castsSeen and SBA_SimpleDB.castsSeen[targetSpec]
+        if srcDB then
+            for _, entry in pairs(srcDB) do
+                if entry.spellID and not seenIDs[entry.spellID] then
+                    seenIDs[entry.spellID] = true
+                    result[#result + 1] = entry
+                end
+            end
+        end
+        table.sort(result, function(a, b) return a.name < b.name end)
+        return result
+    end
+
+    -- ── Own spec (or no API): live spellbook scan ─────────────────────────
+    if not (C_SpellBook and C_SpellBook.GetNumSpellBookSkillLines) then
+        -- No spellbook API: fall back to stored data for the target spec.
+        local result, seenIDs = {}, {}
+        local srcDB = SBA_SimpleDB and SBA_SimpleDB.castsSeen and SBA_SimpleDB.castsSeen[targetSpec]
+        if srcDB then
+            for _, entry in pairs(srcDB) do
+                if entry.spellID and not seenIDs[entry.spellID] then
+                    seenIDs[entry.spellID] = true
+                    result[#result + 1] = entry
+                end
+            end
+        end
+        table.sort(result, function(a, b) return a.name < b.name end)
+        return result
+    end
     local spells, seen = {}, {}
     local isFlyoutType = Enum.SpellBookItemType and Enum.SpellBookItemType.Flyout
     local isFutureType = Enum.SpellBookItemType and Enum.SpellBookItemType.FutureSpell
@@ -2056,16 +2093,37 @@ local function GetClassSpells()
             end
         end
     end
-    -- Build a name-index of spells already added from the spellbook so we can
-    -- suppress seenCast entries that share a name (spellbook version takes precedence).
-    local seenNames = {}
-    for _, sp in ipairs(spells) do
-        seenNames[sp.name] = true
+    -- Persist the freshly scanned spellbook spells into the current spec's store
+    -- so they are available for cross-spec editing in future sessions.
+    if curSpec ~= 0 then
+        SBA_SimpleDB           = SBA_SimpleDB or {}
+        SBA_SimpleDB.castsSeen = SBA_SimpleDB.castsSeen or {}
+        SBA_SimpleDB.castsSeen[curSpec] = SBA_SimpleDB.castsSeen[curSpec] or {}
+        local curDB = SBA_SimpleDB.castsSeen[curSpec]
+        for _, sp in ipairs(spells) do
+            if not curDB[sp.spellID] then
+                curDB[sp.spellID] = { name = sp.name, spellID = sp.spellID, texture = sp.texture }
+            end
+        end
     end
-    -- Merge spells captured via successful casts (override spells, proc abilities, etc.)
-    -- Skip any whose name duplicates a spellbook entry; keep them in seenCastSpells storage.
+
+    -- Build name-index to avoid duplicates when merging stored data.
+    local seenNames = {}
+    for _, sp in ipairs(spells) do seenNames[sp.name] = true end
+
+    -- Merge stored spells and any in-memory runtime captures for the current spec.
+    local srcDB = SBA_SimpleDB and SBA_SimpleDB.castsSeen and SBA_SimpleDB.castsSeen[targetSpec]
+    if srcDB then
+        for castID, entry in pairs(srcDB) do
+            if not seen[castID] and entry.name and not seenNames[entry.name] then
+                seen[castID]           = true
+                seenNames[entry.name]  = true
+                spells[#spells + 1]    = entry
+            end
+        end
+    end
     for castID, entry in pairs(seenCastSpells) do
-        if not seen[castID] and not seenNames[entry.name] then
+        if not seen[castID] and entry.name and not seenNames[entry.name] then
             seen[castID] = true
             spells[#spells + 1] = entry
         end
@@ -2456,8 +2514,8 @@ local function CreateSpellbookPanel(f, leftSF)
     resetBtn:SetScript("OnEnter", function(self)
         resetLbl:SetTextColor(1, 0.8, 0.8, 1)
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-        GameTooltip:SetText("Reset Seen Spells", 1, 0.6, 0.6)
-        GameTooltip:AddLine("Clears the list of spells tracked\nfrom successful casts for this spec.", 0.8, 0.8, 0.8, true)
+        GameTooltip:SetText("Reset Spell Cache", 1, 0.6, 0.6)
+        GameTooltip:AddLine("Clears the cached spell list for this spec.\nReopening the GUI will rebuild it from your spellbook.", 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
     end)
     resetBtn:SetScript("OnLeave", function()
