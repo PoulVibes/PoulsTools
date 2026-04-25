@@ -18,6 +18,7 @@
 --       default       (opt) default numeric value
 --       needsSpell    (opt) true → show This Spell / Other Spell toggle
 --       needsResource (opt) true → show resource type + operator selectors + value input
+--       needsLua      (opt) true → show a free-text Lua expression input
 --       generate(cond, ruleSpellID) → Lua fragment string
 -------------------------------------------------------------------------------
 -- Resolves which spell ID to use: "this"/nil → rule's spell; number → that ID.
@@ -87,13 +88,19 @@ local COND_TYPES = {
           return ("spellID == %d"):format(id)
       end },
     -- Resource (Chi / Energy with operator)
-    { id = "resource",     label = "Resource Check", needsResource = true,
+        { id = "resource",     label = "Resource Check", needsResource = true,
       generate = function(c, s)
           local sec = SPEC_SECONDARY[editSpecID] or SPEC_SECONDARY_DEFAULT
           local var = (c.resource == "energy") and "currentEnergy" or sec.varName
           local op  = c.operator or ">="
           return ("%s %s %d"):format(var, op, c.value or 0)
       end },
+        { id = "custom_lua",   label = "Custom Lua Expression", needsLua = true,
+            generate = function(c, s)
+                    local expr = (c.luaCode and c.luaCode:match("^%s*(.-)%s*$")) or ""
+                    if expr == "" then return "false" end
+                    return "(" .. expr .. ")"
+            end },
     -- Plugin / Proc (Zenith, BOK, RWK, DOCJ — pick via dropdown)
     { id = "plugin",       label = "Plugin / Proc", needsPlugin = true,
       generate = function(c, s)
@@ -153,6 +160,7 @@ local function DeepCopyRules(src)
             conds[j] = {
                 type     = c.type,
                 value    = c.value,
+                luaCode  = c.luaCode,
                 negate   = c.negate,
                 spell    = c.spell,
                 targetID = c.targetID,
@@ -182,6 +190,11 @@ local function CondSummaryText(cond, ruleSpellID)
                         or (SPEC_SECONDARY[editSpecID] or SPEC_SECONDARY_DEFAULT).label
         local op      = cond.operator or ">="
         t = resName .. " " .. op .. " " .. tostring(cond.value or 0)
+    elseif def.needsLua then
+        local expr = (cond.luaCode and cond.luaCode:gsub("%s+", " "):match("^%s*(.-)%s*$")) or ""
+        if expr == "" then expr = "(empty)" end
+        if #expr > 52 then expr = expr:sub(1, 49) .. "..." end
+        t = "Lua: " .. expr
     elseif def.needsPlugin then
         local PLUGIN_LABELS = {
             zenith     = "Zenith Active",
@@ -911,6 +924,11 @@ local function UpdateRowFrame(f, idx, rule)
                     else
                         label = pLabel
                     end
+                elseif def.needsLua then
+                    local expr = (cond.luaCode and cond.luaCode:gsub("%s+", " "):match("^%s*(.-)%s*$")) or ""
+                    if expr == "" then expr = "(empty)" end
+                    if #expr > 30 then expr = expr:sub(1, 27) .. "..." end
+                    label = "Lua: " .. expr
                 elseif def.needsResource then
                     -- Show as e.g. "chi >= 2" or "energy <= 60"
                     local res = cond.resource or "chi"
@@ -1289,6 +1307,9 @@ local function CreateCondInputArea(parent)
     local timerOpFrame
     local valLbl
     local valBox
+    local luaFrame
+    local luaLabel
+    local luaBox
     local selPlugin = nil
     local UpdateLayout  -- assigned below; forward-declared so all closures share it
 
@@ -1471,6 +1492,24 @@ local function CreateCondInputArea(parent)
     timerOpDropdown:SetSelected("<")
     timerOpDropdown:SetOnChange(function(id) timerOpSel = id end)
 
+    -- ── Custom Lua expression row ─────────────────────────────────────────
+    luaFrame = CreateFrame("Frame", nil, f)
+    luaFrame:SetSize(GetRightPanelWidth() - 18, 38)
+    luaFrame:SetPoint("TOPLEFT", typeBtn, "BOTTOMLEFT", 0, -4)
+    luaFrame:Hide()
+
+    luaLabel = luaFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    luaLabel:SetPoint("TOPLEFT", luaFrame, "TOPLEFT", 0, 0)
+    luaLabel:SetText("Lua expression:")
+    luaLabel:SetTextColor(0.55, 0.72, 0.88, 1)
+
+    luaBox = CreateFrame("EditBox", nil, luaFrame, "InputBoxTemplate")
+    luaBox:SetSize(GetRightPanelWidth() - 24, 20)
+    luaBox:SetPoint("TOPLEFT", luaLabel, "BOTTOMLEFT", 0, -2)
+    luaBox:SetAutoFocus(false)
+    luaBox:SetMaxLetters(512)
+    luaBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+
     valLbl = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     valLbl:SetPoint("TOPLEFT", typeBtn, "BOTTOMLEFT", 0, -6)
     valLbl:SetTextColor(0.55, 0.72, 0.88, 1)
@@ -1547,7 +1586,9 @@ local function CreateCondInputArea(parent)
         operatorFrame:SetWidth(contentW)
         pluginFrame:SetWidth(contentW)
         timerOpFrame:SetWidth(contentW)
+        luaFrame:SetWidth(contentW)
         pluginBtn:SetWidth(contentW)
+        luaBox:SetWidth(math.max(120, contentW - 6))
         chiBtn:SetWidth(resBtnW)
         energyBtn:SetWidth(resBtnW)
         if opDropdown      then opDropdown:UpdateWidth(opDropdownW)      end
@@ -1562,6 +1603,8 @@ local function CreateCondInputArea(parent)
             above = (spellSel == "other") and otherFrame or spellToggleFrame
         elseif selType and selType.needsResource then
             above = operatorFrame
+        elseif selType and selType.needsLua then
+            above = luaFrame
         elseif selType and selType.needsPlugin then
             above = (selPlugin and selPlugin.needsOperator) and timerOpFrame or pluginFrame
         end
@@ -1580,6 +1623,9 @@ local function CreateCondInputArea(parent)
         if selType and selType.needsResource then
             h = h + 22 + 4   -- resource row
             h = h + 22 + 4   -- operator row
+        end
+        if selType and selType.needsLua then
+            h = h + 38 + 4   -- custom Lua row
         end
         if selType and selType.needsPlugin then
             h = h + 22 + 4   -- plugin selector row
@@ -1618,6 +1664,7 @@ local function CreateCondInputArea(parent)
             -- Hide all optional sections first
             spellToggleFrame:Hide(); otherFrame:Hide()
             resourceFrame:Hide(); operatorFrame:Hide()
+            luaFrame:Hide()
             pluginFrame:Hide(); timerOpFrame:Hide()
             valLbl:Hide(); valBox:Hide()
             selPlugin = nil
@@ -1645,6 +1692,11 @@ local function CreateCondInputArea(parent)
                 valBox:SetText("0")
                 valBox:Show()
             end
+            if ct.needsLua then
+                luaFrame:Show()
+                luaLabel:SetText((ct.luaLabel or "Lua expression") .. ":")
+                luaBox:SetText("")
+            end
             if ct.needsPlugin then
                 pluginFrame:Show()
                 pluginBtn:SetText("Select plugin...")
@@ -1670,6 +1722,11 @@ local function CreateCondInputArea(parent)
     f.GetOperator     = function() return opSel end
     f.GetTimerOperator= function() return timerOpSel end
     f.GetPlugin       = function() return selPlugin and selPlugin.id or nil end
+    f.GetLuaCode      = function()
+        local expr = luaBox:GetText() and luaBox:GetText():match("^%s*(.-)%s*$") or ""
+        if expr == "" then return nil end
+        return expr
+    end
     f.GetSpell        = function()
         if not selType or not selType.needsSpell then return nil end
         if spellSel == "this" then return "this" end
@@ -1693,6 +1750,7 @@ local function CreateCondInputArea(parent)
         typeBtn:SetText("Select condition type...")
         spellToggleFrame:Hide(); otherFrame:Hide()
         resourceFrame:Hide(); operatorFrame:Hide()
+        luaFrame:Hide(); luaBox:SetText("")
         pluginFrame:Hide(); timerOpFrame:Hide(); pluginBtn:SetText("Select plugin...")
         otherNameBox:SetText(""); otherResultLbl:SetText(""); otherIcon:Hide()
         valLbl:Hide(); valBox:SetText(""); valBox:Hide()
@@ -1741,6 +1799,11 @@ local function CreateCondInputArea(parent)
             valLbl:Show()
             valBox:SetText(tostring(cond.value or 0))
             valBox:Show()
+        end
+        if ct.needsLua then
+            luaFrame:Show()
+            luaLabel:SetText((ct.luaLabel or "Lua expression") .. ":")
+            luaBox:SetText(cond.luaCode or "")
         end
         if ct.needsPlugin then
             pluginFrame:Show()
@@ -2167,6 +2230,13 @@ RefreshRightPanel = function()
                 newCond.resource = condInputArea.GetResource()
                 newCond.operator = condInputArea.GetOperator()
                 newCond.value    = condInputArea.GetValue() or 0
+            end
+            if ct.needsLua then
+                newCond.luaCode = condInputArea.GetLuaCode()
+                if not newCond.luaCode then
+                    print("|cffff4444SBAS GUI:|r Enter a Lua expression first.")
+                    return
+                end
             end
             if ct.needsPlugin then
                 local pid = condInputArea.GetPlugin()
@@ -3389,6 +3459,11 @@ local function CreateGUI()
     previewBtn:SetPoint("LEFT", saveBtn, "RIGHT", 6, 0)
     previewBtn:SetText("Preview Code")
     previewBtn:SetScript("OnClick", function()
+        local of = _G["SBAS_OverrideFrame"]
+        if of and of:IsShown() then
+            of:Hide()
+            return
+        end
         local code = GenerateCode(workingRules) or "-- (no rules defined)"
         -- Open raw override editor in temporary preview mode (non-persistent).
         if type(SBA_Simple_ShowOverridePreview) == "function" then
@@ -3396,7 +3471,6 @@ local function CreateGUI()
         else
             -- Fallback for older SBA_Simple versions where preview API isn't available.
             local eb = _G["SBAS_OverrideEditBox"]
-            local of = _G["SBAS_OverrideFrame"]
             if eb and of then
                 eb:SetText(code)
                 of:Show()
@@ -3569,6 +3643,11 @@ _G.SBAS_BuildCondRowText = function(cond, ruleSpellID, isFirst, parenDepthIn)
         else
             label = pLabel
         end
+    elseif def.needsLua then
+        local expr = (cond.luaCode and cond.luaCode:gsub("%s+", " "):match("^%s*(.-)%s*$")) or ""
+        if expr == "" then expr = "(empty)" end
+        if #expr > 30 then expr = expr:sub(1, 27) .. "..." end
+        label = "Lua: " .. expr
     elseif def.needsResource then
         local res = cond.resource or "chi"
         local op  = cond.operator or ">="
