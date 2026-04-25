@@ -5,6 +5,285 @@ if not PoulsTools then return end
 
 SBA_SimpleDB = SBA_SimpleDB or {}
 
+-------------------------------------------------------------------------------
+-- Override Priority Analyzer window
+-------------------------------------------------------------------------------
+local analyzerFrame = nil
+
+local function CreateOverrideAnalyzerWindow(specID, specName)
+    local PAD         = 10
+    local ROW_H       = 24
+    local WIN_W_DEF   = 420
+    local ICON_SIZE   = 16
+    local MAX_VIS_ROWS = 12  -- default visible rows; window is scrollable for more
+    -- Fixed pixels consumed by icon + pri number + spell name to the left of condTxt
+    -- icon(16) + gap(4) + pri(22) + gap(2) + name(90) + gap(4) = 138
+    local COND_OFFSET = 138
+    local HEADER_H = 30
+    local GRIP_H   = 20   -- reserved at bottom for resize grip
+
+    local f = CreateFrame("Frame", "SBAS_OverrideAnalyzerFrame", UIParent, "BackdropTemplate")
+    f:Hide()  -- frames are visible by default; hide until explicitly opened
+    f:SetFrameStrata("DIALOG")
+    f:SetMovable(true)
+    f:SetResizable(true)
+    f:SetResizeBounds(260, 80)
+    f:EnableMouse(true)
+
+    -- Backdrop
+    if f.SetBackdrop then
+        f:SetBackdrop({
+            bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
+            edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+            tile = true, tileSize = 32, edgeSize = 16,
+            insets = { left=4, right=4, top=4, bottom=4 },
+        })
+    end
+
+    -- Title bar — also the drag handle; dragging here moves the window
+    local titleBar = CreateFrame("Frame", nil, f)
+    titleBar:SetPoint("TOPLEFT",  f, "TOPLEFT",  4, -4)
+    titleBar:SetPoint("TOPRIGHT", f, "TOPRIGHT", -4, -4)
+    titleBar:SetHeight(20)
+    titleBar:EnableMouse(true)
+    titleBar:RegisterForDrag("LeftButton")
+    titleBar:SetScript("OnDragStart", function() f:StartMoving() end)
+    titleBar:SetScript("OnDragStop",  function() f:StopMovingOrSizing() end)
+    local titleTxt = titleBar:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    titleTxt:SetPoint("LEFT", titleBar, "LEFT", 4, 0)
+    titleTxt:SetText("Priority Analyzer — " .. (specName or ""))
+
+    -- Close [X]
+    local closeBtn = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+    closeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
+    closeBtn:SetScript("OnClick", function() f:Hide() end)
+
+    -- Key handler for Escape; propagate so game hotkeys still work while open
+    f:EnableKeyboard(true)
+    f:SetPropagateKeyboardInput(true)
+    f:SetScript("OnKeyDown", function(self, key)
+        if key == "ESCAPE" then self:Hide() end
+    end)
+
+    -- Resize grip (bottom-right corner)
+    local resizeGrip = CreateFrame("Button", nil, f)
+    resizeGrip:SetSize(16, 16)
+    resizeGrip:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -2, 2)
+    resizeGrip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    resizeGrip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    resizeGrip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    resizeGrip:SetScript("OnMouseDown", function() f:StartSizing("BOTTOMRIGHT") end)
+    resizeGrip:SetScript("OnMouseUp",   function() f:StopMovingOrSizing() end)
+
+    -- ScrollFrame fills between header and resize grip; holds ALL rule rows
+    local sf = CreateFrame("ScrollFrame", nil, f)
+    sf:SetPoint("TOPLEFT",     f, "TOPLEFT",     PAD, -(HEADER_H + PAD))
+    sf:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -PAD, GRIP_H)
+    sf:EnableMouseWheel(true)
+    sf:SetScript("OnMouseWheel", function(self, delta)
+        local v = self:GetVerticalScroll()
+        local m = self:GetVerticalScrollRange()
+        self:SetVerticalScroll(math.min(math.max(v - delta * ROW_H, 0), m))
+    end)
+    local sc = CreateFrame("Frame", nil, sf)
+    sc:SetWidth(WIN_W_DEF - PAD * 2)
+    sc:SetHeight(100)
+    sf:SetScrollChild(sc)
+
+    -- Condition text truncation helper.
+    -- Uses GetStringWidth() (measures raw text width with the current font,
+    -- independent of any layout pass) so it works even before first render.
+    local function TruncateCond(fs, text, maxW)
+        fs:SetText(text)
+        if fs:GetStringWidth() <= maxW then return end
+        -- Binary search for longest prefix that fits with "..."
+        local lo, hi = 0, #text
+        while lo < hi do
+            local mid = math.floor((lo + hi + 1) / 2)
+            fs:SetText(text:sub(1, mid) .. "...")
+            if fs:GetStringWidth() > maxW then
+                hi = mid - 1
+            else
+                lo = mid
+            end
+        end
+        fs:SetText(lo > 0 and text:sub(1, lo) .. "..." or "...")
+    end
+
+    -- Compute the available width for condition text given the current frame width
+    local function CondMaxW()
+        return math.max(0, f:GetWidth() - PAD * 2 - COND_OFFSET - 4)
+    end
+
+    local rows = {}  -- { frame, highlight, spellID, condTxt, condFull }
+
+    local function BuildRows(rules, positionReset)
+        for _, r in ipairs(rows) do r.frame:Hide() end
+        rows = {}
+
+        local count    = #rules
+        local visCount = math.min(count, MAX_VIS_ROWS)
+        local winH = HEADER_H + PAD + visCount * ROW_H + PAD + GRIP_H
+
+        if positionReset then
+            f:SetSize(WIN_W_DEF, winH)
+            f:ClearAllPoints()
+            f:SetPoint("CENTER", UIParent, "CENTER", 0, 80)
+        else
+            -- Preserve user-set width; only update height to match visible count
+            local curW = f:GetWidth()
+            f:SetSize(curW > 0 and curW or WIN_W_DEF, winH)
+        end
+
+        -- Scroll child holds ALL rows (enables scrolling past DEF_VIS_ROWS)
+        local scW = math.max(1, f:GetWidth() - PAD * 2)
+        sc:SetWidth(scW)
+        sc:SetHeight(math.max(count * ROW_H, 1))
+        sf:SetVerticalScroll(0)
+
+        local maxW = CondMaxW()
+
+        for i, rule in ipairs(rules) do
+            -- No break: all rules rendered into scroll child
+            local row = CreateFrame("Frame", nil, sc)
+            row:SetHeight(ROW_H)
+            row:SetPoint("TOPLEFT", sc, "TOPLEFT", 0, -(i - 1) * ROW_H)
+            row:SetWidth(scW)
+
+            -- Highlight texture (hidden by default)
+            local hl = row:CreateTexture(nil, "BACKGROUND")
+            hl:SetAllPoints(row)
+            hl:SetColorTexture(1, 0.85, 0, 0.18)
+            hl:Hide()
+
+            -- Spell icon
+            local iconFrame = CreateFrame("Frame", nil, row)
+            iconFrame:SetSize(ICON_SIZE, ICON_SIZE)
+            iconFrame:SetPoint("LEFT", row, "LEFT", 0, 0)
+            local iconTex = iconFrame:CreateTexture(nil, "ARTWORK")
+            iconTex:SetAllPoints(iconFrame)
+            iconTex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+            if rule.spellID then
+                local info = C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(rule.spellID)
+                local texID = info and (info.iconID or info.originalIconID)
+                if texID then iconTex:SetTexture(texID) end
+            end
+
+            -- Priority number
+            local priTxt = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            priTxt:SetPoint("LEFT", iconFrame, "RIGHT", 4, 0)
+            priTxt:SetWidth(22)
+            priTxt:SetText(i .. ".")
+            priTxt:SetTextColor(0.7, 0.7, 0.7)
+
+            -- Spell name
+            local spellName = (rule.name and rule.name ~= "") and rule.name
+                              or (rule.spellID and C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(rule.spellID))
+                              or "?"
+            local nameTxt = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            nameTxt:SetPoint("LEFT", priTxt, "RIGHT", 2, 0)
+            nameTxt:SetWidth(90)
+            nameTxt:SetText(spellName)
+            nameTxt:SetJustifyH("LEFT")
+
+            -- Condition summary — same token format as the right panel; joined with spaces
+            local condParts = {}
+            if rule.conditions then
+                local depth = 0
+                for ci, cond in ipairs(rule.conditions) do
+                    local tok
+                    if type(_G.SBAS_BuildCondRowText) == "function" then
+                        tok, depth = _G.SBAS_BuildCondRowText(cond, rule.spellID, ci == 1, depth)
+                    else
+                        -- Fallback if GUI module not loaded yet
+                        local s = type(_G.SBAS_CondSummaryText) == "function"
+                                  and _G.SBAS_CondSummaryText(cond, rule.spellID)
+                                  or (cond.type or "?")
+                        if ci > 1 then s = (cond.junction or "AND"):upper() .. " " .. s end
+                        tok = s
+                    end
+                    condParts[#condParts + 1] = tok
+                end
+            end
+            local fullCond = #condParts > 0 and table.concat(condParts, " ") or "(no conditions)"
+
+            local condTxt = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            condTxt:SetPoint("LEFT",  row, "LEFT",  COND_OFFSET, 0)
+            condTxt:SetWidth(maxW)   -- explicit width; no RIGHT anchor avoids layout-clamping
+            condTxt:SetWordWrap(false)
+            condTxt:SetNonSpaceWrap(false)
+            condTxt:SetJustifyH("LEFT")
+            condTxt:SetTextColor(0.6, 0.8, 1)
+            TruncateCond(condTxt, fullCond, maxW)
+
+            rows[i] = { frame=row, highlight=hl, spellID=rule.spellID,
+                        condTxt=condTxt, condFull=fullCond }
+        end
+    end
+
+    -- Re-truncate all condition texts when the frame is resized;
+    -- also update scroll-child and row widths
+    f:SetScript("OnSizeChanged", function()
+        local scW  = math.max(1, f:GetWidth() - PAD * 2)
+        sc:SetWidth(scW)
+        local maxW = CondMaxW()
+        for _, r in ipairs(rows) do
+            if r.frame then r.frame:SetWidth(scW) end
+            if r.condTxt and r.condFull then
+                r.condTxt:SetWidth(maxW)
+                TruncateCond(r.condTxt, r.condFull, maxW)
+            end
+        end
+    end)
+
+    -- Active-row highlight ticker
+    local ticker = CreateFrame("Frame", nil, f)
+    ticker:SetAllPoints(f)
+    ticker:SetScript("OnUpdate", function()
+        if not f:IsShown() then return end
+        local suggested = C_AssistedCombat and C_AssistedCombat.GetNextCastSpell
+                          and C_AssistedCombat.GetNextCastSpell()
+        for _, r in ipairs(rows) do
+            if suggested and r.spellID == suggested then
+                r.highlight:Show()
+            else
+                r.highlight:Hide()
+            end
+        end
+    end)
+
+    -- Populate on show and when spec changes
+    f.Refresh = function(sid, sname)
+        specID   = sid   or specID
+        specName = sname or specName
+        titleTxt:SetText("Priority Analyzer — " .. (specName or ""))
+        local db    = SBA_SimpleDB
+        local rules = db and db.gui and db.gui[specID] or {}
+        BuildRows(rules, false)
+    end
+
+    f:SetScript("OnShow", function()
+        local db    = SBA_SimpleDB
+        local rules = db and db.gui and db.gui[specID] or {}
+        BuildRows(rules, true)
+    end)
+
+    return f
+end
+
+-- Public: open or refresh the analyzer window
+function SBAS_OpenOrRefreshAnalyzer(specID, specName)
+    if not analyzerFrame then
+        analyzerFrame = CreateOverrideAnalyzerWindow(specID, specName)
+        analyzerFrame:Show()   -- OnShow triggers BuildRows(rules, positionReset=true)
+    else
+        analyzerFrame.Refresh(specID, specName)
+        if not analyzerFrame:IsShown() then
+            analyzerFrame:Show()
+        end
+    end
+end
+
 local function OnBuildUI(parent)
     local W = PoulsTools.Widgets
     local anchor = parent
@@ -97,6 +376,48 @@ local function OnBuildUI(parent)
         end
     end)
     lockBtn = anchor
+    y = -8
+
+    -- ── Override Analyzer button ────────────────────────────────────────────
+    local analyzerBtn
+    analyzerBtn = W:Button(parent, anchor, y, "Priority Analyzer", function()
+        -- Don't open if an editor is currently visible
+        local guiEd  = _G["SBAS_OverrideGUI_Frame"]
+        local codeEd = _G["SBAS_OverrideFrame"]
+        if (guiEd and guiEd:IsShown()) or (codeEd and codeEd:IsShown()) then
+            print("|cffFFCC00Priority Analyzer:|r Close the override editor first.")
+            return
+        end
+        -- Determine current spec
+        local specIndex = GetSpecialization and GetSpecialization()
+        if not specIndex then
+            print("|cffFF4444Priority Analyzer:|r Could not detect active spec.")
+            return
+        end
+        local specID = select(1, GetSpecializationInfo(specIndex))
+        if not specID then
+            print("|cffFF4444Priority Analyzer:|r Could not detect active specID.")
+            return
+        end
+        local db = SBA_SimpleDB
+        local source = db and db.specs and db.specs[specID] and db.specs[specID].overrideSource
+        local hasCode = db and db.specs and db.specs[specID] and db.specs[specID].overrideCode
+                        and not db.specs[specID].overrideCode:match("^%s*$")
+        local hasGui  = db and db.gui and db.gui[specID] and #db.gui[specID] > 0
+
+        if source == "code" or (hasCode and not hasGui and source ~= "gui") then
+            print("|cffFFCC00Priority Analyzer:|r Not available for coded overrides. Use the Override editor instead.")
+            return
+        end
+        if not hasGui then
+            print("|cffFFCC00Priority Analyzer:|r No GUI priority list found for the current spec.")
+            return
+        end
+        -- Show the analyzer for this spec
+        local specName = select(2, GetSpecializationInfo(specIndex)) or ("Spec "..specID)
+        SBAS_OpenOrRefreshAnalyzer(specID, specName)
+    end)
+    anchor = analyzerBtn
     y = -8
 
     y = -8

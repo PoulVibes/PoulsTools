@@ -28,6 +28,45 @@ local function ResolveSpell(c, s)
     return c.targetID or s
 end
 
+-- Forward declaration: allows closures defined below (COND_TYPES, CondSummaryText, etc.)
+-- to read the currently-edited spec without a circular dependency on section 11.
+local editSpecID = 0
+
+-- Per-spec secondary (non-energy) resource. The "resource" condition type uses this
+-- to emit the correct Lua variable in both generated code and the summary display.
+-- Specs not listed have no secondary resource queryable in the Secret Value System
+-- (e.g. Warriors, Balance Druid, Brewmaster) and fall through to the default, which
+-- emits chi for backwards-compatibility with Windwalker data from before specID was known.
+local SPEC_SECONDARY_DEFAULT = { varName = "chi",         powerType = "Chi",         label = "Chi"        }
+local SPEC_SECONDARY = {
+    -- Monk: only Windwalker uses Chi as a secondary resource.
+    -- Brewmaster uses Energy (primary — not SVS-queryable); no secondary.
+    [269] = { varName = "chi",         powerType = "Chi",         label = "Chi"        },  -- Windwalker
+    -- Rogue (all specs: Combo Points are secondary)
+    [259] = { varName = "comboPoints", powerType = "ComboPoints", label = "Combo Pts"  },  -- Assassination
+    [260] = { varName = "comboPoints", powerType = "ComboPoints", label = "Combo Pts"  },  -- Outlaw
+    [261] = { varName = "comboPoints", powerType = "ComboPoints", label = "Combo Pts"  },  -- Subtlety
+    -- Druid: Feral uses Combo Points as secondary (Energy is primary)
+    [103] = { varName = "comboPoints", powerType = "ComboPoints", label = "Combo Pts"  },  -- Feral
+    -- Death Knight: Runic Power is secondary (Runes are the primary builder)
+    [250] = { varName = "runicPower",  powerType = "RunicPower",  label = "Runic Pwr"  },  -- Blood
+    [251] = { varName = "runicPower",  powerType = "RunicPower",  label = "Runic Pwr"  },  -- Frost
+    [252] = { varName = "runicPower",  powerType = "RunicPower",  label = "Runic Pwr"  },  -- Unholy
+    -- Paladin: Holy Power is secondary (Mana is primary)
+    [65]  = { varName = "holyPower",   powerType = "HolyPower",   label = "Holy Pwr"   },  -- Holy
+    [66]  = { varName = "holyPower",   powerType = "HolyPower",   label = "Holy Pwr"   },  -- Protection
+    [70]  = { varName = "holyPower",   powerType = "HolyPower",   label = "Holy Pwr"   },  -- Retribution
+    -- Warlock: Soul Shards are secondary (Mana is primary)
+    [265] = { varName = "soulShards",  powerType = "SoulShards",  label = "Soul Shards" }, -- Affliction
+    [266] = { varName = "soulShards",  powerType = "SoulShards",  label = "Soul Shards" }, -- Demonology
+    [267] = { varName = "soulShards",  powerType = "SoulShards",  label = "Soul Shards" }, -- Destruction
+    -- Shadow Priest: Insanity is secondary (Mana is primary)
+    [258] = { varName = "insanity",    powerType = "Insanity",    label = "Insanity"   },
+    -- Enhancement Shaman: Maelstrom is the PRIMARY resource — not SVS-queryable; omitted.
+    -- Demon Hunter: Fury (Havoc) and Pain (Vengeance) are PRIMARY resources — not SVS-queryable; omitted.
+    -- Evoker: Essence is PRIMARY (mana equivalent) — not SVS-queryable; omitted.
+}
+
 local COND_TYPES = {
     -- Spell-based checks (needsSpell = true → picker shows This Spell / Other Spell toggle)
     { id = "on_cd",        label = "Ready (Off-Cooldown)",        shortLabel = "Ready",   needsSpell = true,
@@ -50,7 +89,8 @@ local COND_TYPES = {
     -- Resource (Chi / Energy with operator)
     { id = "resource",     label = "Resource Check", needsResource = true,
       generate = function(c, s)
-          local var = (c.resource == "energy") and "currentEnergy" or "chi"
+          local sec = SPEC_SECONDARY[editSpecID] or SPEC_SECONDARY_DEFAULT
+          local var = (c.resource == "energy") and "currentEnergy" or sec.varName
           local op  = c.operator or ">="
           return ("%s %s %d"):format(var, op, c.value or 0)
       end },
@@ -138,7 +178,8 @@ local function CondSummaryText(cond, ruleSpellID)
     local prefix = cond.negate and "NOT " or ""
     local t
     if def.needsResource then
-        local resName = (cond.resource == "energy") and "Energy" or "Chi"
+        local resName = (cond.resource == "energy") and "Energy"
+                        or (SPEC_SECONDARY[editSpecID] or SPEC_SECONDARY_DEFAULT).label
         local op      = cond.operator or ">="
         t = resName .. " " .. op .. " " .. tostring(cond.value or 0)
     elseif def.needsPlugin then
@@ -184,8 +225,27 @@ end
 local function GenerateCode(rules)
     if not rules or #rules == 0 then return nil end
     local L = {}
+
+    -- Scan rules to determine whether currentEnergy is actually referenced.
+    -- The secondary resource is always declared when the spec has one, so it
+    -- is available to write conditions against even before any resource rule exists.
+    local needsEnergy = false
+    for _, rule in ipairs(rules) do
+        for _, cond in ipairs(rule.conditions or {}) do
+            if cond.type == "resource" and cond.resource == "energy" then
+                needsEnergy = true
+            end
+        end
+    end
+    local _sec = SPEC_SECONDARY[editSpecID]   -- nil for specs with no queryable secondary
+
     L[#L+1] = "local spellID = C_AssistedCombat.GetNextCastSpell()"
-    L[#L+1] = "local chi = UnitPower(\"player\", Enum.PowerType.Chi)"
+    if needsEnergy then
+        L[#L+1] = 'local currentEnergy = UnitPower("player", Enum.PowerType.Energy)'
+    end
+    if _sec then
+        L[#L+1] = ('local %s = UnitPower("player", Enum.PowerType.%s)'):format(_sec.varName, _sec.powerType)
+    end
     L[#L+1] = ""
 
     -- Pre-pass: build all condition fragments for every rule so we can count
@@ -582,7 +642,7 @@ local rightPanel   = nil   -- condition editor panel
 local condInputArea= nil   -- "add condition" sub-frame inside rightPanel
 
 local workingRules = {}    -- deep-copy being edited
-local editSpecID   = 0
+-- editSpecID declared at top of file (forward declaration) so COND_TYPES closures can see it
 local sessionRules = {}    -- in-session cache: specID -> workingRules table (survives close/reopen)
 local selectedIdx  = 0     -- 1-based; 0 = none
 local isAddingCond = false
@@ -592,6 +652,7 @@ local rowFrames        = {}    -- pool of rule-row frames
 local condRowPool      = {}    -- pool of condition-row frames in right panel
 local condJunctionPool = {}    -- pool of AND/OR junction toggles between condition rows
 local condGroupBoxPool = {}    -- pool of backdrop boxes for matched parenthesis groups
+local condRowYList     = {}    -- panel-relative Y of each cond row top (for drag hit-testing)
 
 -- Forward declarations
 local RefreshRuleList, RefreshRightPanel
@@ -599,6 +660,9 @@ local RefreshRuleList, RefreshRightPanel
 local ruleDrag      -- assigned in section 11 initialiser block
 local dragIconFrame, dragCatcher
 local EnsureDragIcon, EnsureDragCatcher
+-- Condition-drag forward declarations
+local condDrag, condCatcher, condDropLine
+local EnsureCondCatcher
 
 local function GetPanelWidths(totalWidth)
     totalWidth = totalWidth or (guiFrame and guiFrame:GetWidth()) or GUI_W
@@ -626,10 +690,10 @@ local function CreateRowFrame(parent)
     SetBD(f, 0.06, 0.10, 0.16, 0.88, 0.14, 0.24, 0.40)
     f:EnableMouse(true)
 
-    -- Priority badge
-    f.badge = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    -- Priority badge (GameFontNormal keeps 2-digit numbers inside the 26px width)
+    f.badge = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     f.badge:SetPoint("TOPLEFT", f, "TOPLEFT", 6, -4)
-    f.badge:SetSize(20, 20)
+    f.badge:SetSize(26, 20)
     f.badge:SetJustifyH("CENTER")
     f.badge:SetTextColor(0.4, 0.62, 0.90, 1)
 
@@ -732,6 +796,17 @@ local GROUP_BOX_COLORS = {
 local function ParenColorCode(depth)
     local c = GROUP_BOX_COLORS[((depth - 1) % #GROUP_BOX_COLORS) + 1]
     return ("|cff%02x%02x%02x"):format(c[5]*255, c[6]*255, c[7]*255)
+end
+
+-- Returns true if the conditions for a rule have mismatched parentheses.
+local function HasParenMismatch(conds)
+    local depth = 0
+    for _, cond in ipairs(conds or {}) do
+        depth = depth + (cond.lparen or 0)
+        depth = depth - (cond.rparen or 0)
+        if depth < 0 then return true end   -- unmatched close
+    end
+    return depth ~= 0                       -- unclosed open(s)
 end
 
 local function UpdateRowFrame(f, idx, rule)
@@ -872,7 +947,12 @@ local function UpdateRowFrame(f, idx, rule)
     f:SetSize(leftW - PAD * 2, rowFrameH)
     f:Show()
 
-    if idx == selectedIdx then
+    local hasMismatch = HasParenMismatch(rule.conditions)
+    if hasMismatch then
+        -- Red tint for paren mismatch regardless of selection state
+        f:SetBackdropColor(0.30, 0.04, 0.04, 0.95)
+        f:SetBackdropBorderColor(0.90, 0.18, 0.18, 1)
+    elseif idx == selectedIdx then
         f:SetBackdropColor(0.08, 0.20, 0.36, 0.95)
         f:SetBackdropBorderColor(0.28, 0.58, 0.90, 1)
     else
@@ -896,6 +976,16 @@ RefreshRuleList = function()
     local count = #workingRules
     leftChild:SetWidth(GetLeftPanelWidth())
     local yOff = -PAD
+
+    -- Find the first unconditional rule (no conditions = always returns, shadows everything below)
+    local firstUnconditionalIdx = math.huge
+    for i = 1, count do
+        if #(workingRules[i].conditions or {}) == 0 then
+            firstUnconditionalIdx = i
+            break
+        end
+    end
+
     for i = 1, count do
         if not rowFrames[i] then
             rowFrames[i] = CreateRowFrame(leftChild)
@@ -903,6 +993,8 @@ RefreshRuleList = function()
         UpdateRowFrame(rowFrames[i], i, workingRules[i])
         -- Position after UpdateRowFrame has set _rowH
         local rf = rowFrames[i]
+        -- Dim rules that can never be reached (shadowed by a prior unconditional return)
+        rf:SetAlpha(i > firstUnconditionalIdx and 0.40 or 1.0)
         rf:ClearAllPoints()
         rf:SetPoint("TOPLEFT", leftChild, "TOPLEFT", PAD, yOff)
         yOff = yOff - (rf._rowH or ROW_H)
@@ -1585,6 +1677,13 @@ local function CreateCondInputArea(parent)
     end
     f.RefreshSize     = RefreshSize
 
+    -- Update the secondary-resource button label to match the spec now being edited.
+    -- Call whenever editSpecID changes (e.g. from OpenGUI).
+    f.RefreshSpec = function()
+        local sec = SPEC_SECONDARY[editSpecID] or SPEC_SECONDARY_DEFAULT
+        chiBtn:SetText(sec.label)
+    end
+
     f.Reset = function()
         selType = nil; spellSel = "this"; resSel = "chi"; opSel = ">="
         timerOpSel = "<"
@@ -1782,6 +1881,7 @@ RefreshRightPanel = function()
     for _, row in ipairs(condRowPool)      do row:Hide() end
     for _, jf  in ipairs(condJunctionPool) do jf:Hide()  end
     for _, box in ipairs(condGroupBoxPool) do box:Hide() end
+    condRowYList = {}
 
     local rule = workingRules[selectedIdx]
 
@@ -1902,6 +2002,7 @@ RefreshRightPanel = function()
         row:SetSize(GetRightPanelWidth() - 12, 22)
         row:SetPoint("TOPLEFT", rightPanel, "TOPLEFT", 6, yBase)
         rowYTops[i] = yBase
+        condRowYList[i] = yBase   -- record for drag drop-slot detection
         row._lbl:SetText(CondSummaryText(cond, rule.spellID))
         row._lbl:SetTextColor(cond.negate and 1 or 0.78, cond.negate and 0.38 or 0.90, cond.negate and 0.38 or 1, 1)
         local capturedI    = i
@@ -1982,9 +2083,51 @@ RefreshRightPanel = function()
         row:EnableMouse(true)
         row:SetScript("OnMouseDown", function(self, btn)
             if btn == "LeftButton" then
+                -- Start pending drag; click vs drag resolved in OnMouseUp
+                EnsureCondCatcher()
+                local cx, cy = GetCursorPosition()
+                local sc = UIParent:GetEffectiveScale()
+                condDrag.pending  = true
+                condDrag.active   = false
+                condDrag.fromIdx  = capturedI
+                condDrag.toSlot   = nil
+                condDrag.pendingX = cx / sc
+                condDrag.pendingY = cy / sc
+            end
+        end)
+        row:SetScript("OnMouseUp", function(self, btn)
+            -- WoW always sends OnMouseUp to the frame that received OnMouseDown,
+            -- so this handler fires on release regardless of cursor position.
+            if btn ~= "LeftButton" then return end
+            if condDropLine then condDropLine:Hide() end
+            if condDrag.pending then
+                -- No significant movement: treat as a click to open editor
+                condDrag.pending = false
+                condDrag.fromIdx = nil
                 selectedCondIdx = capturedI
                 isAddingCond = true
                 RefreshRightPanel()
+            elseif condDrag.active then
+                -- Drop: move condition; strip parens to avoid breaking paren groups
+                condDrag.active = false
+                local fromIdx = condDrag.fromIdx
+                local toSlot  = condDrag.toSlot
+                condDrag.fromIdx = nil
+                condDrag.toSlot  = nil
+                local rule = selectedIdx > 0 and workingRules[selectedIdx]
+                if rule and fromIdx and toSlot
+                   and fromIdx ~= toSlot and fromIdx ~= toSlot - 1 then
+                    local conds    = rule.conditions
+                    local moved    = table.remove(conds, fromIdx)
+                    moved.lparen   = 0   -- don't drag paren-grouping structure
+                    moved.rparen   = 0
+                    local insertAt = (toSlot > fromIdx) and (toSlot - 1) or toSlot
+                    table.insert(conds, insertAt, moved)
+                    selectedCondIdx = nil
+                    isAddingCond = false
+                    RefreshRightPanel()
+                    RefreshRuleList()
+                end
             end
         end)
         row:SetScript("OnEnter", function()
@@ -2099,6 +2242,7 @@ end
 local sbasDrag = { active = false, spellID = nil, spellName = nil }
 -- Assign into the forward-declared upvalues so CreateRowFrame closures can see them
 ruleDrag      = { active = false, fromIdx = nil, pending = false, pendingX = 0, pendingY = 0 }
+condDrag      = { active = false, pending = false, fromIdx = nil, pendingX = 0, pendingY = 0, toSlot = nil }
 dragIconFrame = nil
 dragCatcher   = nil
 local dropIndicator = nil   -- horizontal line shown between rows while reordering
@@ -2613,6 +2757,95 @@ EnsureDragCatcher = function()
     end)
 end
 
+-------------------------------------------------------------------------------
+-- Condition drag-drop (reorder conditions inside the right panel)
+-- NOTE: In WoW, OnMouseUp ALWAYS fires on the frame that received OnMouseDown,
+-- even if the cursor has moved far away.  There is no need for a full-screen
+-- mouse-catcher here; the condition row's own OnMouseUp handles the drop.
+-------------------------------------------------------------------------------
+EnsureCondCatcher = function()
+    if condCatcher then return end
+
+    -- Drop-line indicator (cyan horizontal bar between rows)
+    condDropLine = CreateFrame("Frame", nil, UIParent)
+    condDropLine:SetHeight(2)
+    condDropLine:SetFrameStrata("TOOLTIP")
+    condDropLine:Hide()
+    local diTex = condDropLine:CreateTexture(nil, "ARTWORK")
+    diTex:SetAllPoints()
+    diTex:SetColorTexture(0.3, 0.85, 1, 0.95)
+
+    -- Lightweight ticker: handles threshold detection, drop-slot calculation,
+    -- and drop-line positioning only.  The actual reorder happens in the
+    -- condition row's OnMouseUp (which WoW reliably sends to the row that
+    -- received OnMouseDown, regardless of cursor position at release time).
+    condCatcher = CreateFrame("Frame", "SBAS_CondDragTicker", UIParent)
+    condCatcher:SetScript("OnUpdate", function()
+        if not condDrag.pending and not condDrag.active then
+            if condDropLine then condDropLine:Hide() end
+            return
+        end
+
+        local cx, cy = GetCursorPosition()
+        local sc = UIParent:GetEffectiveScale()
+        cx, cy = cx / sc, cy / sc
+
+        if condDrag.pending then
+            if not IsMouseButtonDown("LeftButton") then
+                -- Released before threshold; row's OnMouseUp will handle it
+                return
+            end
+            local dx = cx - condDrag.pendingX
+            local dy = cy - condDrag.pendingY
+            if dx * dx + dy * dy > 64 then
+                condDrag.pending = false
+                condDrag.active  = true
+            end
+            return
+        end
+
+        if not condDrag.active then return end
+
+        -- Safety net: mouse released outside all condition row frames
+        if not IsMouseButtonDown("LeftButton") then
+            condDrag.active  = false
+            condDrag.fromIdx = nil
+            condDrag.toSlot  = nil
+            if condDropLine then condDropLine:Hide() end
+            return
+        end
+
+        -- Update drop slot from cursor position
+        local rule     = selectedIdx > 0 and workingRules[selectedIdx]
+        local numConds = rule and #(rule.conditions or {}) or 0
+        local panelTop = rightPanel and rightPanel:GetTop()
+        if not panelTop or numConds == 0 then return end
+
+        local relY = cy - panelTop
+        local slot = numConds + 1
+        for j = 1, numConds do
+            if relY > (condRowYList[j] or 0) - 11 then
+                slot = j
+                break
+            end
+        end
+        condDrag.toSlot = slot
+
+        -- Position drop-line indicator
+        local lineY
+        if slot <= numConds then
+            lineY = condRowYList[slot] or 0
+        else
+            lineY = (condRowYList[numConds] or 0) - 22
+        end
+        local panelLeft = rightPanel:GetLeft() or 0
+        condDropLine:ClearAllPoints()
+        condDropLine:SetWidth(GetRightPanelWidth() - 12)
+        condDropLine:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", panelLeft + 6, panelTop + lineY)
+        condDropLine:Show()
+    end)
+end
+
 local function CreateSpellbookPanel(f, leftSF)
     EnsureDragIcon()
     EnsureDragCatcher()
@@ -3109,6 +3342,20 @@ local function CreateGUI()
     saveBtn:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", PAD, PAD + 4)
     saveBtn:SetText("Save & Apply")
     saveBtn:SetScript("OnClick", function()
+        -- Validate parentheses before saving
+        local mismatchedPriorities = {}
+        for i, rule in ipairs(workingRules) do
+            if HasParenMismatch(rule.conditions) then
+                mismatchedPriorities[#mismatchedPriorities + 1] = i
+            end
+        end
+        if #mismatchedPriorities > 0 then
+            local nums = table.concat(mismatchedPriorities, ", ")
+            print("|cffFF4444SBAS Override GUI:|r Save blocked — mismatched parentheses in "
+                  .. "priorit" .. (#mismatchedPriorities == 1 and "y " or "ies ")
+                  .. nums .. ". Fix the red rows first.")
+            return
+        end
         -- Persist GUI rules
         GuiDB()[editSpecID] = DeepCopyRules(workingRules)
         -- Keep the session cache in sync
@@ -3118,7 +3365,8 @@ local function CreateGUI()
         local code = GenerateCode(workingRules) or ""
         SBA_SimpleDB.specs                         = SBA_SimpleDB.specs or {}
         SBA_SimpleDB.specs[editSpecID]             = SBA_SimpleDB.specs[editSpecID] or {}
-        SBA_SimpleDB.specs[editSpecID].overrideCode = code
+        SBA_SimpleDB.specs[editSpecID].overrideCode   = code
+        SBA_SimpleDB.specs[editSpecID].overrideSource = "gui"
         SBA_SimpleDB.overrideCode                  = code
 
         -- Compile if editing current spec
@@ -3129,6 +3377,11 @@ local function CreateGUI()
         print("|cff00ff99SBAS Override GUI:|r Priority list saved for "
               .. GetSpecName(editSpecID))
         f:Hide()
+        -- Refresh the analyzer if it is currently visible (GUI save keeps it relevant)
+        local af = _G["SBAS_OverrideAnalyzerFrame"]
+        if af and af:IsShown() and type(_G.SBAS_OpenOrRefreshAnalyzer) == "function" then
+            _G.SBAS_OpenOrRefreshAnalyzer(editSpecID, GetSpecName(editSpecID))
+        end
     end)
 
     local previewBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
@@ -3205,6 +3458,8 @@ local function OpenGUI(specID, displayName)
 
     if targetSpec ~= editSpecID then
         editSpecID = targetSpec
+        -- Refresh the condition editor's secondary-resource button label for the new spec
+        if condInputArea and condInputArea.RefreshSpec then condInputArea.RefreshSpec() end
         if sessionRules[editSpecID] then
             -- Already seen this spec this session — reuse the live in-memory table
             workingRules = sessionRules[editSpecID]
@@ -3232,7 +3487,98 @@ local function OpenGUI(specID, displayName)
     RefreshRightPanel()
 end
 
-_G.SBAS_OpenOverrideGUI = OpenGUI
+_G.SBAS_OpenOverrideGUI    = OpenGUI
+-- Expose condition-summary renderer for the Priority Analyzer.
+-- Returns a human-readable short string for one condition.
+_G.SBAS_CondSummaryText    = CondSummaryText
+
+-- Builds the full decorated display token for one condition, matching the right
+-- panel's exact format: [AND/OR] [(s] [NOT] label [)s]
+-- parenDepth: running parenthesis depth coming INTO this condition (updated in-place
+-- via the returned second value).  Pass 0 for the first call.
+-- isFirst: pass true for condition index 1 (suppresses the junction prefix).
+_G.SBAS_BuildCondRowText = function(cond, ruleSpellID, isFirst, parenDepthIn)
+    local depth = parenDepthIn or 0
+    local def   = COND_BY_ID[cond.type]
+    if not def then
+        return ("[" .. (cond.type or "?") .. "]"), depth
+    end
+
+    -- Junction prefix
+    local junction = ""
+    if not isFirst then
+        local j = cond.junction or "and"
+        junction = "|cff8899cc" .. j:upper() .. "|r "
+    end
+
+    -- Parentheses
+    local lp = ""
+    local rp = ""
+    local depthBefore = depth
+    for k = 1, (cond.lparen or 0) do
+        local d = depthBefore + k
+        lp = lp .. ParenColorCode(d) .. "(" .. "|r"
+    end
+    depth = depth + (cond.lparen or 0)
+    for k = 1, (cond.rparen or 0) do
+        local d = depth - (k - 1)
+        rp = rp .. ParenColorCode(d) .. ")" .. "|r"
+    end
+    depth = depth - (cond.rparen or 0)
+
+    -- Label — mirrors the UpdateRowFrame token-building logic exactly
+    local label = def.shortLabel or def.label
+    if def.needsSpell then
+        if cond.type == "sba_suggests" then
+            local op = "="
+            if not cond.spell or cond.spell == "this" then
+                label = "SBA " .. op .. " [this]"
+            else
+                local sid = type(cond.spell) == "number" and cond.spell or cond.targetID
+                local sInfo = sid and C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(sid)
+                local sIcon = sInfo and sInfo.iconID
+                if sIcon then
+                    label = "SBA " .. op .. " |T" .. sIcon .. ":14:14|t"
+                else
+                    label = "SBA " .. op .. " [" .. tostring(sid or "?") .. "]"
+                end
+            end
+        elseif not cond.spell or cond.spell == "this" then
+            local rInfo = ruleSpellID and C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(ruleSpellID)
+            local rIcon = rInfo and rInfo.iconID
+            if rIcon then
+                label = label .. " |T" .. rIcon .. ":14:14|t"
+            end
+        else
+            local sid = type(cond.spell) == "number" and cond.spell or cond.targetID
+            local sInfo = sid and C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(sid)
+            local sIcon = sInfo and sInfo.iconID
+            if sIcon then
+                label = label .. " |T" .. sIcon .. ":14:14|t"
+            elseif sid then
+                label = label .. " [" .. tostring(sid) .. "]"
+            end
+        end
+    elseif def.needsPlugin then
+        local pLabel = cond.plugin or "?"
+        for _, opt in ipairs(PLUGIN_OPTS) do
+            if opt.id == cond.plugin then pLabel = opt.label; break end
+        end
+        if cond.plugin == "docj_timer" then
+            label = pLabel .. " " .. (cond.operator or "<") .. " " .. tostring(cond.value or 4)
+        else
+            label = pLabel
+        end
+    elseif def.needsResource then
+        local res = cond.resource or "chi"
+        local op  = cond.operator or ">="
+        local val = tostring(cond.value or 0)
+        label = res .. " " .. op .. " " .. val
+    end
+
+    local labelText = cond.negate and ("|cffff4444NOT " .. label .. "|r") or label
+    return junction .. lp .. labelText .. rp, depth
+end
 
 -------------------------------------------------------------------------------
 -- 14. Hook the existing slash command to add "override_gui"

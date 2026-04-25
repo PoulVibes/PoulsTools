@@ -519,7 +519,8 @@ local function CreateOverrideFrame()
         local code = editBox:GetText()
         local specID = overrideEditorTargetSpec or GetCurrentSpecID()
         local specDB = GetSpecDB(specID)
-        specDB.overrideCode = code
+        specDB.overrideCode   = code
+        specDB.overrideSource = "code"
         -- mirror to top-level for legacy compatibility
         GetDB().overrideCode = code
 
@@ -542,6 +543,9 @@ local function CreateOverrideFrame()
         overrideEditorPreviewCode = nil
         overrideEditorPreviewMode = false
         f:Hide()
+        -- Code override makes the analyzer irrelevant; hide it if open
+        local af = _G["SBAS_OverrideAnalyzerFrame"]
+        if af and af:IsShown() then af:Hide() end
     end)
 
     return f
