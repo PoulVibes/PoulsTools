@@ -24,7 +24,7 @@
 SBA_SimpleDB
 ├── gui[specID][]            -- GUI rules (source of truth for GUI builder)
 │   └── { spellID, name, conditions[] }
-│       └── condition: { type, negate, value, spell, targetID, resource, operator, plugin, junction, lparen, rparen }
+│       └── condition: { type, negate, value, luaCode, spell, targetID, resource, operator, plugin, junction, lparen, rparen }
 ├── specs[specID].overrideCode  -- generated/saved Lua code per spec
 └── overrideCode             -- legacy top-level mirror
 ```
@@ -44,6 +44,7 @@ Defined at top of `SBA_Simple_OverrideGUI.lua`. Each entry:
   needsSpell    = true,   -- shows This Spell / Other Spell toggle
   needsValue    = true,   -- shows numeric input; use valueLabel/default
   needsResource = true,   -- shows Chi/Energy selector + operator + value
+  needsLua      = true,   -- shows a Lua expression text input
   needsPlugin   = true,   -- shows plugin/proc dropdown
   generate = function(cond, ruleSpellID) → "Lua fragment string" end
 }
@@ -54,13 +55,14 @@ Defined at top of `SBA_Simple_OverrideGUI.lua`. Each entry:
 ### Current Condition Types
 | id | Label | Output fragment |
 |---|---|---|
-| `on_cd` | On Cooldown | `C_Spell.GetSpellCooldown(id).isActive` |
+| `on_cd` | Ready (Off-Cooldown) | `(not C_Spell.GetSpellCooldown(id).isActive or C_Spell.GetSpellCooldown(id).isOnGCD)` |
 | `reactive_enabled` | Reactive Spell Enabled | `C_Spell.GetSpellCooldown(id).isEnabled` |
 | `usable` | Is Usable | `C_Spell.IsSpellUsable(id)` |
 | `talented` | Talented | `IsPlayerSpell(id)` |
 | `last_combo_eq` | Last Combo Strike = Spell | `LastComboStrikeSpellID == id` |
-| `sba_suggests` | SBA Suggests This Spell | `spellID == id` |
-| `resource` | Resource Check | `chi/currentEnergy >= value` |
+| `sba_suggests` | SBA Suggests | `spellID == id` |
+| `resource` | Resource Check | `currentEnergy` or spec-secondary var with selected operator/value |
+| `custom_lua` | Custom Lua Expression | `(lua expression)` (falls back to `false` if empty) |
 | `plugin` | Plugin / Proc | Zenith/BOK/RWK/DOCJ booleans |
 
 **To add a condition type:** append a new entry to the `COND_TYPES` table. If it needs a custom input, add the appropriate `needs*` flag and handle it in `CreateCondInputArea`.
@@ -136,7 +138,9 @@ Unmatched entries cause red highlighting on the relevant paren buttons.
 Hides old boxes, draws a backdrop box per matched span. Outer groups draw first (lower frame level); depth cycling color from `GROUP_BOX_COLORS[3]`.
 
 ### `GenerateCode(rules)`
-Compiles `workingRules` into a Lua string. Preamble declares `spellID`, `chi`.  
+Compiles `workingRules` into a Lua string. Preamble always declares `spellID`,
+optionally declares `currentEnergy` if needed, and declares a spec-aware secondary
+resource variable when available (for specs with an SVS-queryable secondary resource).  
 Each rule generates: `if lp .. fragment .. rp [and/or ...] then return spellID end`.  
 No conditions → `return spellID  -- unconditional` (blocks everything below).
 
@@ -144,7 +148,7 @@ No conditions → `return spellID  -- unconditional` (blocks everything below).
 Returns frame `f` with public interface:
 - `f.Reset()` — clears all fields
 - `f.Populate(cond)` — fills fields from an existing condition table
-- `f.GetSelectedType/GetValue/GetNegate/GetResource/GetOperator/GetPlugin/GetSpell` — read current selections
+- `f.GetSelectedType/GetValue/GetNegate/GetResource/GetOperator/GetPlugin/GetSpell/GetLuaCode` — read current selections
 - `f.RefreshSize()` — resizes widgets to current `GetRightPanelWidth()`
 - `f.confirmBtn` — set text to "Add" or "Update"; `OnClick` is wired in `RefreshRightPanel`
 
@@ -153,11 +157,12 @@ Returns frame `f` with public interface:
 ## Preview vs Save Flow
 
 **Preview Code button:**
-1. Calls `GenerateCode(workingRules)`.
-2. Calls `SBA_Simple_ShowOverridePreview(code, editSpecID, specName)` in `SBA_Simple.lua`.
-3. Raw override editor opens showing the generated code with `(Preview)` suffix in title.
-4. Closing without clicking "Override Logic" → `OnHide` clears `overrideEditorPreviewMode` (discards).
-5. Clicking "Override Logic" → saves to DB and compiles.
+1. If `SBAS_OverrideFrame` is already shown, it closes the frame (toggle behavior).
+2. Otherwise calls `GenerateCode(workingRules)`.
+3. Calls `SBA_Simple_ShowOverridePreview(code, editSpecID, specName)` in `SBA_Simple.lua`.
+4. Raw override editor opens showing the generated code with `(Preview)` suffix in title.
+5. Closing without clicking "Override Logic" → `OnHide` clears `overrideEditorPreviewMode` (discards).
+6. Clicking "Override Logic" → saves to DB and compiles.
 
 **Save & Apply button:**
 - Writes `workingRules` directly to `SBA_SimpleDB.gui[editSpecID]`.
@@ -197,7 +202,9 @@ Add it in `CreateGUI()` after the existing footer buttons, anchored relative to 
 Edit `GROUP_BOX_COLORS` at the top of `DrawConditionGroupBoxes`.
 
 ### Change how `GenerateCode` works
-Edit the `GenerateCode(rules)` function. The preamble variables (`spellID`, `chi`) are always emitted; add others if new condition types need them (e.g., `currentEnergy`).
+Edit the `GenerateCode(rules)` function. `spellID` is always emitted.
+`currentEnergy` is emitted only if required by rules, and spec-secondary resource
+variables are emitted only for specs that have a mapped SVS-queryable secondary.
 
 ---
 

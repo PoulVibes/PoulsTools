@@ -13,8 +13,9 @@ My goal is simple: bring back the quality-of-life rotation helpers and informati
 A single-spell suggestion display that improves on Blizzard's Assisted Combat system.
 
 - Displays the Assisted Combat suggestion by default — zero configuration required
-- Supports custom override logic written in Lua for per-spec fine-tuning
-- Override code runs surprisingly well in practice
+- Supports per-spec overrides via raw Lua or the graphical priority-list builder
+- Includes advanced condition editing and custom Lua expression conditions
+- Override code lets you pick your rotational priorities
 
 ---
 
