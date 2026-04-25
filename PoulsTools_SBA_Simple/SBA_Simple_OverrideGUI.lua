@@ -276,8 +276,8 @@ end
 -------------------------------------------------------------------------------
 local function GetSpecName(specID)
     if specID and specID > 0 and GetSpecializationInfoByID then
-        local name = select(1, GetSpecializationInfoByID(specID))
-        if name then return name end
+        local specName = select(2, GetSpecializationInfoByID(specID))
+        if specName then return specName end
     end
     return "Spec " .. tostring(specID)
 end
@@ -2918,7 +2918,7 @@ end
 -------------------------------------------------------------------------------
 -- 13. Open the GUI
 -------------------------------------------------------------------------------
-local function OpenGUI(specID)
+local function OpenGUI(specID, displayName)
     if not guiFrame then CreateGUI() end
 
     local targetSpec = specID or CurrentSpecID()
@@ -2943,7 +2943,7 @@ local function OpenGUI(specID)
         sessionRules[editSpecID] = workingRules
     end
 
-    guiFrame.title:SetText("SBA Override Builder — " .. GetSpecName(editSpecID))
+    guiFrame.title:SetText("SBA Override Builder — " .. (displayName or GetSpecName(editSpecID)))
     guiFrame:Show()
     -- Refresh the flyout spell list on every open so it reflects the current
     -- spec, any newly cast override spells, and talent changes.

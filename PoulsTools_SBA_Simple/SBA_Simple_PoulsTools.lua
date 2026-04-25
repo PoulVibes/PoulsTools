@@ -36,7 +36,7 @@ local function OnBuildUI(parent)
 
     -- track all spec buttons so we can enable/disable and refresh their colors
     local specButtons = {}
-    local BUTTON_WIDTH = 520 / 4
+    local ACTION_BTN_W = 120
 
     anchor = W:Checkbox(parent, anchor, y,
         "Enabled",
@@ -164,48 +164,63 @@ local function OnBuildUI(parent)
                             local targetID = matchingID or expectedID
                             local displayName = (targetID and apiSpecNameByID[targetID]) or expectedName
 
-                            local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-                            btn:SetSize(BUTTON_WIDTH, 22)
-                            btn:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 12, y)
-                            btn:SetText(displayName)
-                            local f = btn:GetFontString()
-                            if f then
-                                f:SetJustifyH("LEFT")
-                                f:ClearAllPoints()
-                                f:SetPoint("LEFT", btn, "LEFT", 8, 0)
-                                f:SetWidth(BUTTON_WIDTH - 40)
-                            end
-
                             -- determine initial color (gray if no per-spec entry or empty override)
                             local db = SBA_SimpleDB or {}
                             local hasText = false
                             if targetID and db.specs and db.specs[targetID] and db.specs[targetID].overrideCode and not db.specs[targetID].overrideCode:match("^%s*$") then
                                 hasText = true
                             end
-                            if f then
-                                if hasText then f:SetTextColor(unpack(W.colors.warning)) else f:SetTextColor(unpack(W.colors.textMuted)) end
+
+                            -- Spec name label (colored by override state)
+                            local specLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+                            specLabel:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 14, y)
+                            specLabel:SetText(displayName)
+                            if hasText then specLabel:SetTextColor(unpack(W.colors.warning)) else specLabel:SetTextColor(unpack(W.colors.textMuted)) end
+                            y = y - 18
+
+                            -- 4 action buttons: Override Tool | Override Code | Recommended | Clear Override
+                            local actionDefs = {
+                                { "Override Tool", function()
+                                    for _, se in ipairs(specButtons) do for _, sb in ipairs(se.btns or {}) do sb:Disable() end end
+                                    if _G.SBAS_OpenOverrideGUI then _G.SBAS_OpenOverrideGUI(targetID, cname .. " — " .. displayName) end
+                                end },
+                                { "Override Code", function()
+                                    for _, se in ipairs(specButtons) do for _, sb in ipairs(se.btns or {}) do sb:Disable() end end
+                                    SBA_Simple_ShowOverrideForSpec(targetID, cname .. " — " .. displayName)
+                                end },
+                                { "Recommended",   function() end },
+                                { "Clear Override", function()
+                                    SBA_SimpleDB = SBA_SimpleDB or {}
+                                    SBA_SimpleDB.specs = SBA_SimpleDB.specs or {}
+                                    SBA_SimpleDB.specs[targetID] = SBA_SimpleDB.specs[targetID] or {}
+                                    SBA_SimpleDB.specs[targetID].overrideCode = ""
+                                    specLabel:SetTextColor(unpack(W.colors.textMuted))
+                                end },
+                            }
+                            local actionBtns = {}
+                            for i, def in ipairs(actionDefs) do
+                                local ab = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+                                ab:SetSize(ACTION_BTN_W, 22)
+                                ab:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 12 + (i - 1) * ACTION_BTN_W, y)
+                                ab:SetText(def[1])
+                                ab:SetScript("OnClick", def[2])
+                                actionBtns[i] = ab
                             end
-
-                            -- store for later enable/disable and refresh
-                            table.insert(specButtons, { btn = btn, id = targetID })
-
-                            -- Clicking will open the override editor for targetID (creates DB entry if missing)
-                            btn:SetScript("OnClick", function()
-                                for _, e in ipairs(specButtons) do e.btn:Disable() end
-                                SBA_Simple_ShowOverrideForSpec(targetID, cname .. " — " .. displayName)
-                            end)
 
                             -- If the client API doesn't report this spec ID, show an explanatory tooltip
                             if targetID and not apiSpecByID[targetID] then
-                                btn:SetScript("OnEnter", function(self)
-                                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                                    local tip = "Spec not reported by this client API; clicking will create per-spec data for id: " .. tostring(targetID)
-                                    GameTooltip:SetText(tip, 1,1,1)
-                                    GameTooltip:Show()
-                                end)
-                                btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                                for _, ab in ipairs(actionBtns) do
+                                    ab:SetScript("OnEnter", function(self)
+                                        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                                        GameTooltip:SetText("Spec not reported by this client API; id: " .. tostring(targetID), 1, 1, 1)
+                                        GameTooltip:Show()
+                                    end)
+                                    ab:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                                end
                             end
 
+                            -- store label + action buttons for enable/disable and color refresh
+                            table.insert(specButtons, { btns = actionBtns, label = specLabel, id = targetID })
                             y = y - 26
                         end
                 else
@@ -213,34 +228,47 @@ local function OnBuildUI(parent)
                     for si = 1, num do
                         local specID, specName = GetSpecializationInfoForClassID(si, classID)
                         if specName then
-                            local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-                            btn:SetSize(BUTTON_WIDTH, 22)
-                            btn:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 12, y)
-                            btn:SetText(specName)
-                            local f = btn:GetFontString()
-                            if f then
-                                f:SetJustifyH("LEFT")
-                                f:ClearAllPoints()
-                                f:SetPoint("LEFT", btn, "LEFT", 8, 0)
-                                f:SetWidth(BUTTON_WIDTH - 40)
-                            end
-
                             -- determine initial color based on saved DB
                             local db = SBA_SimpleDB or {}
                             local hasText = false
                             if specID and db.specs and db.specs[specID] and db.specs[specID].overrideCode and not db.specs[specID].overrideCode:match("^%s*$") then
                                 hasText = true
                             end
-                            if f then
-                                if hasText then f:SetTextColor(unpack(W.colors.warning)) else f:SetTextColor(unpack(W.colors.textMuted)) end
+
+                            local specLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+                            specLabel:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 14, y)
+                            specLabel:SetText(specName)
+                            if hasText then specLabel:SetTextColor(unpack(W.colors.warning)) else specLabel:SetTextColor(unpack(W.colors.textMuted)) end
+                            y = y - 18
+
+                            local actionDefs = {
+                                { "Override Tool", function()
+                                    for _, se in ipairs(specButtons) do for _, sb in ipairs(se.btns or {}) do sb:Disable() end end
+                                    if _G.SBAS_OpenOverrideGUI then _G.SBAS_OpenOverrideGUI(specID, cname .. " — " .. specName) end
+                                end },
+                                { "Override Code", function()
+                                    for _, se in ipairs(specButtons) do for _, sb in ipairs(se.btns or {}) do sb:Disable() end end
+                                    SBA_Simple_ShowOverrideForSpec(specID, cname .. " — " .. specName)
+                                end },
+                                { "Recommended",   function() end },
+                                { "Clear Override", function()
+                                    SBA_SimpleDB = SBA_SimpleDB or {}
+                                    SBA_SimpleDB.specs = SBA_SimpleDB.specs or {}
+                                    SBA_SimpleDB.specs[specID] = SBA_SimpleDB.specs[specID] or {}
+                                    SBA_SimpleDB.specs[specID].overrideCode = ""
+                                    specLabel:SetTextColor(unpack(W.colors.textMuted))
+                                end },
+                            }
+                            local actionBtns = {}
+                            for i, def in ipairs(actionDefs) do
+                                local ab = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+                                ab:SetSize(ACTION_BTN_W, 22)
+                                ab:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 12 + (i - 1) * ACTION_BTN_W, y)
+                                ab:SetText(def[1])
+                                ab:SetScript("OnClick", def[2])
+                                actionBtns[i] = ab
                             end
-
-                            table.insert(specButtons, { btn = btn, id = specID })
-
-                            btn:SetScript("OnClick", function()
-                                for _, e in ipairs(specButtons) do e.btn:Disable() end
-                                SBA_Simple_ShowOverrideForSpec(specID, cname .. " — " .. specName)
-                            end)
+                            table.insert(specButtons, { btns = actionBtns, label = specLabel, id = specID })
                             y = y - 26
                         end
                     end
@@ -255,44 +283,59 @@ local function OnBuildUI(parent)
         y = y - 18
     end
 
-    -- Manage spec buttons: re-enable and refresh colors when override frame closes
+    -- Manage spec buttons: re-enable and refresh label colors when any editor closes
     local function refreshSpecButtonColors()
         local db = SBA_SimpleDB or {}
         for _, e in ipairs(specButtons) do
-            local f = e.btn:GetFontString()
             local id = e.id
             local hasText = false
             if id and db.specs and db.specs[id] and db.specs[id].overrideCode and not db.specs[id].overrideCode:match("^%s*$") then
                 hasText = true
             end
-            if f then
-                if hasText then f:SetTextColor(unpack(W.colors.text)) else f:SetTextColor(unpack(W.colors.textMuted)) end
+            if e.label then
+                if hasText then e.label:SetTextColor(unpack(W.colors.warning)) else e.label:SetTextColor(unpack(W.colors.textMuted)) end
             end
         end
     end
 
     local function setSpecButtonsEnabled(enabled)
         for _, e in ipairs(specButtons) do
-            if enabled then e.btn:Enable() else e.btn:Disable() end
+            for _, b in ipairs(e.btns or {}) do
+                if enabled then b:Enable() else b:Disable() end
+            end
         end
     end
 
-    local overrideFrame = _G and _G["SBAS_OverrideFrame"]
-    if overrideFrame then
-        overrideFrame:HookScript("OnShow", function() setSpecButtonsEnabled(false) end)
-        overrideFrame:HookScript("OnHide", function() setSpecButtonsEnabled(true); refreshSpecButtonColors() end)
-    else
-        if type(SBA_Simple_ShowOverrideForSpec) == "function" then
-            local origShow = SBA_Simple_ShowOverrideForSpec
-            SBA_Simple_ShowOverrideForSpec = function(specID, displayName)
-                setSpecButtonsEnabled(false)
-                origShow(specID, displayName)
-                local f = _G and _G["SBAS_OverrideFrame"]
-                if f then
-                    f:HookScript("OnShow", function() setSpecButtonsEnabled(false) end)
-                    f:HookScript("OnHide", function() setSpecButtonsEnabled(true); refreshSpecButtonColors() end)
-                end
-            end
+    local function onEditorClose()
+        setSpecButtonsEnabled(true)
+        refreshSpecButtonColors()
+    end
+
+    -- Hook the text code editor (SBAS_OverrideFrame — always exists at this point)
+    local overrideCodeFrame = _G["SBAS_OverrideFrame"]
+    if overrideCodeFrame then
+        overrideCodeFrame:HookScript("OnShow", function() setSpecButtonsEnabled(false) end)
+        overrideCodeFrame:HookScript("OnHide", function() onEditorClose() end)
+    end
+
+    -- Hook the graphical GUI editor (SBAS_OverrideGUI_Frame — created lazily; wrap opener)
+    local _guiFrameHooked = false
+    local function ensureGUIFrameHooked()
+        if _guiFrameHooked then return end
+        local gf = _G["SBAS_OverrideGUI_Frame"]
+        if gf then
+            gf:HookScript("OnShow", function() setSpecButtonsEnabled(false) end)
+            gf:HookScript("OnHide", function() onEditorClose() end)
+            _guiFrameHooked = true
+        end
+    end
+
+    if type(_G.SBAS_OpenOverrideGUI) == "function" then
+        local _origOpenGUI = _G.SBAS_OpenOverrideGUI
+        _G.SBAS_OpenOverrideGUI = function(sid, dname)
+            setSpecButtonsEnabled(false)
+            _origOpenGUI(sid, dname)
+            ensureGUIFrameHooked()
         end
     end
 
