@@ -355,14 +355,14 @@ local function GenerateCode(rules)
                 if rule.spellID == SBA_BUTTON_SPELL_ID then
                     L[#L+1] = ("if %s then return spellID end"):format(expr)
                 else
-                    L[#L+1] = ("if IsPlayerSpell(%d) and (%s) then return %d end"):format(rule.spellID, expr, rule.spellID)
+                    L[#L+1] = ("if %s then return %d end"):format(expr, rule.spellID)
                 end
             else
                 -- No conditions: unconditional (this blocks everything below it)
                 if rule.spellID == SBA_BUTTON_SPELL_ID then
                     L[#L+1] = "return spellID  -- unconditional"
                 else
-                    L[#L+1] = ("if IsPlayerSpell(%d) then return %d end  -- unconditional"):format(rule.spellID, rule.spellID)
+                    L[#L+1] = ("return %d  -- unconditional"):format(rule.spellID)
                 end
                 hasUnconditional = true
             end
