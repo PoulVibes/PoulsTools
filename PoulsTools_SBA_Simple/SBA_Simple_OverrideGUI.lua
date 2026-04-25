@@ -30,19 +30,23 @@ end
 
 local COND_TYPES = {
     -- Spell-based checks (needsSpell = true → picker shows This Spell / Other Spell toggle)
-    { id = "on_cd",        label = "On Cooldown",               needsSpell = true,
-      generate = function(c, s) return ("C_Spell.GetSpellCooldown(%d).isActive"):format(ResolveSpell(c,s)) end },
-    { id = "reactive_enabled", label = "Reactive Spell Enabled", needsSpell = true,
+    { id = "on_cd",        label = "Ready (Off-Cooldown)",        shortLabel = "Ready",   needsSpell = true,
+      generate = function(c, s) local id = ResolveSpell(c,s) return ("(not C_Spell.GetSpellCooldown(%d).isActive or C_Spell.GetSpellCooldown(%d).isOnGCD)"):format(id, id) end },
+    { id = "reactive_enabled", label = "Reactive Spell Enabled",  shortLabel = "Enabled", needsSpell = true,
       generate = function(c, s) return ("C_Spell.GetSpellCooldown(%d).isEnabled"):format(ResolveSpell(c,s)) end },
-    { id = "usable",       label = "Is Usable",                 needsSpell = true,
+    { id = "usable",       label = "Is Usable",                  shortLabel = "Usable",  needsSpell = true,
       generate = function(c, s) return ("C_Spell.IsSpellUsable(%d)"):format(ResolveSpell(c,s)) end },
     { id = "talented",     label = "Talented",                  needsSpell = true,
       generate = function(c, s) return ("IsPlayerSpell(%d)"):format(ResolveSpell(c,s)) end },
     { id = "last_combo_eq",label = "Last Combo Strike = Spell", needsSpell = true,
       generate = function(c, s) return ("LastComboStrikeSpellID == %d"):format(ResolveSpell(c,s)) end },
     -- SBA
-    { id = "sba_suggests", label = "SBA Suggests This Spell",
-      generate = function(c, s) return ("spellID == %d"):format(s) end },
+    { id = "sba_suggests", label = "SBA Suggests", needsSpell = true,
+      generate = function(c, s)
+          local id = (not c.spell or c.spell == "this") and s
+                     or (type(c.spell) == "number" and c.spell or c.targetID or s)
+          return ("spellID == %d"):format(id)
+      end },
     -- Resource (Chi / Energy with operator)
     { id = "resource",     label = "Resource Check", needsResource = true,
       generate = function(c, s)
@@ -77,6 +81,18 @@ local PLUGIN_OPTS = {
 -------------------------------------------------------------------------------
 -- 2.  Data helpers
 -------------------------------------------------------------------------------
+
+-- The SBA "Single-Button Assistant" virtual button spell ID.
+-- When a player tries to add this spell to the priority list we substitute
+-- the spell that the Assisted Combat system is currently recommending.
+local SBA_BUTTON_SPELL_ID = 1229376
+
+-- Resolves a spell ID / name pair before inserting into the priority list.
+-- Returns: resolvedID, resolvedName  (both nil if resolution fails)
+local function ResolveSpellForAdd(id, name)
+    return id, name
+end
+
 local function GuiDB()
     SBA_SimpleDB       = SBA_SimpleDB or {}
     SBA_SimpleDB.gui   = SBA_SimpleDB.gui or {}
@@ -138,15 +154,27 @@ local function CondSummaryText(cond, ruleSpellID)
             and (pLabel .. " " .. tostring(cond.value or 4))
             or  pLabel
     else
-        t = def.label
         if def.needsSpell then
-            if not cond.spell or cond.spell == "this" then
-                t = t .. " [this]"
+            if cond.type == "sba_suggests" then
+                if not cond.spell or cond.spell == "this" then
+                    t = "SBA = [this]"
+                else
+                    local id = type(cond.spell) == "number" and cond.spell or cond.targetID
+                    local n = id and (C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(id)) or tostring(id)
+                    t = "SBA = [" .. (n or "?") .. "]"
+                end
             else
-                local id = type(cond.spell) == "number" and cond.spell or cond.targetID
-                local n = id and (C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(id)) or tostring(id)
-                t = t .. " [" .. (n or "?") .. "]"
+                t = def.label
+                if not cond.spell or cond.spell == "this" then
+                    t = t .. " [this]"
+                else
+                    local id = type(cond.spell) == "number" and cond.spell or cond.targetID
+                    local n = id and (C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(id)) or tostring(id)
+                    t = t .. " [" .. (n or "?") .. "]"
+                end
             end
+        else
+            t = def.label
         end
         if cond.value then t = t .. " " .. tostring(cond.value) end
     end
@@ -175,16 +203,47 @@ local function GenerateCode(rules)
                     junctions[#junctions+1] = (ci > 1) and (cond.junction or "and") or nil
                 end
             end
+
+            -- Hoist repeated C_Spell.GetSpellCooldown(N) calls into locals.
+            -- Count how many times each spell-ID argument appears across all parts.
+            if #parts > 1 then
+                local cdCount = {}
+                for _, part in ipairs(parts) do
+                    for id in part:gmatch("C_Spell%.GetSpellCooldown%((%d+)%)") do
+                        cdCount[id] = (cdCount[id] or 0) + 1
+                    end
+                end
+                -- For each ID used more than once, emit a local and substitute.
+                for id, count in pairs(cdCount) do
+                    if count > 1 then
+                        local varName = "cd_" .. id
+                        L[#L+1] = ("local %s = C_Spell.GetSpellCooldown(%s)"):format(varName, id)
+                        local pattern = "C_Spell%.GetSpellCooldown%(" .. id .. "%)"
+                        for pi, part in ipairs(parts) do
+                            parts[pi] = part:gsub(pattern, varName)
+                        end
+                    end
+                end
+            end
+
             L[#L+1] = ("-- Priority %d: %s (%d)"):format(i, rule.name or "?", rule.spellID)
             if #parts > 0 then
                 local expr = parts[1]
                 for pi = 2, #parts do
                     expr = expr .. " " .. (junctions[pi] or "and") .. " " .. parts[pi]
                 end
-                L[#L+1] = ("if %s then return %d end"):format(expr, rule.spellID)
+                if rule.spellID == SBA_BUTTON_SPELL_ID then
+                    L[#L+1] = ("if %s then return spellID end"):format(expr)
+                else
+                    L[#L+1] = ("if %s then return %d end"):format(expr, rule.spellID)
+                end
             else
                 -- No conditions: unconditional (this blocks everything below it)
-                L[#L+1] = ("return %d  -- unconditional"):format(rule.spellID)
+                if rule.spellID == SBA_BUTTON_SPELL_ID then
+                    L[#L+1] = "return spellID  -- unconditional"
+                else
+                    L[#L+1] = ("return %d  -- unconditional"):format(rule.spellID)
+                end
                 hasUnconditional = true
             end
             L[#L+1] = ""
@@ -334,12 +393,12 @@ local function CreateAddSpellPopup()
 
     local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOP", f, "TOP", 0, -10)
-    title:SetText("Add Spell by Name")
+    title:SetText("Add Spell by Name or ID")
     title:SetTextColor(0.55, 0.82, 1, 1)
 
     local namInLbl = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     namInLbl:SetPoint("TOPLEFT", f, "TOPLEFT", 12, -30)
-    namInLbl:SetText("Spell Name:")
+    namInLbl:SetText("Name or ID:")
     namInLbl:SetTextColor(0.65, 0.78, 0.9, 1)
 
     local nameBox = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
@@ -371,12 +430,26 @@ local function CreateAddSpellPopup()
             resolvedID = nil
             return
         end
-        -- Primary: exact name lookup (available in 12.x)
+
         local id = nil
-        if C_Spell and C_Spell.GetSpellIDForSpellIdentifier then
+        -- Numeric input: treat as a direct spell ID
+        local numericID = tonumber(input)
+        if numericID then
+            id = numericID
+        elseif C_Spell and C_Spell.GetSpellIDForSpellIdentifier then
+            -- Name lookup
             id = C_Spell.GetSpellIDForSpellIdentifier(input)
         end
+
         if id and id > 0 then
+            local isPassive = C_Spell.IsSpellPassive and C_Spell.IsSpellPassive(id)
+            if isPassive then
+                resolvedID = nil
+                resolvedName = nil
+                resultLbl:SetText("|cffff5555That spell is passive and cannot be added|r")
+                iconTex:Hide()
+                return
+            end
             local n   = C_Spell.GetSpellName   and C_Spell.GetSpellName(id)
             local tex = C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(id)
             resolvedID   = id
@@ -394,7 +467,6 @@ local function CreateAddSpellPopup()
     nameBox:SetScript("OnTextChanged", DoLookup)
     nameBox:SetScript("OnEnterPressed", function()
         DoLookup()
-        -- If resolved, confirm immediately on Enter
         if resolvedID then
             f:Hide()
             if f.onAdd then f.onAdd(resolvedID, resolvedName) end
@@ -411,7 +483,7 @@ local function CreateAddSpellPopup()
             f:Hide()
             if f.onAdd then f.onAdd(resolvedID, resolvedName) end
         else
-            resultLbl:SetText("|cffff5555Enter a valid spell name first|r")
+            resultLbl:SetText("|cffff5555Enter a valid spell name or ID first|r")
         end
     end)
 
@@ -522,11 +594,12 @@ local function CreateRowFrame(parent)
     f.idLabel:SetPoint("TOPLEFT", f.nameLabel, "BOTTOMLEFT", 0, -1)
     f.idLabel:SetTextColor(0.48, 0.60, 0.75, 1)
 
-    -- Condition summary
+    -- Condition summary (anchored below ID label, grows downward)
     f.condLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    f.condLabel:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 30, 6)
-    f.condLabel:SetSize(LEFT_W - 130, 14)
+    f.condLabel:SetPoint("TOPLEFT", f.idLabel, "BOTTOMLEFT", 0, -4)
+    f.condLabel:SetWidth(LEFT_W - 130)
     f.condLabel:SetJustifyH("LEFT")
+    f.condLabel:SetWordWrap(true)
     f.condLabel:SetTextColor(0.50, 0.72, 0.55, 1)
 
     -- Buttons (top-right)
@@ -555,9 +628,10 @@ local function CreateRowFrame(parent)
         -- Pre-load the icon texture so it's ready the moment drag activates
         local rule = workingRules[self._idx]
         if rule and dragIconFrame then
-            local tex = rule.spellID and C_Spell and C_Spell.GetSpellTexture
-                        and C_Spell.GetSpellTexture(rule.spellID)
-            dragIconFrame._tex:SetTexture(tex or "Interface\\Icons\\INV_Misc_QuestionMark")
+            local info = rule.spellID and C_Spell and C_Spell.GetSpellInfo
+                         and C_Spell.GetSpellInfo(rule.spellID)
+            local iconID = info and info.originalIconID
+            dragIconFrame._tex:SetTexture(iconID or "Interface\\Icons\\INV_Misc_QuestionMark")
         end
         -- Show catcher with mouse DISABLED so it doesn't block clicks;
         -- EnableMouse is turned on once the threshold is crossed.
@@ -586,47 +660,155 @@ local function CreateRowFrame(parent)
     return f
 end
 
+local GROUP_BOX_COLORS = {
+    { 0.78, 0.66, 0.14, 0.08, 0.92, 0.76, 0.18, 0.95 },
+    { 0.18, 0.42, 0.72, 0.08, 0.28, 0.58, 0.90, 0.95 },
+    { 0.18, 0.58, 0.34, 0.08, 0.24, 0.82, 0.46, 0.95 },
+}
+
+-- Returns a WoW color-code hex string for parenthesis at the given stack depth (1-based).
+local function ParenColorCode(depth)
+    local c = GROUP_BOX_COLORS[((depth - 1) % #GROUP_BOX_COLORS) + 1]
+    return ("|cff%02x%02x%02x"):format(c[5]*255, c[6]*255, c[7]*255)
+end
+
 local function UpdateRowFrame(f, idx, rule)
     local leftW = GetLeftPanelWidth()
     f._idx = idx
-    f:ClearAllPoints()
-    f:SetSize(leftW - PAD * 2, ROW_H - 4)
-    f:SetPoint("TOPLEFT", leftChild, "TOPLEFT", PAD, -PAD - (idx - 1) * ROW_H)
-    f:Show()
+    -- Positioning (ClearAllPoints + SetPoint) is handled by RefreshRuleList
+    -- after _rowH is computed here.
 
     f.badge:SetText(tostring(idx))
 
-    local tex = rule.spellID and C_Spell and C_Spell.GetSpellTexture
-                and C_Spell.GetSpellTexture(rule.spellID)
-    f.iconTex:SetTexture(tex or "Interface\\Icons\\INV_Misc_QuestionMark")
-    f.nameLabel:SetText(rule.name or "Unknown")
+    local info = rule.spellID and C_Spell and C_Spell.GetSpellInfo
+                 and C_Spell.GetSpellInfo(rule.spellID)
+    local iconID  = info and info.originalIconID
+    local dispName = (info and info.name) or rule.name or "Unknown"
+    f.iconTex:SetTexture(iconID or "Interface\\Icons\\INV_Misc_QuestionMark")
+    f.nameLabel:SetText(dispName)
     f.nameLabel:SetWidth(math.max(120, leftW - 186))
     f.idLabel:SetText("ID: " .. tostring(rule.spellID or 0))
-    f.condLabel:SetWidth(math.max(120, leftW - 130))
 
     local condCount = #(rule.conditions or {})
     if condCount == 0 then
+        local labelW = math.max(120, leftW - 130)
+        f.condLabel:SetWidth(labelW)
         f.condLabel:SetText("|cffff9944No conditions — unconditional return|r")
     else
-        local items = {}
-        for i = 1, math.min(3, condCount) do
+        -- Build one display-string per condition, then group by paren depth.
+        local tokens = {}
+        local depth  = 0  -- running paren depth for color selection
+        for i = 1, condCount do
             local cond = rule.conditions[i] or {}
             local def  = COND_BY_ID[cond.type]
             if def then
-                if #items > 0 then
+                local junction = ""
+                if i > 1 then
                     local j = cond.junction or "and"
-                    items[#items+1] = "|cff8899cc" .. j:upper() .. "|r"
+                    junction = "|cff8899cc" .. j:upper() .. "|r "
                 end
-                local lp = (cond.lparen or 0) > 0 and "|cffffff55" .. string.rep("(", cond.lparen) .. "|r" or ""
-                local rp = (cond.rparen or 0) > 0 and "|cffffff55" .. string.rep(")", cond.rparen) .. "|r" or ""
-                local labelText = cond.negate and ("|cffff4444NOT " .. def.label .. "|r") or def.label
-                items[#items+1] = lp .. labelText .. rp
+                local lp = ""
+                local rp = ""
+                do
+                    local depthBefore = depth
+                    for k = 1, (cond.lparen or 0) do
+                        local d = depthBefore + k
+                        lp = lp .. ParenColorCode(d) .. "(" .. "|r"
+                    end
+                    depth = depth + (cond.lparen or 0)
+                    for k = 1, (cond.rparen or 0) do
+                        local d = depth - (k - 1)
+                        rp = rp .. ParenColorCode(d) .. ")" .. "|r"
+                    end
+                    depth = depth - (cond.rparen or 0)
+                end
+                local label = def.shortLabel or def.label
+                if def.needsSpell then
+                    if cond.type == "sba_suggests" then
+                        -- Show as "SBA = icon" using the chosen spell's icon
+                        local op = "="
+                        if not cond.spell or cond.spell == "this" then
+                            label = "SBA " .. op .. (iconID and (" |T" .. iconID .. ":14:14|t") or " [this]")
+                        else
+                            local sid = type(cond.spell) == "number" and cond.spell or cond.targetID
+                            if sid then
+                                local sInfo = C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(sid)
+                                local sIcon = sInfo and sInfo.iconID
+                                if sIcon then
+                                    label = "SBA " .. op .. " |T" .. sIcon .. ":14:14|t"
+                                else
+                                    label = "SBA " .. op .. " [" .. tostring(sid) .. "]"
+                                end
+                            else
+                                label = "SBA " .. op
+                            end
+                        end
+                    elseif not cond.spell or cond.spell == "this" then
+                        -- Show the rule's own spell icon
+                        if iconID then
+                            label = label .. " |T" .. iconID .. ":14:14|t"
+                        end
+                    else
+                        local sid = type(cond.spell) == "number" and cond.spell or cond.targetID
+                        if sid then
+                            local sInfo = C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(sid)
+                            local sIcon = sInfo and sInfo.iconID
+                            if sIcon then
+                                label = label .. " |T" .. sIcon .. ":14:14|t"
+                            else
+                                label = label .. " [" .. tostring(sid) .. "]"
+                            end
+                        end
+                    end
+                elseif def.needsPlugin then
+                    -- Replace generic label with the specific chosen plugin proc name.
+                    local pLabel = cond.plugin or "?"
+                    for _, opt in ipairs(PLUGIN_OPTS) do
+                        if opt.id == cond.plugin then
+                            pLabel = opt.label
+                            break
+                        end
+                    end
+                    if cond.plugin == "docj_timer" then
+                        label = pLabel .. " " .. tostring(cond.value or 4)
+                    else
+                        label = pLabel
+                    end
+                elseif def.needsResource then
+                    -- Show as e.g. "chi >= 2" or "energy <= 60"
+                    local res = cond.resource or "chi"
+                    local op  = cond.operator or ">="
+                    local val = tostring(cond.value or 0)
+                    label = res .. " " .. op .. " " .. val
+                end
+
+                local labelText = cond.negate and ("|cffff4444NOT " .. label .. "|r") or label
+                tokens[#tokens+1] = {
+                    str = junction .. lp .. labelText .. rp,
+                    lp  = cond.lparen or 0,
+                    rp  = cond.rparen or 0,
+                }
             end
         end
-        local txt = table.concat(items, " ")
-        if condCount > 3 then txt = txt .. (" +%d more"):format(condCount - 3) end
-        f.condLabel:SetText(txt)
+
+        -- Join all tokens into one continuous string; word-wrap handles line breaking.
+        local parts = {}
+        for _, tok in ipairs(tokens) do
+            parts[#parts+1] = tok.str
+        end
+        local condText = table.concat(parts, " ")
+        local labelW = math.max(120, leftW - 130)
+        f.condLabel:SetWidth(labelW)
+        f.condLabel:SetText(condText)
     end
+
+    -- Use GetStringHeight() for accurate height now that width and text are set.
+    -- Base header block ~44px + actual text height + 10px bottom pad.
+    local textH = f.condLabel:GetStringHeight()
+    local rowFrameH = math.max(ROW_H - 4, 44 + textH + 10)
+    f._rowH = rowFrameH + 4   -- +4 gap between rows (used by RefreshRuleList)
+    f:SetSize(leftW - PAD * 2, rowFrameH)
+    f:Show()
 
     if idx == selectedIdx then
         f:SetBackdropColor(0.08, 0.20, 0.36, 0.95)
@@ -651,16 +833,22 @@ end
 RefreshRuleList = function()
     local count = #workingRules
     leftChild:SetWidth(GetLeftPanelWidth())
+    local yOff = -PAD
     for i = 1, count do
         if not rowFrames[i] then
             rowFrames[i] = CreateRowFrame(leftChild)
         end
         UpdateRowFrame(rowFrames[i], i, workingRules[i])
+        -- Position after UpdateRowFrame has set _rowH
+        local rf = rowFrames[i]
+        rf:ClearAllPoints()
+        rf:SetPoint("TOPLEFT", leftChild, "TOPLEFT", PAD, yOff)
+        yOff = yOff - (rf._rowH or ROW_H)
     end
     for i = count + 1, #rowFrames do
         if rowFrames[i] then rowFrames[i]:Hide() end
     end
-    leftChild:SetHeight(math.max(count * ROW_H + PAD * 2, 100))
+    leftChild:SetHeight(math.max(-yOff + PAD, 100))
 end
 
 -------------------------------------------------------------------------------
@@ -726,6 +914,97 @@ end
 --     Shown when isAddingCond = true; lets the user pick a type + optional
 --     numeric value and/or secondary spell-ID target.
 -------------------------------------------------------------------------------
+
+-- Scan every spellbook slot (all tabs, including passives) for a case-insensitive
+-- name match.  Used as a fallback when GetSpellIDForSpellIdentifier fails, which
+-- happens for many talent-granted spells.
+local function SearchSpellBookByName(input)
+    if not (C_SpellBook and C_SpellBook.GetNumSpellBookSkillLines) then return nil end
+    local lower = input:lower()
+    local numLines = C_SpellBook.GetNumSpellBookSkillLines()
+    for lineIdx = 1, numLines do
+        local info = C_SpellBook.GetSpellBookSkillLineInfo(lineIdx)
+        if info then
+            local offset = info.itemIndexOffset
+            local count  = info.numSpellBookItems
+            for j = offset + 1, offset + count do
+                local name, _ =
+                    C_SpellBook.GetSpellBookItemName(j, Enum.SpellBookSpellBank.Player)
+                local _, spellID =
+                    C_SpellBook.GetSpellBookItemType(j, Enum.SpellBookSpellBank.Player)
+                if spellID and spellID ~= 0 then
+                    -- Check the base spellbook entry name
+                    if name and name:lower() == lower then
+                        return spellID
+                    end
+                    -- Also check the GetSpellInfo name (may differ from spellbook display name)
+                    if C_Spell and C_Spell.GetSpellInfo then
+                        local si = C_Spell.GetSpellInfo(spellID)
+                        if si and si.name and si.name:lower() == lower then
+                            return spellID
+                        end
+                    end
+                    -- Check the active override of this spell
+                    if C_SpellBook.FindSpellOverrideByID then
+                        local oid = C_SpellBook.FindSpellOverrideByID(spellID)
+                        if oid and oid ~= spellID then
+                            local oi = C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(oid)
+                            if oi and oi.name and oi.name:lower() == lower then
+                                return oid
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- Scan the active talent tree for a case-insensitive name match.
+-- Catches passive talents (like Obsidian Spiral) that never appear in the spellbook.
+-- Uses: C_ClassTalents.GetActiveConfigID → C_Traits.GetConfigInfo (treeIDs) →
+--       GetTreeNodes → GetNodeInfo (entryIDs) → GetEntryInfo (definitionID) →
+--       GetDefinitionInfo (spellID).
+local function SearchTalentTreeByName(input)
+    if not (C_ClassTalents and C_ClassTalents.GetActiveConfigID) then return nil end
+    if not (C_Traits and C_Traits.GetConfigInfo and C_Traits.GetTreeNodes
+            and C_Traits.GetNodeInfo and C_Traits.GetEntryInfo
+            and C_Traits.GetDefinitionInfo) then return nil end
+
+    local configID = C_ClassTalents.GetActiveConfigID()
+    if not configID then return nil end
+
+    local configInfo = C_Traits.GetConfigInfo(configID)
+    if not (configInfo and configInfo.treeIDs) then return nil end
+
+    local lower = input:lower()
+    for _, treeID in ipairs(configInfo.treeIDs) do
+        local nodeIDs = C_Traits.GetTreeNodes(treeID)
+        if nodeIDs then
+            for _, nodeID in ipairs(nodeIDs) do
+                local nodeInfo = C_Traits.GetNodeInfo(configID, nodeID)
+                if nodeInfo and nodeInfo.entryIDs then
+                    for _, entryID in ipairs(nodeInfo.entryIDs) do
+                        local entryInfo = C_Traits.GetEntryInfo(configID, entryID)
+                        if entryInfo and entryInfo.definitionID then
+                            local defInfo = C_Traits.GetDefinitionInfo(entryInfo.definitionID)
+                            if defInfo and defInfo.spellID and defInfo.spellID ~= 0 then
+                                local si = C_Spell.GetSpellInfo
+                                           and C_Spell.GetSpellInfo(defInfo.spellID)
+                                if si and si.name and si.name:lower() == lower then
+                                    return defInfo.spellID
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
 local function CreateCondInputArea(parent)
     local f = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     f:SetSize(GetRightPanelWidth() - 10, 95)
@@ -798,8 +1077,21 @@ local function CreateCondInputArea(parent)
             otherResultLbl:SetText("") otherIcon:Hide() resolvedOtherID = nil; return
         end
         local id
-        if C_Spell and C_Spell.GetSpellIDForSpellIdentifier then
+        -- Numeric input: treat as a direct spell ID
+        local numericID = tonumber(input)
+        if numericID then
+            id = numericID
+        elseif C_Spell and C_Spell.GetSpellIDForSpellIdentifier then
             id = C_Spell.GetSpellIDForSpellIdentifier(input)
+        end
+        -- Fallback: scan spellbook by name (catches talent-granted spells)
+        if not (id and id > 0) then
+            id = SearchSpellBookByName(input)
+        end
+        -- Final fallback: scan talent tree (catches passive talents like Obsidian Spiral
+        -- that never appear in the spellbook)
+        if not (id and id > 0) then
+            id = SearchTalentTreeByName(input)
         end
         if id and id > 0 then
             local n   = C_Spell.GetSpellName   and C_Spell.GetSpellName(id)
@@ -1041,6 +1333,16 @@ local function CreateCondInputArea(parent)
             selPlugin = nil
             if ct.needsSpell then
                 spellToggleFrame:Show()
+                if ct.id == "sba_suggests" then
+                    thisBtn:SetText("This Spell")
+                    otherBtn:SetText("Other Spell")
+                elseif ct.id == "talented" then
+                    thisBtn:SetText("This Spell")
+                    otherBtn:SetText("Other Spell / Talent")
+                else
+                    thisBtn:SetText("This Spell")
+                    otherBtn:SetText("Other Spell")
+                end
                 SetSpellSel("this")
             end
             if ct.needsResource then
@@ -1107,6 +1409,16 @@ local function CreateCondInputArea(parent)
         notCheck:SetChecked(cond.negate and true or false)
         if ct.needsSpell then
             spellToggleFrame:Show()
+            if ct.id == "sba_suggests" then
+                thisBtn:SetText("This Spell")
+                otherBtn:SetText("Other Spell")
+            elseif ct.id == "talented" then
+                thisBtn:SetText("This Spell")
+                otherBtn:SetText("Other Spell / Talent")
+            else
+                thisBtn:SetText("This Spell")
+                otherBtn:SetText("Other Spell")
+            end
             if not cond.spell or cond.spell == "this" then
                 SetSpellSel("this")
             else
@@ -1159,12 +1471,6 @@ local function CreateCondInputArea(parent)
     return f
 end
 
-local GROUP_BOX_COLORS = {
-    { 0.78, 0.66, 0.14, 0.08, 0.92, 0.76, 0.18, 0.95 },
-    { 0.18, 0.42, 0.72, 0.08, 0.28, 0.58, 0.90, 0.95 },
-    { 0.18, 0.58, 0.34, 0.08, 0.24, 0.82, 0.46, 0.95 },
-}
-
 local function AnalyzeParenGroups(conds)
     local spans = {}
     local unmatchedOpens  = {}
@@ -1201,6 +1507,28 @@ local function AnalyzeParenGroups(conds)
     end)
 
     return spans, unmatchedOpens, unmatchedCloses
+end
+
+-- Returns two tables: lpDepths[i] and rpDepths[i], each a list of depths for
+-- the opening/closing parens of condition i (innermost depth last).
+local function GetCondParenDepths(conds)
+    local lpDepths = {}
+    local rpDepths = {}
+    local stack    = {}   -- each entry = depth at which that ( was opened
+    for i, cond in ipairs(conds) do
+        lpDepths[i] = {}
+        for _ = 1, (cond.lparen or 0) do
+            local d = #stack + 1
+            stack[#stack + 1] = d
+            lpDepths[i][#lpDepths[i] + 1] = d
+        end
+        rpDepths[i] = {}
+        for _ = 1, (cond.rparen or 0) do
+            local d = table.remove(stack) or 1
+            rpDepths[i][#rpDepths[i] + 1] = d
+        end
+    end
+    return lpDepths, rpDepths
 end
 
 local function DrawConditionGroupBoxes(spans, rowYTops)
@@ -1262,6 +1590,7 @@ RefreshRightPanel = function()
 
     local conds  = rule.conditions or {}
     local spans, unmatchedOpens, unmatchedCloses = AnalyzeParenGroups(conds)
+    local lpDepths, rpDepths = GetCondParenDepths(conds)
     local yBase  = -28  -- below the header
     local rowIdx = 0
     local rowYTops = {}
@@ -1367,9 +1696,11 @@ RefreshRightPanel = function()
         rowYTops[i] = yBase
         row._lbl:SetText(CondSummaryText(cond, rule.spellID))
         row._lbl:SetTextColor(cond.negate and 1 or 0.78, cond.negate and 0.38 or 0.90, cond.negate and 0.38 or 1, 1)
-        -- Capture index and condition ref for closures
         local capturedI    = i
         local capturedCond = cond
+        -- Snapshot depth lists so closures don't capture by-reference after loop mutation.
+        local capturedLpD  = lpDepths[i] or {}
+        local capturedRpD  = rpDepths[i] or {}
 
         local function UpdateLPBtn()
             local n = capturedCond.lparen or 0
@@ -1378,8 +1709,17 @@ RefreshRightPanel = function()
                 row._lpLbl:SetText("(")
                 row._lpLbl:SetTextColor(hasError and 1.0 or 0.28, hasError and 0.30 or 0.36, hasError and 0.30 or 0.52, 1)
             else
-                row._lpLbl:SetText(string.rep("(", n))
-                row._lpLbl:SetTextColor(hasError and 1.0 or 1.0, hasError and 0.30 or 0.88, hasError and 0.30 or 0.30, 1)
+                -- Build a colored string per paren, each at its own depth.
+                local parts = {}
+                for k = 1, n do
+                    local d = capturedLpD[k] or k
+                    local c = GROUP_BOX_COLORS[((d - 1) % #GROUP_BOX_COLORS) + 1]
+                    parts[k] = ("|cff%02x%02x%02x(|r"):format(c[5]*255, c[6]*255, c[7]*255)
+                end
+                row._lpLbl:SetText(table.concat(parts))
+                if hasError then
+                    row._lpLbl:SetTextColor(1.0, 0.30, 0.30, 1)
+                end
             end
             row._lpBtn._bg:SetColorTexture(hasError and 0.42 or 0.08, hasError and 0.08 or 0.12, hasError and 0.08 or 0.22, hasError and 0.85 or 0.7)
         end
@@ -1390,8 +1730,16 @@ RefreshRightPanel = function()
                 row._rpLbl:SetText(")")
                 row._rpLbl:SetTextColor(hasError and 1.0 or 0.28, hasError and 0.30 or 0.36, hasError and 0.30 or 0.52, 1)
             else
-                row._rpLbl:SetText(string.rep(")", n))
-                row._rpLbl:SetTextColor(hasError and 1.0 or 1.0, hasError and 0.30 or 0.88, hasError and 0.30 or 0.30, 1)
+                local parts = {}
+                for k = 1, n do
+                    local d = capturedRpD[k] or (n - k + 1)
+                    local c = GROUP_BOX_COLORS[((d - 1) % #GROUP_BOX_COLORS) + 1]
+                    parts[k] = ("|cff%02x%02x%02x)|r"):format(c[5]*255, c[6]*255, c[7]*255)
+                end
+                row._rpLbl:SetText(table.concat(parts))
+                if hasError then
+                    row._rpLbl:SetTextColor(1.0, 0.30, 0.30, 1)
+                end
             end
             row._rpBtn._bg:SetColorTexture(hasError and 0.42 or 0.08, hasError and 0.08 or 0.12, hasError and 0.08 or 0.22, hasError and 0.85 or 0.7)
         end
@@ -1560,10 +1908,10 @@ do
     end
 
     local function LoadCastsForSpec()
-        local specIdx = GetSpecialization and GetSpecialization()
+        local specID = CurrentSpecID()
         wipe(seenCastSpells)
-        if not specIdx then return end
-        local saved = CastsDB()[specIdx]
+        if specID == 0 then return end
+        local saved = CastsDB()[specID]
         if saved then
             for spellID, entry in pairs(saved) do
                 seenCastSpells[spellID] = entry
@@ -1572,10 +1920,10 @@ do
     end
 
     ResetSeenCastsForCurrentSpec = function()
-        local specIdx = GetSpecialization and GetSpecialization()
+        local specID = CurrentSpecID()
         wipe(seenCastSpells)
-        if specIdx then
-            CastsDB()[specIdx] = {}
+        if specID ~= 0 then
+            CastsDB()[specID] = {}
         end
     end
 
@@ -1603,15 +1951,14 @@ do
             if isPassive then return end
             local info = C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(spellID)
             if not info or not info.name then return end
-            local tex = C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(spellID)
             local entry = {
                 name    = info.name,
                 spellID = spellID,
-                texture = tex or "Interface\\Icons\\INV_Misc_QuestionMark",
+                texture = info.originalIconID or "Interface\\Icons\\INV_Misc_QuestionMark",
             }
             seenCastSpells[spellID] = entry
-            local curSpec = GetSpecialization and GetSpecialization()
-            if curSpec then
+            local curSpec = CurrentSpecID()
+            if curSpec ~= 0 then
                 local db = CastsDB()
                 db[curSpec]          = db[curSpec] or {}
                 db[curSpec][spellID] = entry
@@ -1663,32 +2010,46 @@ local function GetClassSpells()
                               or (isPassive)   -- passives without an icon are excluded
                               or seen[spellID]
                     if not skip then
+                        local baseInfo = C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(spellID)
+                        local baseName = (baseInfo and baseInfo.name) or name
                         seen[spellID] = true
-                        local spellTex = C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(spellID)
-                        spells[#spells + 1] = {
-                            name    = name,
-                            spellID = spellID,
-                            texture = spellTex or "Interface\\Icons\\INV_Misc_QuestionMark",
-                        }
-                        -- Include the active override for this spell (e.g. Rushing Wind Kick overriding Rising Sun Kick)
+
+                        local overID, overInfo, overName
                         if C_SpellBook.FindSpellOverrideByID then
-                            local overID = C_SpellBook.FindSpellOverrideByID(spellID)
-                            if overID and overID ~= spellID and not seen[overID] then
-                                local isOverPassive = C_Spell.IsSpellPassive and C_Spell.IsSpellPassive(overID)
+                            local oid = C_SpellBook.FindSpellOverrideByID(spellID)
+                            if oid and oid ~= spellID and not seen[oid] then
+                                local isOverPassive = C_Spell.IsSpellPassive and C_Spell.IsSpellPassive(oid)
                                 if not isOverPassive then
-                                    local overInfo = C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(overID)
-                                    local overName = overInfo and overInfo.name
-                                    if overName then
-                                        seen[overID] = true
-                                        local overTex = C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(overID)
-                                        spells[#spells + 1] = {
-                                            name    = overName,
-                                            spellID = overID,
-                                            texture = overTex or "Interface\\Icons\\INV_Misc_QuestionMark",
-                                        }
-                                    end
+                                    overID   = oid
+                                    overInfo = C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(oid)
+                                    overName = overInfo and overInfo.name
                                 end
                             end
+                        end
+
+                        if overID then
+                            seen[overID] = true
+                            -- Names differ: both are distinct spells, add both
+                            if overName and overName ~= baseName then
+                                spells[#spells + 1] = {
+                                    name    = baseName,
+                                    spellID = spellID,
+                                    texture = (baseInfo and baseInfo.originalIconID) or "Interface\\Icons\\INV_Misc_QuestionMark",
+                                }
+                            end
+                            -- Always add the override (only entry when names match)
+                            spells[#spells + 1] = {
+                                name    = overName or baseName,
+                                spellID = overID,
+                                texture = (overInfo and overInfo.originalIconID) or "Interface\\Icons\\INV_Misc_QuestionMark",
+                            }
+                        else
+                            -- No active override — add the base spell
+                            spells[#spells + 1] = {
+                                name    = baseName,
+                                spellID = spellID,
+                                texture = (baseInfo and baseInfo.originalIconID) or "Interface\\Icons\\INV_Misc_QuestionMark",
+                            }
                         end
                     end
                 end
@@ -2188,9 +2549,11 @@ local function CreateSpellbookPanel(f, leftSF)
         -- Left-click: append to end of priority list
         row:SetScript("OnClick", function(self)
             if not self._spellID then return end
+            local addID, addName = ResolveSpellForAdd(self._spellID, self._spellName)
+            if not addID then return end
             workingRules[#workingRules + 1] = {
-                spellID    = self._spellID,
-                name       = self._spellName,
+                spellID    = addID,
+                name       = addName,
                 conditions = {},
             }
             selectedIdx  = #workingRules
@@ -2202,9 +2565,11 @@ local function CreateSpellbookPanel(f, leftSF)
         -- Left-drag: drag to a specific position in the priority list
         row:SetScript("OnDragStart", function(self)
             if not self._spellID then return end
+            local addID, addName = ResolveSpellForAdd(self._spellID, self._spellName)
+            if not addID then return end
             sbasDrag.active    = true
-            sbasDrag.spellID   = self._spellID
-            sbasDrag.spellName = self._spellName
+            sbasDrag.spellID   = addID
+            sbasDrag.spellName = addName
             dragIconFrame._tex:SetTexture(self._icon:GetTexture())
             dragIconFrame:Show()
             dragCatcher:Show()
@@ -2242,6 +2607,8 @@ local function CreateSpellbookPanel(f, leftSF)
         currentSpells = GetClassSpells()
         PopulatePanel(searchBox:GetText())
     end
+    -- Expose so OpenGUI can force a refresh on every open.
+    f._refreshSpellPanel = RefreshSpellbookPanel
 
     -- Wire up the reset button now that RefreshSpellbookPanel is in scope.
     resetBtn:SetScript("OnClick", function()
@@ -2413,7 +2780,9 @@ local function CreateGUI()
             addSpellPopup = CreateAddSpellPopup()
         end
         addSpellPopup.onAdd = function(id, name)
-            workingRules[#workingRules + 1] = { spellID = id, name = name, conditions = {} }
+            local addID, addName = ResolveSpellForAdd(id, name)
+            if not addID then return end
+            workingRules[#workingRules + 1] = { spellID = addID, name = addName, conditions = {} }
             selectedIdx  = #workingRules
             isAddingCond = false
             RefreshRuleList()
@@ -2576,6 +2945,11 @@ local function OpenGUI(specID)
 
     guiFrame.title:SetText("SBA Override Builder — " .. GetSpecName(editSpecID))
     guiFrame:Show()
+    -- Refresh the flyout spell list on every open so it reflects the current
+    -- spec, any newly cast override spells, and talent changes.
+    if guiFrame._refreshSpellPanel then
+        guiFrame._refreshSpellPanel()
+    end
     RefreshRuleList()
     RefreshRightPanel()
 end
