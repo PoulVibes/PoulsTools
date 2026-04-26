@@ -431,6 +431,23 @@ local function OnBuildUI(parent)
     anchor = analyzerBtn
     y = -8
 
+    -- Debug error toggle button
+    local debugToggleBtn
+    local function GetDebugToggleLabel()
+        local debug = SBA_SimpleDB and SBA_SimpleDB.overrideDebug
+        return debug and "Suppress Errors" or "Show Errors"
+    end
+    debugToggleBtn = W:Button(parent, anchor, y, GetDebugToggleLabel(), function()
+        SBA_SimpleDB = SBA_SimpleDB or {}
+        SBA_SimpleDB.overrideDebug = not SBA_SimpleDB.overrideDebug
+        if debugToggleBtn then debugToggleBtn:SetText(GetDebugToggleLabel()) end
+    end)
+    parent:HookScript("OnShow", function()
+        if debugToggleBtn then debugToggleBtn:SetText(GetDebugToggleLabel()) end
+    end)
+    anchor = debugToggleBtn
+    y = -8
+
     y = -8
     local hdr, dy2 = W:SectionHeader(parent, anchor, y, "Single-Button Suggestion Overrides (by Class / Spec)")
     local listAnchor = hdr
@@ -467,7 +484,7 @@ local function OnBuildUI(parent)
                 local apiSpecNameByID  = {}
                 local apiSpecByNameLow = {}
                 for si = 1, num do
-                    local specID, specName = GetSpecializationInfoForClassID(si, classID)
+                    local specID, specName = GetSpecializationInfoForClassID(classID, si)
                     if specID and specName then
                         apiSpecByID[specID]               = true
                         apiSpecNameByID[specID]           = specName
@@ -495,7 +512,7 @@ local function OnBuildUI(parent)
                     end
                 else
                     for si = 1, num do
-                        local specID, specName = GetSpecializationInfoForClassID(si, classID)
+                        local specID, specName = GetSpecializationInfoForClassID(classID, si)
                         if specID and specName then
                             classSpecData[cname].specs[#classSpecData[cname].specs + 1] = {
                                 id = specID, displayName = specName, apiKnown = true,

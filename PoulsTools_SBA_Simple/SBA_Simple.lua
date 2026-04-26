@@ -24,6 +24,7 @@ local function GetDB()
     if db.enabled      == nil then db.enabled       = true     end
     if db.glow_enabled == nil then db.glow_enabled  = false    end
     if db.overrideCode == nil then db.overrideCode  = ""       end
+    if db.overrideDebug == nil then db.overrideDebug = true     end
     return db
 end
 
@@ -61,6 +62,21 @@ local overrideEditorTargetSpec = nil
 local overrideEditorTargetName = nil
 local overrideEditorPreviewCode = nil
 local overrideEditorPreviewMode = false
+local lastOverrideRuntimeError = nil
+local lastOverrideRuntimeErrorAt = 0
+
+local function ReportOverrideRuntimeError(err)
+    local db = GetDB()
+    if not db.overrideDebug then return end
+    local msg = tostring(err or "unknown error")
+    local now = GetTime and GetTime() or 0
+    if msg == lastOverrideRuntimeError and (now - lastOverrideRuntimeErrorAt) < 2 then
+        return
+    end
+    lastOverrideRuntimeError = msg
+    lastOverrideRuntimeErrorAt = now
+    print("|cffff4444SBA_Simple override runtime error:|r " .. msg)
+end
 
 local function CompileOverride(code)
     if not code or code:match("^%s*$") then
@@ -69,6 +85,7 @@ local function CompileOverride(code)
     end
     local chunk, err = loadstring(code)
     if not chunk then
+        ReportOverrideRuntimeError(err)
         return false, err
     end
     overrideChunk = chunk
@@ -78,7 +95,15 @@ end
 local function Override()
     if not overrideChunk then return nil end
     local ok, result = pcall(overrideChunk)
-    if not ok or type(result) ~= "number" then return nil end
+    if not ok then
+        ReportOverrideRuntimeError(result)
+        return nil
+    end
+    if result == nil then return nil end
+    if type(result) ~= "number" then
+        ReportOverrideRuntimeError("override returned non-number: " .. type(result))
+        return nil
+    end
     return result
 end
 
@@ -595,10 +620,22 @@ SlashCmdList["SBASIMPLE"] = function(msg)
             -- always open editor for the current specialization
             SBA_Simple_ShowOverrideForSpec(nil)
         end
+    elseif cmd == "override_debug" then
+        local db = GetDB()
+        db.overrideDebug = not db.overrideDebug
+        print("|cff00ff99SBA_Simple:|r override runtime debug " .. (db.overrideDebug and "enabled." or "disabled."))
+    elseif cmd == "override_error" then
+        if lastOverrideRuntimeError then
+            print("|cffff4444SBA_Simple override last error:|r " .. lastOverrideRuntimeError)
+        else
+            print("|cff00ff99SBA_Simple:|r no runtime override error recorded yet.")
+        end
     else
         print("|cff00ccffSBA_Simple|r commands:")
         print("  /SBAS lock          — toggle move/resize lock for all shmIcons")
         print("  /SBAS override      — toggle the raw Lua override code editor")
+        print("  /SBAS override_debug — toggle runtime override error prints")
+        print("  /SBAS override_error — print the last runtime override error")
         --override GUI not fully functional still in development
         --print("  /SBAS override_gui  — open the graphical priority-list builder")
         print("  /SBAS reset         — reset icon position and size")

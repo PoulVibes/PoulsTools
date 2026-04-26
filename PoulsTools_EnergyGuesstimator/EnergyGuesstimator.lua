@@ -72,7 +72,8 @@ local function UpdateEnabledState()
 end
 
 -- 2. Internal "Clean" State
-local maxEnergy = UnitPowerMax("player", 3) or 120
+-- Initialize with a safe constant; UnitPowerMax returns a secret value in Midnight.
+local maxEnergy = 120
 currentEnergy = maxEnergy
 
 -- 3. UI Setup
@@ -168,7 +169,8 @@ frame:SetScript("OnEvent", function(self, event, ...)
             end
         end
     elseif event == "UNIT_MAXPOWER" then
-        maxEnergy = UnitPowerMax("player", 3) or 120
+        local newMax = UnitPowerMax("player", 3)
+        if newMax and not issecretvalue(newMax) then maxEnergy = newMax end
     end
 end)
 

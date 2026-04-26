@@ -95,7 +95,7 @@ local COND_TYPES = {
         { id = "resource",     label = "Resource Check", needsResource = true,
       generate = function(c, s)
           local sec = SPEC_SECONDARY[editSpecID] or SPEC_SECONDARY_DEFAULT
-          local var = (c.resource == "energy") and "currentEnergy" or sec.varName
+          local var = (c.resource == "energy") and "(_G.currentEnergy or 0)" or sec.varName
           local op  = c.operator or ">="
           return ("%s %s %d"):format(var, op, c.value or 0)
       end },
@@ -194,9 +194,9 @@ BuildPluginConditionExpr = function(cond)
     local meta = PROC_PLUGIN_BY_ID[plugin]
     if not meta then return "false" end
     if IsCompOp(op) then
-        return ("%s %s %d"):format(meta.timerVar, op, value or 4)
+        return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 4)
     end
-    return meta.activeFlag
+    return ("(%s == true)"):format(meta.activeFlag)
 end
 
 BuildPluginSummary = function(cond)
@@ -754,23 +754,11 @@ local function GenerateCode(rules)
     if not rules or #rules == 0 then return nil end
     local L = {}
 
-    -- Scan rules to determine whether currentEnergy is actually referenced.
-    -- The secondary resource is always declared when the spec has one, so it
-    -- is available to write conditions against even before any resource rule exists.
-    local needsEnergy = false
-    for _, rule in ipairs(rules) do
-        for _, cond in ipairs(rule.conditions or {}) do
-            if cond.type == "resource" and cond.resource == "energy" then
-                needsEnergy = true
-            end
-        end
-    end
+    -- Energy is referenced inline as (_G.currentEnergy or 0) in each expression,
+    -- so no top-level local is needed (assigning a secret value to a local taints it).
     local _sec = SPEC_SECONDARY[editSpecID]   -- nil for specs with no queryable secondary
 
     L[#L+1] = "local spellID = C_AssistedCombat.GetNextCastSpell()"
-    if needsEnergy then
-        L[#L+1] = 'local currentEnergy = UnitPower("player", Enum.PowerType.Energy)'
-    end
     if _sec then
         L[#L+1] = ('local %s = UnitPower("player", Enum.PowerType.%s)'):format(_sec.varName, _sec.powerType)
     end
