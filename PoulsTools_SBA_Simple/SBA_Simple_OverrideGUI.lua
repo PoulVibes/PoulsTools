@@ -123,6 +123,26 @@ local PLUGIN_OPTS = {
     { id = "docj_proc", label = "Dance of Chi-Ji",   supportsProcMode = true, default = 4 },
 }
 
+local WINDWALKER_SPEC_ID = 269
+
+local function IsWindwalkerGUI()
+    return editSpecID == WINDWALKER_SPEC_ID
+end
+
+local function GetVisibleCondTypes()
+    if IsWindwalkerGUI() then return COND_TYPES end
+    local out = {}
+    for _, ct in ipairs(COND_TYPES) do
+        if ct.id ~= "plugin" then out[#out + 1] = ct end
+    end
+    return out
+end
+
+local function GetVisiblePluginOptions()
+    if IsWindwalkerGUI() then return PLUGIN_OPTS end
+    return {}
+end
+
 local PROC_PLUGIN_BY_ID = {
     bok_proc = {
         label = "Blackout Kick!",
@@ -517,39 +537,54 @@ local function CreateCondPicker()
     end)
 
     local sc = CreateFrame("Frame", nil, sf)
-    sc:SetSize(266, #COND_TYPES * 22 + 4)
+    sc:SetSize(266, 4)
     sf:SetScrollChild(sc)
 
     f.callback = nil
 
-    for i, ct in ipairs(COND_TYPES) do
-        local btn = CreateFrame("Button", nil, sc)
-        btn:SetSize(262, 20)
-        btn:SetPoint("TOPLEFT", sc, "TOPLEFT", 2, -2 - (i - 1) * 22)
+    f.rows = {}
+    f.scrollChild = sc
+    f.UpdateRows = function(self)
+        local visible = GetVisibleCondTypes()
+        sc:SetHeight(math.max(4, #visible * 22 + 4))
 
-        local bg = btn:CreateTexture(nil, "BACKGROUND")
-        bg:SetAllPoints()
-        bg:SetColorTexture(0, 0, 0, 0)
+        for i, ct in ipairs(visible) do
+            local row = self.rows[i]
+            if not row then
+                row = CreateFrame("Button", nil, sc)
+                row:SetSize(262, 20)
+                row.bg = row:CreateTexture(nil, "BACKGROUND")
+                row.bg:SetAllPoints()
+                row.bg:SetColorTexture(0, 0, 0, 0)
+                row.lbl = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                row.lbl:SetAllPoints()
+                row.lbl:SetJustifyH("LEFT")
+                row.lbl:SetTextColor(0.82, 0.9, 1, 1)
+                self.rows[i] = row
+            end
 
-        local lbl = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        lbl:SetAllPoints()
-        lbl:SetJustifyH("LEFT")
-        lbl:SetText("  " .. ct.label)
-        lbl:SetTextColor(0.82, 0.9, 1, 1)
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", sc, "TOPLEFT", 2, -2 - (i - 1) * 22)
+            row.lbl:SetText("  " .. ct.label)
+            row.ctRef = ct
+            row:SetScript("OnClick", function(btn)
+                self:Hide()
+                if self.callback then self.callback(btn.ctRef) end
+            end)
+            row:SetScript("OnEnter", function(btn)
+                btn.bg:SetColorTexture(0.14, 0.28, 0.50, 0.7)
+                btn.lbl:SetTextColor(1, 1, 1, 1)
+            end)
+            row:SetScript("OnLeave", function(btn)
+                btn.bg:SetColorTexture(0, 0, 0, 0)
+                btn.lbl:SetTextColor(0.82, 0.9, 1, 1)
+            end)
+            row:Show()
+        end
 
-        local ctRef = ct
-        btn:SetScript("OnClick", function()
-            f:Hide()
-            if f.callback then f.callback(ctRef) end
-        end)
-        btn:SetScript("OnEnter", function(self)
-            bg:SetColorTexture(0.14, 0.28, 0.50, 0.7)
-            lbl:SetTextColor(1, 1, 1, 1)
-        end)
-        btn:SetScript("OnLeave", function(self)
-            bg:SetColorTexture(0, 0, 0, 0)
-            lbl:SetTextColor(0.82, 0.9, 1, 1)
-        end)
+        for i = #visible + 1, #self.rows do
+            self.rows[i]:Hide()
+        end
     end
 
     return f
@@ -557,6 +592,7 @@ end
 
 local function ShowCondPicker(anchor, callback)
     if not condPicker then condPicker = CreateCondPicker() end
+    condPicker:UpdateRows()
     condPicker.callback = callback
     condPicker:ClearAllPoints()
     condPicker:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
@@ -1072,7 +1108,7 @@ end
 -------------------------------------------------------------------------------
 local function CreatePluginPicker()
     local f = CreateFrame("Frame", "SBAS_GUI_PluginPicker", UIParent, "BackdropTemplate")
-    f:SetSize(200, #PLUGIN_OPTS * 22 + 28)
+    f:SetSize(200, 28)
     f:SetFrameStrata("TOOLTIP")
     f:SetToplevel(true)
     f:Hide()
@@ -1083,30 +1119,48 @@ local function CreatePluginPicker()
     hdr:SetText("Select Plugin / Proc")
     hdr:SetTextColor(0.5, 0.72, 0.92, 1)
 
-    for i, opt in ipairs(PLUGIN_OPTS) do
-        local btn = CreateFrame("Button", nil, f)
-        btn:SetSize(192, 20)
-        btn:SetPoint("TOPLEFT", f, "TOPLEFT", 4, -22 - (i - 1) * 22)
+    f.rows = {}
+    f.UpdateRows = function(self)
+        local visible = GetVisiblePluginOptions()
+        self:SetHeight(#visible * 22 + 28)
 
-        local bg = btn:CreateTexture(nil, "BACKGROUND")
-        bg:SetAllPoints() bg:SetColorTexture(0, 0, 0, 0)
+        for i, opt in ipairs(visible) do
+            local row = self.rows[i]
+            if not row then
+                row = CreateFrame("Button", nil, self)
+                row:SetSize(192, 20)
+                row.bg = row:CreateTexture(nil, "BACKGROUND")
+                row.bg:SetAllPoints()
+                row.bg:SetColorTexture(0, 0, 0, 0)
+                row.lbl = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                row.lbl:SetAllPoints()
+                row.lbl:SetJustifyH("LEFT")
+                row.lbl:SetTextColor(0.82, 0.9, 1, 1)
+                self.rows[i] = row
+            end
 
-        local lbl = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        lbl:SetAllPoints() lbl:SetJustifyH("LEFT")
-        lbl:SetText("  " .. opt.label)
-        lbl:SetTextColor(0.82, 0.9, 1, 1)
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", self, "TOPLEFT", 4, -22 - (i - 1) * 22)
+            row.lbl:SetText("  " .. opt.label)
+            row.optRef = opt
+            row:SetScript("OnClick", function(btn)
+                self:Hide()
+                if self.callback then self.callback(btn.optRef) end
+            end)
+            row:SetScript("OnEnter", function(btn)
+                btn.bg:SetColorTexture(0.14, 0.28, 0.50, 0.7)
+                btn.lbl:SetTextColor(1, 1, 1, 1)
+            end)
+            row:SetScript("OnLeave", function(btn)
+                btn.bg:SetColorTexture(0, 0, 0, 0)
+                btn.lbl:SetTextColor(0.82, 0.9, 1, 1)
+            end)
+            row:Show()
+        end
 
-        local optRef = opt
-        btn:SetScript("OnClick", function()
-            f:Hide()
-            if f.callback then f.callback(optRef) end
-        end)
-        btn:SetScript("OnEnter", function()
-            bg:SetColorTexture(0.14, 0.28, 0.50, 0.7) lbl:SetTextColor(1, 1, 1, 1)
-        end)
-        btn:SetScript("OnLeave", function()
-            bg:SetColorTexture(0, 0, 0, 0) lbl:SetTextColor(0.82, 0.9, 1, 1)
-        end)
+        for i = #visible + 1, #self.rows do
+            self.rows[i]:Hide()
+        end
     end
 
     return f
@@ -1114,6 +1168,8 @@ end
 
 local function ShowPluginPicker(anchor, callback)
     if not pluginPicker then pluginPicker = CreatePluginPicker() end
+    pluginPicker:UpdateRows()
+    if #GetVisiblePluginOptions() == 0 then return end
     pluginPicker.callback = callback
     pluginPicker:ClearAllPoints()
     pluginPicker:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)

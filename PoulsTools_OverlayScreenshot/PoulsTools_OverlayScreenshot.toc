@@ -1,0 +1,10 @@
+## Interface: 120005
+## Title: PoulsTools_OverlayScreenshot
+## Notes: Shows spell activation overlay icon in center, captures screenshot, then hides icon.
+## Author: Poul
+## Version: 1.0.0
+## IconTexture: Interface\Icons\inv_misc_book_08
+## Category-enUS: PoulsTools
+## Group: PoulsTools
+
+OverlayScreenshot.lua
