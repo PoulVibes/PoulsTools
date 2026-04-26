@@ -13,6 +13,7 @@
 
 local ADDON_NAME   = "PoulsTools_CooldownTracker"
 local DEFAULT_SIZE = 64
+local POLL_INTERVAL_SECONDS = 0.20
 
 -- spellKey → { spellName, spellID } for the currently active specialization.
 local tracked = {}
@@ -189,6 +190,16 @@ local function UpdateAllTrackers(updateStacks)
     for key in pairs(tracked) do UpdateTracker(key, updateStacks) end
 end
 
+local ticker = CreateFrame("Frame")
+
+local function EnsureTickerState()
+    if next(tracked) == nil then
+        ticker:Hide()
+    else
+        ticker:Show()
+    end
+end
+
 local function AddTracker(spellName, specID)
     specID = specID or currentSpecID
     local spellID = C_Spell.GetSpellIDForSpellIdentifier(spellName)
@@ -212,20 +223,28 @@ local function AddTracker(spellName, specID)
 
     tracked[key] = { spellName = spellName, spellID = spellID }
     UpdateTracker(key, true)
+    EnsureTickerState()
     -- notify any UI listeners so they can refresh lists
     NotifyChangeListeners()
 end
 
-local ticker = CreateFrame("Frame")
-ticker:SetScript("OnUpdate", function()
+ticker.elapsed = 0
+ticker:SetScript("OnUpdate", function(_, elapsed)
+    ticker.elapsed = ticker.elapsed + elapsed
+    if ticker.elapsed < POLL_INTERVAL_SECONDS then
+        return
+    end
+    ticker.elapsed = 0
     UpdateAllTrackers()
 end)
+ticker:Hide()
 
 local function RemoveTracker(key)
     shmIcons:Unregister(ADDON_NAME, key)
     tracked[key] = nil
     local spells = GetSpecSpells(currentSpecID)
     if spells[key] then spells[key].enabled = false end
+    EnsureTickerState()
     -- notify UI listeners
     NotifyChangeListeners()
 end
@@ -236,6 +255,7 @@ local function UnloadSpec()
         shmIcons:Unregister(ADDON_NAME, key)
     end
     tracked = {}
+    EnsureTickerState()
     -- notify UI listeners that the tracked list changed (cleared)
     NotifyChangeListeners()
 end
@@ -252,6 +272,7 @@ local function LoadSpec(specID)
     end
     shmIcons:RestoreSnapGroups()
     UpdateAllTrackers()
+    EnsureTickerState()
     -- Notify listeners so UI (PoulsTools) can refresh when specialization changes
     NotifyChangeListeners()
 end
@@ -457,7 +478,21 @@ end
 -- abilities for the current spec change (add/remove).
 function CooldownTracker_RegisterChangeListener(fn)
     if type(fn) ~= "function" then return end
+    for _, existing in ipairs(changeListeners) do
+        if existing == fn then
+            return
+        end
+    end
     changeListeners[#changeListeners + 1] = fn
+end
+
+function CooldownTracker_UnregisterChangeListener(fn)
+    if type(fn) ~= "function" then return end
+    for i = #changeListeners, 1, -1 do
+        if changeListeners[i] == fn then
+            table.remove(changeListeners, i)
+        end
+    end
 end
 
 -- Return a simple array of tracked spell entries for the given specID.

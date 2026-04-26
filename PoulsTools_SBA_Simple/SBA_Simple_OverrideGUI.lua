@@ -68,6 +68,10 @@ local SPEC_SECONDARY = {
     -- Evoker: Essence is PRIMARY (mana equivalent) — not SVS-queryable; omitted.
 }
 
+-- Forward declarations used by condition generators defined before helper bodies.
+local BuildPluginConditionExpr
+local BuildPluginSummary
+
 local COND_TYPES = {
     -- Spell-based checks (needsSpell = true → picker shows This Spell / Other Spell toggle)
     { id = "on_cd",        label = "Ready (Off-Cooldown)",        shortLabel = "Ready",   needsSpell = true,
@@ -104,12 +108,7 @@ local COND_TYPES = {
     -- Plugin / Proc (Zenith, BOK, RWK, DOCJ — pick via dropdown)
     { id = "plugin",       label = "Plugin / Proc", needsPlugin = true,
       generate = function(c, s)
-          if c.plugin == "zenith"     then return "ZenithActiveTracker" end
-          if c.plugin == "bok_proc"   then return "bok_proc_active" end
-          if c.plugin == "rwk_proc"   then return "rwk_proc_active" end
-          if c.plugin == "docj_proc"  then return "docj_proc_active" end
-          if c.plugin == "docj_timer" then return ("docj_proc_timer %s %d"):format(c.operator or "<", c.value or 4) end
-          return "false"
+                    return BuildPluginConditionExpr(c)
       end },
 }
 
@@ -118,12 +117,79 @@ for _, ct in ipairs(COND_TYPES) do COND_BY_ID[ct.id] = ct end
 
 -- Plugin options shown inside the Plugin / Proc condition picker
 local PLUGIN_OPTS = {
-    { id = "zenith",     label = "Zenith Active"    },
-    { id = "bok_proc",   label = "BOK Proc Active"  },
-    { id = "rwk_proc",   label = "RWK Proc Active"  },
-    { id = "docj_proc",  label = "DOCJ Proc Active" },
-    { id = "docj_timer", label = "DOCJ Timer", needsValue = true, needsOperator = true, default = 4 },
+    { id = "zenith",    label = "Zenith"            },
+    { id = "bok_proc",  label = "Blackout Kick!",    supportsProcMode = true, default = 4 },
+    { id = "rwk_proc",  label = "Rushing Wind Kick", supportsProcMode = true, default = 4 },
+    { id = "docj_proc", label = "Dance of Chi-Ji",   supportsProcMode = true, default = 4 },
 }
+
+local PROC_PLUGIN_BY_ID = {
+    bok_proc = {
+        label = "Blackout Kick!",
+        activeFlag = "bok_proc_active",
+        timerVar = "bok_proc_timer",
+    },
+    rwk_proc = {
+        label = "Rushing Wind Kick",
+        activeFlag = "rwk_proc_active",
+        timerVar = "rwk_proc_timer",
+    },
+    docj_proc = {
+        label = "Dance of Chi-Ji",
+        activeFlag = "docj_proc_active",
+        timerVar = "docj_proc_timer",
+    },
+}
+
+local VALID_COMP_OPS = {
+    [">="] = true,
+    ["<="] = true,
+    ["=="] = true,
+    [">"] = true,
+    ["<"] = true,
+}
+
+local function IsCompOp(op)
+    return op and VALID_COMP_OPS[op] or false
+end
+
+local function NormalizePluginState(cond)
+    local plugin = cond and cond.plugin or nil
+    local op = cond and cond.operator or nil
+    local value = cond and cond.value or nil
+
+    -- Backward compatibility: old saves used a separate docj_timer plugin id.
+    if plugin == "docj_timer" then
+        plugin = "docj_proc"
+        op = IsCompOp(op) and op or "<"
+        value = value or 4
+    end
+    return plugin, op, value
+end
+
+BuildPluginConditionExpr = function(cond)
+    local plugin, op, value = NormalizePluginState(cond)
+    if plugin == "zenith" then return "ZenithActiveTracker" end
+
+    local meta = PROC_PLUGIN_BY_ID[plugin]
+    if not meta then return "false" end
+    if IsCompOp(op) then
+        return ("%s %s %d"):format(meta.timerVar, op, value or 4)
+    end
+    return meta.activeFlag
+end
+
+BuildPluginSummary = function(cond)
+    local plugin, op, value = NormalizePluginState(cond)
+    if plugin == "zenith" then return "Zenith" end
+
+    local meta = PROC_PLUGIN_BY_ID[plugin]
+    if not meta then return plugin or "?" end
+    if IsCompOp(op) then
+        return meta.label .. " " .. op .. " " .. tostring(value or 4)
+    end
+    return meta.label .. " Active"
+end
 
 -------------------------------------------------------------------------------
 -- 2.  Data helpers
@@ -196,17 +262,7 @@ local function CondSummaryText(cond, ruleSpellID)
         if #expr > 52 then expr = expr:sub(1, 49) .. "..." end
         t = "Lua: " .. expr
     elseif def.needsPlugin then
-        local PLUGIN_LABELS = {
-            zenith     = "Zenith Active",
-            bok_proc   = "BOK Proc",
-            rwk_proc   = "RWK Proc",
-            docj_proc  = "DOCJ Proc",
-            docj_timer = "DOCJ Timer",
-        }
-        local pLabel = PLUGIN_LABELS[cond.plugin] or (cond.plugin or "?")
-        t = (cond.plugin == "docj_timer")
-            and (pLabel .. " " .. (cond.operator or "<") .. " " .. tostring(cond.value or 4))
-            or  pLabel
+        t = BuildPluginSummary(cond)
     else
         if def.needsSpell then
             if cond.type == "sba_suggests" then
@@ -911,19 +967,7 @@ local function UpdateRowFrame(f, idx, rule)
                         end
                     end
                 elseif def.needsPlugin then
-                    -- Replace generic label with the specific chosen plugin proc name.
-                    local pLabel = cond.plugin or "?"
-                    for _, opt in ipairs(PLUGIN_OPTS) do
-                        if opt.id == cond.plugin then
-                            pLabel = opt.label
-                            break
-                        end
-                    end
-                    if cond.plugin == "docj_timer" then
-                        label = pLabel .. " " .. (cond.operator or "<") .. " " .. tostring(cond.value or 4)
-                    else
-                        label = pLabel
-                    end
+                    label = BuildPluginSummary(cond)
                 elseif def.needsLua then
                     local expr = (cond.luaCode and cond.luaCode:gsub("%s+", " "):match("^%s*(.-)%s*$")) or ""
                     if expr == "" then expr = "(empty)" end
@@ -1178,7 +1222,7 @@ local function SearchTalentTreeByName(input)
 end
 
 -------------------------------------------------------------------------------
--- Comparison operator options (shared by resource and DOCJ timer dropdowns)
+-- Comparison operator options (shared by resource and proc timer comparisons)
 -------------------------------------------------------------------------------
 local OP_LIST = {
     { id = ">=", label = ">=" },
@@ -1186,6 +1230,15 @@ local OP_LIST = {
     { id = "==", label = "==" },
     { id = ">",  label = ">"  },
     { id = "<",  label = "<"  },
+}
+
+local PROC_MODE_LIST = {
+    { id = "active", label = "Active" },
+    { id = ">=",     label = ">="     },
+    { id = "<=",     label = "<="     },
+    { id = "==",     label = "=="     },
+    { id = ">",      label = ">"      },
+    { id = "<",      label = "<"      },
 }
 
 -- Creates a compact dropdown button that opens a popup list of options.
@@ -1300,11 +1353,11 @@ local function CreateCondInputArea(parent)
     local resolvedOtherName = nil
     local resSel            = "chi"    -- "chi" or "energy"
     local opSel             = ">="     -- resource operator (>=, <=, ==, >, <)
-    local timerOpSel        = "<"      -- DOCJ timer operator
+    local procModeSel       = "active" -- "active" or comparison operator
     local opDropdown        = nil      -- assigned after operatorFrame is built
-    local timerOpDropdown   = nil      -- assigned after timerOpFrame is built
+    local procModeDropdown  = nil      -- assigned after procModeFrame is built
     -- Forward-declare so closures defined before their creation can capture them.
-    local timerOpFrame
+    local procModeFrame
     local valLbl
     local valBox
     local luaFrame
@@ -1456,41 +1509,46 @@ local function CreateCondInputArea(parent)
         ShowPluginPicker(pluginBtn, function(opt)
             selPlugin = opt
             pluginBtn:SetText(opt.label)
-            if opt.needsOperator then
-                timerOpFrame:Show()
-                timerOpSel = "<"
-                if timerOpDropdown then timerOpDropdown:SetSelected("<") end
+            if opt.supportsProcMode then
+                procModeFrame:Show()
+                procModeSel = "active"
+                if procModeDropdown then procModeDropdown:SetSelected("active") end
+                valLbl:Hide(); valBox:Hide()
             else
-                timerOpFrame:Hide()
-            end
-            if opt.needsValue then
-                valLbl:SetText("Seconds:")
-                valLbl:Show()
-                valBox:SetText(tostring(opt.default or 4))
-                valBox:Show()
-            else
+                procModeFrame:Hide()
                 valLbl:Hide(); valBox:Hide()
             end
             UpdateLayout()
         end)
     end)
 
-    -- ── DOCJ Timer operator selector (shown only for docj_timer plugin) ───
-    timerOpFrame = CreateFrame("Frame", nil, f)
-    timerOpFrame:SetSize(GetRightPanelWidth() - 18, 22)
-    timerOpFrame:SetPoint("TOPLEFT", pluginFrame, "BOTTOMLEFT", 0, -4)
-    timerOpFrame:Hide()
+    -- ── Proc mode selector (Active or timer comparison) ───────────────────
+    procModeFrame = CreateFrame("Frame", nil, f)
+    procModeFrame:SetSize(GetRightPanelWidth() - 18, 22)
+    procModeFrame:SetPoint("TOPLEFT", pluginFrame, "BOTTOMLEFT", 0, -4)
+    procModeFrame:Hide()
 
-    local timerOpLabel = timerOpFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    timerOpLabel:SetPoint("LEFT", timerOpFrame, "LEFT", 0, 0)
-    timerOpLabel:SetWidth(60)
-    timerOpLabel:SetText("Operator:")
-    timerOpLabel:SetTextColor(0.55, 0.72, 0.88, 1)
+    local procModeLabel = procModeFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    procModeLabel:SetPoint("LEFT", procModeFrame, "LEFT", 0, 0)
+    procModeLabel:SetWidth(60)
+    procModeLabel:SetText("Mode:")
+    procModeLabel:SetTextColor(0.55, 0.72, 0.88, 1)
 
-    timerOpDropdown = MakeOpDropdown(timerOpFrame, OP_LIST)
-    timerOpDropdown:SetPoint("LEFT", timerOpLabel, "RIGHT", 4, 0)
-    timerOpDropdown:SetSelected("<")
-    timerOpDropdown:SetOnChange(function(id) timerOpSel = id end)
+    procModeDropdown = MakeOpDropdown(procModeFrame, PROC_MODE_LIST)
+    procModeDropdown:SetPoint("LEFT", procModeLabel, "RIGHT", 4, 0)
+    procModeDropdown:SetSelected("active")
+    procModeDropdown:SetOnChange(function(id)
+        procModeSel = id
+        if id == "active" then
+            valLbl:Hide(); valBox:Hide()
+        else
+            valLbl:SetText("Seconds:")
+            valLbl:Show()
+            if valBox:GetText() == "" then valBox:SetText("4") end
+            valBox:Show()
+        end
+        UpdateLayout()
+    end)
 
     -- ── Custom Lua expression row ─────────────────────────────────────────
     luaFrame = CreateFrame("Frame", nil, f)
@@ -1558,11 +1616,6 @@ local function CreateCondInputArea(parent)
         if opDropdown then opDropdown:SetSelected(mode) end
     end
 
-    local function SetTimerOpSel(mode)
-        timerOpSel = mode
-        if timerOpDropdown then timerOpDropdown:SetSelected(mode) end
-    end
-
     chiBtn:SetScript("OnClick",    function() SetResSel("chi")    end)
     energyBtn:SetScript("OnClick", function() SetResSel("energy") end)
 
@@ -1585,14 +1638,14 @@ local function CreateCondInputArea(parent)
         resourceFrame:SetWidth(contentW)
         operatorFrame:SetWidth(contentW)
         pluginFrame:SetWidth(contentW)
-        timerOpFrame:SetWidth(contentW)
+        procModeFrame:SetWidth(contentW)
         luaFrame:SetWidth(contentW)
         pluginBtn:SetWidth(contentW)
         luaBox:SetWidth(math.max(120, contentW - 6))
         chiBtn:SetWidth(resBtnW)
         energyBtn:SetWidth(resBtnW)
         if opDropdown      then opDropdown:UpdateWidth(opDropdownW)      end
-        if timerOpDropdown then timerOpDropdown:UpdateWidth(opDropdownW) end
+        if procModeDropdown then procModeDropdown:UpdateWidth(opDropdownW) end
         UpdateLayout()
     end
 
@@ -1606,11 +1659,11 @@ local function CreateCondInputArea(parent)
         elseif selType and selType.needsLua then
             above = luaFrame
         elseif selType and selType.needsPlugin then
-            above = (selPlugin and selPlugin.needsOperator) and timerOpFrame or pluginFrame
+            above = (selPlugin and selPlugin.supportsProcMode) and procModeFrame or pluginFrame
         end
         local showVal = selType and (
             selType.needsValue or selType.needsResource or
-            (selType.needsPlugin and selPlugin and selPlugin.needsValue))
+            (selType.needsPlugin and selPlugin and selPlugin.supportsProcMode and procModeSel ~= "active"))
         if showVal then
             valLbl:ClearAllPoints()
             valLbl:SetPoint("TOPLEFT", above, "BOTTOMLEFT", 0, -6)
@@ -1629,8 +1682,8 @@ local function CreateCondInputArea(parent)
         end
         if selType and selType.needsPlugin then
             h = h + 22 + 4   -- plugin selector row
-            if selPlugin and selPlugin.needsOperator then
-                h = h + 22 + 4  -- timer operator row
+            if selPlugin and selPlugin.supportsProcMode then
+                h = h + 22 + 4  -- mode row
             end
         end
         if showVal then h = h + 22 + 4 end
@@ -1665,7 +1718,7 @@ local function CreateCondInputArea(parent)
             spellToggleFrame:Hide(); otherFrame:Hide()
             resourceFrame:Hide(); operatorFrame:Hide()
             luaFrame:Hide()
-            pluginFrame:Hide(); timerOpFrame:Hide()
+            pluginFrame:Hide(); procModeFrame:Hide()
             valLbl:Hide(); valBox:Hide()
             selPlugin = nil
             if ct.needsSpell then
@@ -1700,6 +1753,8 @@ local function CreateCondInputArea(parent)
             if ct.needsPlugin then
                 pluginFrame:Show()
                 pluginBtn:SetText("Select plugin...")
+                procModeSel = "active"
+                if procModeDropdown then procModeDropdown:SetSelected("active") end
             end
             if ct.needsValue then
                 valLbl:SetText((ct.valueLabel or "Value") .. ":")
@@ -1720,7 +1775,7 @@ local function CreateCondInputArea(parent)
     f.GetNegate       = function() return notCheck:GetChecked() and true or false end
     f.GetResource     = function() return resSel end
     f.GetOperator     = function() return opSel end
-    f.GetTimerOperator= function() return timerOpSel end
+    f.GetProcMode     = function() return procModeSel end
     f.GetPlugin       = function() return selPlugin and selPlugin.id or nil end
     f.GetLuaCode      = function()
         local expr = luaBox:GetText() and luaBox:GetText():match("^%s*(.-)%s*$") or ""
@@ -1743,7 +1798,7 @@ local function CreateCondInputArea(parent)
 
     f.Reset = function()
         selType = nil; spellSel = "this"; resSel = "chi"; opSel = ">="
-        timerOpSel = "<"
+        procModeSel = "active"
         selPlugin = nil
         resolvedOtherID = nil; resolvedOtherName = nil
         notCheck:SetChecked(false)
@@ -1751,11 +1806,11 @@ local function CreateCondInputArea(parent)
         spellToggleFrame:Hide(); otherFrame:Hide()
         resourceFrame:Hide(); operatorFrame:Hide()
         luaFrame:Hide(); luaBox:SetText("")
-        pluginFrame:Hide(); timerOpFrame:Hide(); pluginBtn:SetText("Select plugin...")
+        pluginFrame:Hide(); procModeFrame:Hide(); pluginBtn:SetText("Select plugin...")
         otherNameBox:SetText(""); otherResultLbl:SetText(""); otherIcon:Hide()
         valLbl:Hide(); valBox:SetText(""); valBox:Hide()
         if opDropdown      then opDropdown:SetSelected(">=") end
-        if timerOpDropdown then timerOpDropdown:SetSelected("<") end
+        if procModeDropdown then procModeDropdown:SetSelected("active") end
         f:SetHeight(95)
     end
 
@@ -1807,21 +1862,22 @@ local function CreateCondInputArea(parent)
         end
         if ct.needsPlugin then
             pluginFrame:Show()
+            local pluginID, savedOp, savedValue = NormalizePluginState(cond)
             for _, opt in ipairs(PLUGIN_OPTS) do
-                if opt.id == cond.plugin then
+                if opt.id == pluginID then
                     selPlugin = opt
                     pluginBtn:SetText(opt.label)
-                    if opt.needsOperator then
-                        timerOpFrame:Show()
-                        local savedOp = cond.operator or "<"
-                        timerOpSel = savedOp
-                        if timerOpDropdown then timerOpDropdown:SetSelected(savedOp) end
-                    end
-                    if opt.needsValue then
-                        valLbl:SetText("Seconds:")
-                        valLbl:Show()
-                        valBox:SetText(tostring(cond.value or opt.default or 4))
-                        valBox:Show()
+                    if opt.supportsProcMode then
+                        procModeFrame:Show()
+                        local mode = IsCompOp(savedOp) and savedOp or "active"
+                        procModeSel = mode
+                        if procModeDropdown then procModeDropdown:SetSelected(mode) end
+                        if mode ~= "active" then
+                            valLbl:SetText("Seconds:")
+                            valLbl:Show()
+                            valBox:SetText(tostring(savedValue or opt.default or 4))
+                            valBox:Show()
+                        end
                     end
                     break
                 end
@@ -2245,9 +2301,12 @@ RefreshRightPanel = function()
                     return
                 end
                 newCond.plugin = pid
-                if pid == "docj_timer" then
-                    newCond.value    = condInputArea.GetValue() or 4
-                    newCond.operator = condInputArea.GetTimerOperator()
+                if PROC_PLUGIN_BY_ID[pid] then
+                    local mode = condInputArea.GetProcMode()
+                    if IsCompOp(mode) then
+                        newCond.operator = mode
+                        newCond.value = condInputArea.GetValue() or 4
+                    end
                 end
             end
             if ct.needsSpell then
@@ -3634,15 +3693,7 @@ _G.SBAS_BuildCondRowText = function(cond, ruleSpellID, isFirst, parenDepthIn)
             end
         end
     elseif def.needsPlugin then
-        local pLabel = cond.plugin or "?"
-        for _, opt in ipairs(PLUGIN_OPTS) do
-            if opt.id == cond.plugin then pLabel = opt.label; break end
-        end
-        if cond.plugin == "docj_timer" then
-            label = pLabel .. " " .. (cond.operator or "<") .. " " .. tostring(cond.value or 4)
-        else
-            label = pLabel
-        end
+        label = BuildPluginSummary(cond)
     elseif def.needsLua then
         local expr = (cond.luaCode and cond.luaCode:gsub("%s+", " "):match("^%s*(.-)%s*$")) or ""
         if expr == "" then expr = "(empty)" end

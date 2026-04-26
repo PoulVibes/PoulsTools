@@ -246,8 +246,12 @@ local function OnBuildUI(parent)
     BuildTrackedList()
 
     -- register for runtime updates when trackers are added/removed
+    if parent._cdtChangeListener and type(CooldownTracker_UnregisterChangeListener) == "function" then
+        CooldownTracker_UnregisterChangeListener(parent._cdtChangeListener)
+    end
+    parent._cdtChangeListener = BuildTrackedList
     if type(CooldownTracker_RegisterChangeListener) == "function" then
-        CooldownTracker_RegisterChangeListener(BuildTrackedList)
+        CooldownTracker_RegisterChangeListener(parent._cdtChangeListener)
     end
 
     local div3, dy3 = W:SectionHeader(parent, trackedContainer, -6, "Actions")
@@ -297,6 +301,7 @@ local function OnBuildUI(parent)
         end
     end)
     lockBtn = anchor
+    parent._cdtLockBtn = lockBtn
     y = -8
 
     btn = W:Button(parent, anchor, y, "Print List", function()
@@ -308,11 +313,15 @@ local function OnBuildUI(parent)
     end)
     anchor = btn
     -- Keep lock button label in sync when the settings panel is shown
-    parent:HookScript("OnShow", function()
-        if lockBtn and shmIcons and shmIcons.IsLocked then
-            lockBtn:SetText(shmIcons:IsLocked() and "Unlock Icons" or "Lock Icons")
-        end
-    end)
+    if not parent._cdtOnShowHooked then
+        parent._cdtOnShowHooked = true
+        parent:HookScript("OnShow", function()
+            local btn = parent._cdtLockBtn
+            if btn and shmIcons and shmIcons.IsLocked then
+                btn:SetText(shmIcons:IsLocked() and "Unlock Icons" or "Lock Icons")
+            end
+        end)
+    end
 end
 
 PoulsTools.Menu:RegisterAddon({
