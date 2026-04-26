@@ -10,6 +10,9 @@ local initialized = false
 local debugFrame = nil
 local debugCountText = nil
 
+-- Public global for other addons/conditions.
+_G.ECT_TargetCount = 0
+
 local function EnsureDB()
     EnemyCountTrackerDB = EnemyCountTrackerDB or {}
     local db = EnemyCountTrackerDB
@@ -28,6 +31,7 @@ local function ResetTables()
     wipe(unitToGUID)
     wipe(guidCounts)
     enemyCount = 0
+    _G.ECT_TargetCount = enemyCount
 end
 
 local function Recount()
@@ -38,6 +42,7 @@ local function Recount()
         end
     end
     enemyCount = n
+    _G.ECT_TargetCount = enemyCount
 end
 
 local function UpdateDebugDisplay()
@@ -112,9 +117,17 @@ local function ShouldCountUnit(unit)
         return false
     end
 
-    local hasThreat = UnitThreatSituation("player", unit) ~= nil
+    local playerThreat = UnitThreatSituation("player", unit)
+    local hasThreat = false
+    if playerThreat then
+        hasThreat = true
+    end
+
     if not hasThreat and db.includePetThreat and UnitExists("pet") then
-        hasThreat = UnitThreatSituation("pet", unit) ~= nil
+        local petThreat = UnitThreatSituation("pet", unit)
+        if petThreat then
+            hasThreat = true
+        end
     end
 
     if hasThreat then
@@ -144,6 +157,7 @@ local function AddGUID(guid)
     guidCounts[guid] = current + 1
     if current == 0 then
         enemyCount = enemyCount + 1
+        _G.ECT_TargetCount = enemyCount
     end
 end
 
@@ -156,6 +170,7 @@ local function RemoveGUID(guid)
         guidCounts[guid] = nil
         if enemyCount > 0 then
             enemyCount = enemyCount - 1
+            _G.ECT_TargetCount = enemyCount
         end
     else
         guidCounts[guid] = current - 1
@@ -184,12 +199,32 @@ end
 
 local function ForEachVisibleNameplateUnit(cb)
     local plates = C_NamePlate.GetNamePlates(false)
-    if not plates then return end
+    local foundAny = false
 
-    for _, plateFrame in ipairs(plates) do
-        local unit = plateFrame and plateFrame.namePlateUnitToken
-        if unit then
+    if plates then
+        for _, plateFrame in ipairs(plates) do
+            local unit = nil
+            if plateFrame then
+                unit = plateFrame.namePlateUnitToken
+                    or (plateFrame.UnitFrame and plateFrame.UnitFrame.unit)
+                    or plateFrame.unit
+            end
+
+            if unit and UnitExists(unit) then
+                foundAny = true
+                cb(unit)
+            end
+        end
+    end
+
+    -- Fallback path for nameplate mods that wrap or replace frame references.
+    if foundAny then return end
+
+    for i = 1, 80 do
+        local unit = "nameplate" .. i
+        if UnitExists(unit) then
             cb(unit)
+            foundAny = true
         end
     end
 end

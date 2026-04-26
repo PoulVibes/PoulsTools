@@ -315,6 +315,9 @@ local function OnBuildUI(parent)
 
     -- track all spec buttons so we can enable/disable and refresh their colors
     local specButtons = {}
+    -- Pending optimized baseline per specID: stored when "Optimized" is clicked.
+    -- Save & Apply compares the saved export with this to decide mode.
+    local pendingOptimizedBaseline = {}
     local ACTION_BTN_W = 160
 
     local function GetRecommendedImportTextForSpec(specID)
@@ -463,6 +466,10 @@ local function OnBuildUI(parent)
             if lockBtn and shmIcons and shmIcons.IsLocked then
                 lockBtn:SetText(shmIcons:IsLocked() and "Unlock Icons" or "Lock Icons")
             end
+            -- refresh spec button highlights
+            for _, e in ipairs(specButtons) do
+                if e.refreshHighlight then e.refreshHighlight() end
+            end
         end)
     end
 
@@ -593,8 +600,35 @@ local function OnBuildUI(parent)
                     else             specLabel:SetTextColor(unpack(W.colors.textMuted)) end
                     gy = gy - 18
 
+                    -- Per-spec highlight state (closures capture targetID)
+                    local highlightFrames = {}
+
+                    local function GetSpecMode()
+                        local db = SBA_SimpleDB or {}
+                        local spec_db = db.specs and db.specs[targetID]
+                        local code = spec_db and spec_db.overrideCode
+                        if not code or code:match("^%s*$") then return "blizzard" end
+                        local mode = spec_db and spec_db.overrideMode
+                        if mode then return mode end
+                        return "custom"
+                    end
+
+                    local function RefreshHighlight()
+                        local mode = GetSpecMode()
+                        -- button indices: 1=Custom, 2=Optimized, 3=Blizzard SBA
+                        local activeIdx = (mode == "blizzard") and 3
+                                       or (mode == "optimized") and 2
+                                       or 1
+                        for i, hf in ipairs(highlightFrames) do
+                            if i == activeIdx then hf:Show() else hf:Hide() end
+                        end
+                    end
+
                     local actionDefs = {
                         { "Custom", function()
+                            -- Open the GUI; mode will be committed to "custom" when
+                            -- Save & Apply is clicked (no immediate highlight change).
+                            pendingOptimizedBaseline[targetID] = nil
                             if _G.SBAS_OpenOverrideGUI then
                                 _G.SBAS_OpenOverrideGUI(targetID, cname .. " — " .. displayName)
                             end
@@ -611,6 +645,16 @@ local function OnBuildUI(parent)
                                 return
                             end
 
+                            -- Store the baseline; Save & Apply will compare saved rules
+                            -- against it to determine "optimized" vs "custom".
+                            -- Normalize through the same pipeline as SerializeRulesForExportV2
+                            -- so the strings are directly comparable.
+                            if type(_G.SBAS_NormalizeImportText) == "function" then
+                                local normalized = _G.SBAS_NormalizeImportText(recommendedImportText, targetID)
+                                pendingOptimizedBaseline[targetID] = normalized or recommendedImportText
+                            else
+                                pendingOptimizedBaseline[targetID] = recommendedImportText
+                            end
                             print("|cff00ff99SBA_Simple:|r Loaded recommended GUI priorities for " .. displayName .. ".")
                         end, recommendedImportText ~= nil },
                         { "Blizzard SBA", function()
@@ -618,7 +662,10 @@ local function OnBuildUI(parent)
                             SBA_SimpleDB.specs = SBA_SimpleDB.specs or {}
                             SBA_SimpleDB.specs[targetID] = SBA_SimpleDB.specs[targetID] or {}
                             SBA_SimpleDB.specs[targetID].overrideCode = ""
+                            SBA_SimpleDB.specs[targetID].overrideMode = "blizzard"
+                            pendingOptimizedBaseline[targetID] = nil
                             specLabel:SetTextColor(unpack(W.colors.textMuted))
+                            RefreshHighlight()
                         end },
                     }
                     local actionBtns = {}
@@ -633,7 +680,22 @@ local function OnBuildUI(parent)
                             ab:Disable()
                         end
                         actionBtns[i] = ab
+
+                        -- Light-blue border overlay to indicate the active choice
+                        local hf = CreateFrame("Frame", nil, ab, "BackdropTemplate")
+                        hf:SetAllPoints(ab)
+                        hf:SetFrameLevel(ab:GetFrameLevel() + 5)
+                        hf:SetBackdrop({
+                            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+                            edgeSize = 8,
+                            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+                        })
+                        hf:SetBackdropBorderColor(0.4, 0.8, 1, 1)
+                        hf:Hide()
+                        highlightFrames[i] = hf
                     end
+
+                    RefreshHighlight()
 
                     if not spec.apiKnown then
                         for _, ab in ipairs(actionBtns) do
@@ -646,7 +708,7 @@ local function OnBuildUI(parent)
                         end
                     end
 
-                    table.insert(specButtons, { btns = actionBtns, label = specLabel, id = targetID })
+                    table.insert(specButtons, { btns = actionBtns, label = specLabel, id = targetID, refreshHighlight = RefreshHighlight })
                     gy = gy - 26
                 end
                 group:SetHeight(-gy + 4)
@@ -674,7 +736,24 @@ local function OnBuildUI(parent)
             if e.label then
                 if hasText then e.label:SetTextColor(unpack(W.colors.warning)) else e.label:SetTextColor(unpack(W.colors.textMuted)) end
             end
+            if e.refreshHighlight then e.refreshHighlight() end
         end
+    end
+
+    -- Called by the GUI's Save & Apply with the serialized export of what was saved.
+    -- Compares with the pending optimized baseline to determine mode, then refreshes highlights.
+    _G.SBAS_OnGuiSaveAndApply = function(specID, savedExport)
+        SBA_SimpleDB = SBA_SimpleDB or {}
+        SBA_SimpleDB.specs = SBA_SimpleDB.specs or {}
+        SBA_SimpleDB.specs[specID] = SBA_SimpleDB.specs[specID] or {}
+        local baseline = pendingOptimizedBaseline and pendingOptimizedBaseline[specID]
+        if baseline and savedExport == baseline then
+            SBA_SimpleDB.specs[specID].overrideMode = "optimized"
+        else
+            SBA_SimpleDB.specs[specID].overrideMode = "custom"
+        end
+        if pendingOptimizedBaseline then pendingOptimizedBaseline[specID] = nil end
+        refreshSpecButtonColors()
     end
 
     local function setSpecButtonsEnabled(enabled)

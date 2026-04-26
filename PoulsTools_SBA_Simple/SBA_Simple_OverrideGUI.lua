@@ -360,6 +360,33 @@ local function SplitByChar(s, sep)
     return out
 end
 
+-- Ensure export headers always carry a real specialization ID (e.g. 269), not
+-- a specialization index (1-4). Some call paths can accidentally pass indices.
+local function NormalizeExportSpecID(specID)
+    local sid = tonumber(specID) or 0
+    if sid > 4 then return sid end
+
+    if editSpecID and editSpecID > 4 then
+        return editSpecID
+    end
+
+    if sid > 0 and sid <= 4 and type(GetSpecializationInfo) == "function" then
+        local byIndex = select(1, GetSpecializationInfo(sid))
+        if byIndex and byIndex > 0 then
+            return byIndex
+        end
+    end
+
+    if type(CurrentSpecID) == "function" then
+        local cur = CurrentSpecID()
+        if cur and cur > 0 then
+            return cur
+        end
+    end
+
+    return sid
+end
+
 local NormalizeRuleParens
 
 -- v2 compact format (single line):
@@ -370,7 +397,8 @@ local NormalizeRuleParens
 -- type~neg~spellMode~spellID~resource~operator~plugin~value~lua
 local function SerializeRulesForExportV2(specID, rules)
     local chunks = {}
-    chunks[#chunks + 1] = ("SBASGUI2|1|%d"):format(specID or 0)
+    local exportSpecID = NormalizeExportSpecID(specID)
+    chunks[#chunks + 1] = ("SBASGUI2|1|%d"):format(exportSpecID or 0)
 
     for _, rule in ipairs(rules or {}) do
         local ruleParts = {
@@ -431,12 +459,52 @@ local function DeserializeRulesFromExportV2(text, expectedSpecID)
     if header[1] ~= "SBASGUI2" then
         return nil, "Missing v2 export header (expected SBASGUI2)."
     end
-    if tonumber(header[2]) ~= 1 then
-        return nil, "Unsupported v2 export version."
+    local rawVersion = tostring(header[2] or "")
+    rawVersion = rawVersion:match("^%s*(.-)%s*$") or ""
+    local version = tonumber(rawVersion) or tonumber(rawVersion:match("(%d+)"))
+    local rawSpec = tostring(header[3] or "")
+    local sourceSpecID = tonumber(rawSpec:match("^(%d+)$")) or 0
+
+    -- Compatibility recovery for malformed v2 headers where version/spec fields
+    -- can be blank or shifted when copied through some text paths.
+    if not version and rawVersion == "" then
+        version = 1
+    end
+    -- Handle shifted header variant: SBASGUI2||1|269
+    -- In this case header[3] carries version and header[4] carries spec.
+    if rawVersion == "" and sourceSpecID > 0 and (sourceSpecID == 1 or sourceSpecID == 2) and #header >= 4 then
+        local shiftedSpec = tonumber(tostring(header[4] or ""):match("^(%d+)")) or 0
+        if shiftedSpec > 0 then
+            version = sourceSpecID
+            sourceSpecID = shiftedSpec
+        end
+    end
+    -- If the spec token has trailing non-digits (e.g. malformed header that bled into
+    -- the next record), recover by taking the leading numeric prefix only.
+    if sourceSpecID == 0 then
+        sourceSpecID = tonumber(rawSpec:match("^(%d+)")) or 0
+    end
+    if not version and #header >= 3 then
+        for i = 2, #header do
+            local token = tostring(header[i] or "")
+            local n = tonumber(token) or tonumber(token:match("(%d+)"))
+            if not version and (n == 1 or n == 2) then
+                version = n
+            end
+        end
+    end
+    if version ~= 1 and version ~= 2 then
+        return nil, "Unsupported v2 export version: " .. rawVersion
     end
 
-    local sourceSpecID = tonumber(header[3]) or 0
-    if expectedSpecID and expectedSpecID ~= 0 and sourceSpecID ~= expectedSpecID then
+    -- Spec IDs are values like 62, 269, 577... If parsing yields 1-4, that's a
+    -- specialization index from malformed/copied headers, not a real spec ID.
+    -- Treat it as unknown to avoid false mismatch failures on self-export/import.
+    if sourceSpecID > 0 and sourceSpecID <= 4 then
+        sourceSpecID = 0
+    end
+
+    if expectedSpecID and expectedSpecID ~= 0 and sourceSpecID ~= 0 and sourceSpecID ~= expectedSpecID then
         return nil, ("Spec mismatch: import is for spec %d, current GUI is spec %d."):format(sourceSpecID, expectedSpecID)
     end
 
@@ -4101,6 +4169,12 @@ local function CreateGUI()
 
         print("|cff00ff99SBAS Override GUI:|r Priority list saved for "
               .. GetSpecName(editSpecID))
+        -- Notify PoulsTools integration so it can determine the override mode
+        -- (optimized vs custom) based on whether the saved rules match the baseline.
+        if type(_G.SBAS_OnGuiSaveAndApply) == "function" then
+            local savedExport = SerializeRulesForExportV2(editSpecID, workingRules)
+            _G.SBAS_OnGuiSaveAndApply(editSpecID, savedExport)
+        end
         f:Hide()
         -- Refresh the analyzer if it is currently visible (GUI save keeps it relevant)
         local af = _G["SBAS_OverrideAnalyzerFrame"]
@@ -4278,6 +4352,18 @@ _G.SBAS_LoadImportTextIntoOverrideGUI = function(specID, displayName, payload)
     RefreshRightPanel()
 
     return true
+end
+
+-- Public: normalize an import text string through the same deserialize→re-serialize pipeline
+-- used by Save & Apply. Callers can store this normalized form as a baseline and compare it
+-- directly against the savedExport passed to SBAS_OnGuiSaveAndApply.
+_G.SBAS_NormalizeImportText = function(importText, specID)
+    if type(importText) ~= "string" or importText:match("^%s*$") then
+        return nil, "empty import text"
+    end
+    local rules, err = DeserializeRulesFromExport(importText, specID)
+    if not rules then return nil, err or "parse error" end
+    return SerializeRulesForExportV2(specID, rules)
 end
 
 -- Public: open GUI for a spec and replace current working rules with a provided table.
