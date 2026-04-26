@@ -14,4 +14,5 @@
 ## SavedVariablesPerCharacter: SBA_GUI_CharDB
 SBA_Simple.lua
 SBA_Simple_OverrideGUI.lua
+SBA_Simple_RecommendedImports.lua
 SBA_Simple_PoulsTools.lua

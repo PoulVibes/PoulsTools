@@ -263,6 +263,445 @@ local function DeepCopyRules(src)
     return out
 end
 
+local function EncodeField(v)
+    if v == nil then return "" end
+    local s = tostring(v)
+    s = s:gsub("%%", "%%25")
+    s = s:gsub("\r", "%%0D")
+    s = s:gsub("\n", "%%0A")
+    s = s:gsub("|", "%%7C")
+    s = s:gsub(",", "%%2C")
+    s = s:gsub(";", "%%3B")
+    s = s:gsub("~", "%%7E")
+    s = s:gsub("%(", "%%28")
+    s = s:gsub("%)", "%%29")
+    return s
+end
+
+local function DecodeField(v)
+    if not v or v == "" then return "" end
+    return (v:gsub("%%(%x%x)", function(h)
+        return string.char(tonumber(h, 16))
+    end))
+end
+
+local function SplitPipe(line)
+    local out = {}
+    local start = 1
+    while true do
+        local idx = line:find("|", start, true)
+        if not idx then
+            out[#out + 1] = line:sub(start)
+            break
+        end
+        out[#out + 1] = line:sub(start, idx - 1)
+        start = idx + 1
+    end
+    return out
+end
+
+local function SerializeRulesForExport(specID, rules)
+    local lines = {}
+    lines[#lines + 1] = ("SBASGUI|1|%d"):format(specID or 0)
+    for _, rule in ipairs(rules or {}) do
+        lines[#lines + 1] = table.concat({
+            "R",
+            EncodeField(rule.spellID or 0),
+            EncodeField(rule.name or ""),
+        }, "|")
+
+        for _, cond in ipairs(rule.conditions or {}) do
+            local spellMode = ""
+            local spellID = ""
+            if cond.spell == "this" or cond.spell == nil then
+                spellMode = "this"
+            elseif type(cond.spell) == "number" then
+                spellMode = "num"
+                spellID = cond.spell
+            elseif cond.targetID then
+                spellMode = "num"
+                spellID = cond.targetID
+            end
+
+            lines[#lines + 1] = table.concat({
+                "C",
+                EncodeField(cond.type or ""),
+                EncodeField(cond.negate and "1" or "0"),
+                EncodeField(spellMode),
+                EncodeField(spellID),
+                EncodeField(cond.resource),
+                EncodeField(cond.operator),
+                EncodeField(cond.plugin),
+                EncodeField(cond.value),
+                EncodeField(cond.junction),
+                EncodeField(cond.lparen),
+                EncodeField(cond.rparen),
+                EncodeField(cond.luaCode),
+            }, "|")
+        end
+
+        lines[#lines + 1] = "E"
+    end
+    return table.concat(lines, "\n")
+end
+
+local function SplitByChar(s, sep)
+    local out = {}
+    local start = 1
+    while true do
+        local idx = s:find(sep, start, true)
+        if not idx then
+            out[#out + 1] = s:sub(start)
+            break
+        end
+        out[#out + 1] = s:sub(start, idx - 1)
+        start = idx + 1
+    end
+    return out
+end
+
+local NormalizeRuleParens
+
+-- v2 compact format (single line):
+-- SBASGUI2|1|<spec>;R,<spellID>,<name>,<cond>,<cond>;R,...
+-- Condition token: <j><(><body><)>
+-- j is "&&" or "||" for non-first conditions; first has no junction prefix.
+-- body fields are ~-separated and percent-encoded:
+-- type~neg~spellMode~spellID~resource~operator~plugin~value~lua
+local function SerializeRulesForExportV2(specID, rules)
+    local chunks = {}
+    chunks[#chunks + 1] = ("SBASGUI2|1|%d"):format(specID or 0)
+
+    for _, rule in ipairs(rules or {}) do
+        local ruleParts = {
+            "R",
+            EncodeField(rule.spellID or 0),
+            EncodeField(rule.name or ""),
+        }
+
+        for idx, cond in ipairs(rule.conditions or {}) do
+            local spellMode = ""
+            local spellID = ""
+            if cond.spell == "this" or cond.spell == nil then
+                spellMode = "this"
+            elseif type(cond.spell) == "number" then
+                spellMode = "num"
+                spellID = cond.spell
+            elseif cond.targetID then
+                spellMode = "num"
+                spellID = cond.targetID
+            end
+
+            local body = table.concat({
+                EncodeField(cond.type or ""),
+                EncodeField(cond.negate and "1" or "0"),
+                EncodeField(spellMode),
+                EncodeField(spellID),
+                EncodeField(cond.resource),
+                EncodeField(cond.operator),
+                EncodeField(cond.plugin),
+                EncodeField(cond.value),
+                EncodeField(cond.luaCode),
+            }, "~")
+
+            local j = ""
+            if idx > 1 then
+                j = (cond.junction == "or") and "||" or "&&"
+            end
+            local lp = (cond.lparen and cond.lparen > 0) and string.rep("(", cond.lparen) or ""
+            local rp = (cond.rparen and cond.rparen > 0) and string.rep(")", cond.rparen) or ""
+
+            ruleParts[#ruleParts + 1] = j .. lp .. body .. rp
+        end
+
+        chunks[#chunks + 1] = table.concat(ruleParts, ",")
+    end
+
+    return table.concat(chunks, ";")
+end
+
+local function DeserializeRulesFromExportV2(text, expectedSpecID)
+    local payload = (text or ""):match("^%s*(.-)%s*$") or ""
+    local chunks = SplitByChar(payload, ";")
+    if #chunks == 0 or not chunks[1] or chunks[1] == "" then
+        return nil, "Import text is empty."
+    end
+
+    local header = SplitPipe(chunks[1])
+    if header[1] ~= "SBASGUI2" then
+        return nil, "Missing v2 export header (expected SBASGUI2)."
+    end
+    if tonumber(header[2]) ~= 1 then
+        return nil, "Unsupported v2 export version."
+    end
+
+    local sourceSpecID = tonumber(header[3]) or 0
+    if expectedSpecID and expectedSpecID ~= 0 and sourceSpecID ~= expectedSpecID then
+        return nil, ("Spec mismatch: import is for spec %d, current GUI is spec %d."):format(sourceSpecID, expectedSpecID)
+    end
+
+    local out = {}
+    for i = 2, #chunks do
+        local line = chunks[i]
+        if line and line ~= "" then
+            local parts = SplitByChar(line, ",")
+            if parts[1] ~= "R" then
+                return nil, "Invalid v2 record tag: " .. tostring(parts[1])
+            end
+
+            local spellID = tonumber(DecodeField(parts[2] or "")) or 0
+            local name = DecodeField(parts[3] or "")
+            if name == "" then name = tostring(spellID) end
+
+            local rule = { spellID = spellID, name = name, conditions = {} }
+            for ci = 4, #parts do
+                local tok = parts[ci] or ""
+                if tok ~= "" then
+                    local junction
+                    if tok:sub(1, 2) == "&&" then
+                        junction = "and"
+                        tok = tok:sub(3)
+                    elseif tok:sub(1, 2) == "||" then
+                        junction = "or"
+                        tok = tok:sub(3)
+                    elseif tok:sub(1, 1) == "&" then
+                        junction = "and"
+                        tok = tok:sub(2)
+                    elseif tok:sub(1, 1) == "|" then
+                        junction = "or"
+                        tok = tok:sub(2)
+                    end
+
+                    local lp = 0
+                    while tok:sub(1, 1) == "(" do
+                        lp = lp + 1
+                        tok = tok:sub(2)
+                    end
+
+                    local rp = 0
+                    while tok:sub(-1) == ")" do
+                        rp = rp + 1
+                        tok = tok:sub(1, -2)
+                    end
+
+                    local cols = SplitByChar(tok, "~")
+                    local function col(idx)
+                        return DecodeField(cols[idx] or "")
+                    end
+
+                    local cond = {
+                        type = col(1),
+                        negate = col(2) == "1",
+                    }
+
+                    local spellMode = col(3)
+                    local cSpellID = tonumber(col(4))
+                    if spellMode == "this" then
+                        cond.spell = "this"
+                    elseif spellMode == "num" and cSpellID then
+                        cond.spell = cSpellID
+                        cond.targetID = cSpellID
+                    end
+
+                    local resource = col(5)
+                    local operator = col(6)
+                    local plugin = col(7)
+                    local value = tonumber(col(8))
+                    local luaCode = col(9)
+
+                    if resource ~= "" then cond.resource = resource end
+                    if operator ~= "" then cond.operator = operator end
+                    if plugin ~= "" then cond.plugin = plugin end
+                    if value ~= nil then cond.value = value end
+                    if luaCode ~= "" then cond.luaCode = luaCode end
+                    if junction ~= nil then cond.junction = junction end
+                    if lp > 0 then cond.lparen = lp end
+                    if rp > 0 then cond.rparen = rp end
+
+                    rule.conditions[#rule.conditions + 1] = cond
+                end
+            end
+
+            NormalizeRuleParens(rule.conditions)
+            out[#out + 1] = rule
+        end
+    end
+
+    return out
+end
+
+local SPELL_MODE_SET = {
+    ["this"] = true,
+    ["num"] = true,
+}
+
+local RESOURCE_SET = {
+    ["chi"] = true,
+    ["energy"] = true,
+}
+
+local PLUGIN_SET = {
+    ["zenith"] = true,
+    ["bok_proc"] = true,
+    ["rwk_proc"] = true,
+    ["docj_proc"] = true,
+    ["docj_timer"] = true,
+}
+
+local function InferMissingPrefix(raw, validSet)
+    if not raw or raw == "" then return raw end
+    if validSet[raw] then return raw end
+    for k in pairs(validSet) do
+        if #k == (#raw + 1) and k:sub(2) == raw then
+            return k
+        end
+    end
+    return raw
+end
+
+local function InferCondType(raw)
+    if not raw or raw == "" then return "" end
+    if COND_BY_ID[raw] then return raw end
+    for id in pairs(COND_BY_ID) do
+        if #id == (#raw + 1) and id:sub(2) == raw then
+            return id
+        end
+    end
+    return raw
+end
+
+local function NormalizeImportLines(lines)
+    local out = {}
+    for _, ln in ipairs(lines) do
+        local startsNew = (ln == "E") or ln:match("^R|") or ln:match("^C")
+        if #out > 0 and not startsNew and out[#out]:sub(1, 1) == "C" then
+            -- Some payloads split one condition record over multiple lines.
+            out[#out] = out[#out] .. "|" .. ln
+        else
+            out[#out + 1] = ln
+        end
+    end
+    return out
+end
+
+local function ParseConditionRelaxed(parts)
+    local mergedTag = parts[1] or ""
+    local typeRaw, negateRaw, startIdx
+
+    if mergedTag == "C" then
+        typeRaw   = DecodeField(parts[2] or "")
+        negateRaw = DecodeField(parts[3] or "0")
+        startIdx  = 4
+    else
+        -- Legacy malformed line where first field is like "Calented".
+        typeRaw   = DecodeField(mergedTag:sub(2))
+        negateRaw = DecodeField(parts[2] or "0")
+        startIdx  = 3
+    end
+
+    local impliedSpellMode = ""
+    local nDigit, tail = negateRaw:match("^([01])(.*)$")
+    if nDigit then
+        negateRaw = nDigit
+        impliedSpellMode = tail or ""
+    end
+
+    local condType = InferCondType(typeRaw)
+    local cond = {
+        type = condType,
+        negate = negateRaw == "1",
+    }
+
+    local def = COND_BY_ID[condType]
+    if not def then
+        cond.type = "custom_lua"
+        cond.luaCode = table.concat(parts, "|")
+        return cond
+    end
+
+    local tokens = {}
+    for i = startIdx, #parts do
+        tokens[#tokens + 1] = DecodeField(parts[i] or "")
+    end
+
+    local spellMode = InferMissingPrefix(tokens[1] ~= "" and tokens[1] or impliedSpellMode, SPELL_MODE_SET)
+    local spellID = tonumber(tokens[2] or "")
+
+    if def.needsSpell then
+        if spellMode == "num" and spellID then
+            cond.spell = spellID
+            cond.targetID = spellID
+        else
+            cond.spell = "this"
+        end
+    end
+
+    if def.needsResource then
+        for _, tok in ipairs(tokens) do
+            local res = InferMissingPrefix(tok, RESOURCE_SET)
+            if RESOURCE_SET[res] then cond.resource = res end
+            if VALID_COMP_OPS[tok] then cond.operator = tok end
+            local n = tonumber(tok)
+            if n ~= nil then cond.value = n end
+        end
+        cond.resource = cond.resource or "chi"
+        cond.operator = cond.operator or ">="
+        cond.value = cond.value or 0
+    end
+
+    if def.needsPlugin then
+        for _, tok in ipairs(tokens) do
+            local plugin = InferMissingPrefix(tok, PLUGIN_SET)
+            if PLUGIN_SET[plugin] then cond.plugin = plugin end
+            if VALID_COMP_OPS[tok] then cond.operator = tok end
+            local n = tonumber(tok)
+            if n ~= nil then cond.value = n end
+        end
+    end
+
+    if def.needsLua then
+        cond.luaCode = tokens[#tokens] or ""
+    end
+
+    for _, tok in ipairs(tokens) do
+        if tok == "and" or tok == "or" then
+            cond.junction = tok
+            break
+        end
+    end
+
+    return cond
+end
+
+NormalizeRuleParens = function(conds)
+    local depth = 0
+    for i, cond in ipairs(conds or {}) do
+        local lp = tonumber(cond.lparen) or 0
+        local rp = tonumber(cond.rparen) or 0
+        if lp < 0 then lp = 0 end
+        if rp < 0 then rp = 0 end
+
+        -- Clamp closes so we never close more groups than are currently open.
+        local maxClosable = depth + lp
+        if rp > maxClosable then rp = maxClosable end
+
+        cond.lparen = (lp > 0) and lp or nil
+        cond.rparen = (rp > 0) and rp or nil
+        depth = maxClosable - rp
+    end
+
+    -- Auto-close any trailing opens on the last condition to keep expressions valid.
+    if depth > 0 and conds and #conds > 0 then
+        local last = conds[#conds]
+        last.rparen = (tonumber(last.rparen) or 0) + depth
+    end
+end
+
+local function DeserializeRulesFromExport(text, expectedSpecID)
+    local trimmedPayload = (text or ""):match("^%s*(.-)%s*$") or ""
+    return DeserializeRulesFromExportV2(trimmedPayload, expectedSpecID)
+end
+
 -------------------------------------------------------------------------------
 -- 3.  Code generator
 -------------------------------------------------------------------------------
@@ -347,9 +786,6 @@ local function GenerateCode(rules)
         if (rule.spellID or 0) > 0 then
             local parts        = {}
             local junctions    = {}
-            local prevJunction = nil   -- junction stored on the PREVIOUS processed condition;
-                                       -- cond.junction means "connect me to the NEXT condition",
-                                       -- so it becomes the junction BEFORE the next part.
             for ci, cond in ipairs(rule.conditions or {}) do
                 local def = COND_BY_ID[cond.type]
                 if def then
@@ -357,9 +793,14 @@ local function GenerateCode(rules)
                     if cond.negate then frag = "not (" .. frag .. ")" end
                     local lp = (cond.lparen or 0) > 0 and string.rep("(", cond.lparen) or ""
                     local rp = (cond.rparen or 0) > 0 and string.rep(")", cond.rparen) or ""
-                    parts[#parts+1]         = lp .. frag .. rp
-                    junctions[#junctions+1] = prevJunction   -- junction leading INTO this part
-                    prevJunction            = cond.junction or "and"  -- junction leading OUT of this part
+                    local partIdx = #parts + 1
+                    parts[partIdx] = lp .. frag .. rp
+                    if partIdx == 1 then
+                        junctions[partIdx] = nil
+                    else
+                        local j = cond.junction
+                        junctions[partIdx] = (j == "and" or j == "or") and j or "and"
+                    end
                 end
             end
             allRuleParts[i] = { parts = parts, junctions = junctions }
@@ -370,11 +811,17 @@ local function GenerateCode(rules)
 
     -- Count total occurrences of each spell-ID across all rules.
     local cdTotalCount = {}
+    local cdFirstSeenOrder = {}
+    local cdSeen = {}
     for _, rp in ipairs(allRuleParts) do
         if rp then
             for _, part in ipairs(rp.parts) do
                 for id in part:gmatch("C_Spell%.GetSpellCooldown%((%d+)%)") do
                     cdTotalCount[id] = (cdTotalCount[id] or 0) + 1
+                    if not cdSeen[id] then
+                        cdSeen[id] = true
+                        cdFirstSeenOrder[#cdFirstSeenOrder + 1] = id
+                    end
                 end
             end
         end
@@ -383,7 +830,8 @@ local function GenerateCode(rules)
     -- Emit one top-level local for each spell ID that appears more than once,
     -- then substitute the variable name into every part that references it.
     local hoisted = {}   -- set of IDs already emitted as top-level locals
-    for id, count in pairs(cdTotalCount) do
+    for _, id in ipairs(cdFirstSeenOrder) do
+        local count = cdTotalCount[id] or 0
         if count > 1 then
             local varName = "cd_" .. id
             L[#L+1] = ("local %s = C_Spell.GetSpellCooldown(%s)"):format(varName, id)
@@ -504,12 +952,16 @@ end
 local condPicker    = nil
 local pluginPicker  = nil   -- forward-declared so CloseAllPopups can reference it
 local addSpellPopup = nil   -- forward-declared so CloseAllPopups can reference it
+local exportPopup   = nil
+local importPopup   = nil
 local opDropdownPopups = {} -- all MakeOpDropdown popup frames, closed by CloseAllPopups
 
 local function CloseAllPopups()
     if condPicker   and condPicker:IsShown()   then condPicker:Hide()   end
     if pluginPicker and pluginPicker:IsShown() then pluginPicker:Hide() end
     if addSpellPopup and addSpellPopup:IsShown() then addSpellPopup:Hide() end
+    if exportPopup and exportPopup:IsShown() then exportPopup:Hide() end
+    if importPopup and importPopup:IsShown() then importPopup:Hide() end
     for _, p in ipairs(opDropdownPopups) do if p:IsShown() then p:Hide() end end
 end
 
@@ -725,6 +1177,106 @@ local function CreateAddSpellPopup()
     f.onAdd    = nil   -- set before showing
 
     return f
+end
+
+local function CreateTransferPopup(titleText, confirmText)
+    local f = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+    f:SetSize(520, 390)
+    f:SetFrameStrata("DIALOG")
+    f:SetToplevel(true)
+    f:SetClampedToScreen(true)
+    f:Hide()
+    SetBD(f, 0.04, 0.06, 0.12, 0.97, 0.3, 0.5, 0.7)
+
+    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    title:SetPoint("TOP", f, "TOP", 0, -10)
+    title:SetText(titleText)
+    title:SetTextColor(0.55, 0.82, 1, 1)
+
+    local note = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    note:SetPoint("TOPLEFT", f, "TOPLEFT", 12, -30)
+    note:SetPoint("TOPRIGHT", f, "TOPRIGHT", -12, -30)
+    note:SetJustifyH("LEFT")
+    note:SetTextColor(0.68, 0.78, 0.9, 1)
+    f.note = note
+
+    local boxFrame = CreateFrame("Frame", nil, f, "BackdropTemplate")
+    boxFrame:SetPoint("TOPLEFT", f, "TOPLEFT", 12, -52)
+    boxFrame:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -12, 44)
+    SetBD(boxFrame, 0.03, 0.05, 0.09, 0.95, 0.17, 0.28, 0.42)
+
+    local sf = CreateFrame("ScrollFrame", nil, boxFrame)
+    sf:SetPoint("TOPLEFT", boxFrame, "TOPLEFT", 4, -4)
+    sf:SetPoint("BOTTOMRIGHT", boxFrame, "BOTTOMRIGHT", -4, 4)
+    sf:EnableMouseWheel(true)
+    sf:SetScript("OnMouseWheel", function(self, d)
+        local v = self:GetVerticalScroll()
+        local m = self:GetVerticalScrollRange()
+        self:SetVerticalScroll(math.min(math.max(v - d * 24, 0), m))
+    end)
+
+    local edit = CreateFrame("EditBox", nil, sf)
+    edit:SetMultiLine(true)
+    edit:SetAutoFocus(false)
+    edit:SetFontObject("ChatFontNormal")
+    edit:SetWidth(486)
+    edit:SetTextInsets(4, 4, 4, 4)
+    edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    edit:SetScript("OnTextChanged", function(self)
+        local h = math.max(320, self:GetStringHeight() + 16)
+        self:SetHeight(h)
+    end)
+    sf:SetScrollChild(edit)
+
+    local confirmBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    confirmBtn:SetSize(110, 24)
+    confirmBtn:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 12, 12)
+    confirmBtn:SetText(confirmText)
+
+    local closeBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    closeBtn:SetSize(110, 24)
+    closeBtn:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -12, 12)
+    closeBtn:SetText("Close")
+    closeBtn:SetScript("OnClick", function() f:Hide() end)
+
+    f.editBox = edit
+    f.confirmBtn = confirmBtn
+
+    return f
+end
+
+local function ShowExportPopup(anchor, specID, rules)
+    if not exportPopup then
+        exportPopup = CreateTransferPopup("Export SBA Rules", "Select All")
+    end
+    exportPopup.note:SetText("Copy this text and keep it as your backup for the currently open spec.")
+    exportPopup.editBox:SetText(SerializeRulesForExportV2(specID, rules))
+    exportPopup.confirmBtn:SetScript("OnClick", function()
+        exportPopup.editBox:SetFocus()
+        exportPopup.editBox:HighlightText()
+    end)
+    exportPopup:ClearAllPoints()
+    exportPopup:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
+    exportPopup:Show()
+    exportPopup.editBox:SetFocus()
+    exportPopup.editBox:HighlightText()
+end
+
+local function ShowImportPopup(anchor, onImport)
+    if not importPopup then
+        importPopup = CreateTransferPopup("Import SBA Rules", "Import")
+    end
+    importPopup.note:SetText("Paste exported text for this spec, then click Import.")
+    importPopup.editBox:SetText("")
+    importPopup.confirmBtn:SetScript("OnClick", function()
+        if onImport and onImport(importPopup.editBox:GetText() or "") then
+            importPopup:Hide()
+        end
+    end)
+    importPopup:ClearAllPoints()
+    importPopup:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
+    importPopup:Show()
+    importPopup.editBox:SetFocus()
 end
 
 -------------------------------------------------------------------------------
@@ -3570,7 +4122,7 @@ local function CreateGUI()
     end)
 
     local previewBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-    previewBtn:SetSize(118, 28)
+    previewBtn:SetSize(106, 28)
     previewBtn:SetPoint("LEFT", saveBtn, "RIGHT", 6, 0)
     previewBtn:SetText("Preview Code")
     previewBtn:SetScript("OnClick", function()
@@ -3595,9 +4147,45 @@ local function CreateGUI()
         end
     end)
 
+    local exportBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    exportBtn:SetSize(82, 28)
+    exportBtn:SetPoint("LEFT", previewBtn, "RIGHT", 6, 0)
+    exportBtn:SetText("Export")
+    exportBtn:SetScript("OnClick", function()
+        ShowExportPopup(exportBtn, editSpecID, workingRules)
+    end)
+
+    local importBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    importBtn:SetSize(82, 28)
+    importBtn:SetPoint("LEFT", exportBtn, "RIGHT", 6, 0)
+    importBtn:SetText("Import")
+    importBtn:SetScript("OnClick", function()
+        ShowImportPopup(importBtn, function(payload)
+            local imported, err = DeserializeRulesFromExport(payload, editSpecID)
+            if not imported then
+                print("|cffff4444SBAS Override GUI:|r Import failed - " .. tostring(err or "invalid text"))
+                return false
+            end
+
+            workingRules = DeepCopyRules(imported)
+            sessionRules[editSpecID] = workingRules
+            selectedIdx = (#workingRules > 0) and 1 or 0
+            selectedCondIdx = nil
+            isAddingCond = false
+            RefreshRuleList()
+            RefreshRightPanel()
+
+            print("|cff00ff99SBAS Override GUI:|r Imported " .. tostring(#workingRules)
+                  .. " priorit" .. ((#workingRules == 1) and "y" or "ies")
+                  .. " for " .. GetSpecName(editSpecID)
+                  .. ". Click Save & Apply to compile.")
+            return true
+        end)
+    end)
+
     local clearBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
     clearBtn:SetSize(104, 28)
-    clearBtn:SetPoint("LEFT", previewBtn, "RIGHT", 6, 0)
+    clearBtn:SetPoint("LEFT", importBtn, "RIGHT", 6, 0)
     clearBtn:SetText("Clear All Rules")
     clearBtn:SetScript("OnClick", function()
         workingRules = {}
@@ -3677,6 +4265,54 @@ local function OpenGUI(specID, displayName)
 end
 
 _G.SBAS_OpenOverrideGUI    = OpenGUI
+
+-- Public: open GUI for a spec and load rules from an import/export payload.
+-- This uses the exact same parser as the Import button in the GUI.
+_G.SBAS_LoadImportTextIntoOverrideGUI = function(specID, displayName, payload)
+    if type(payload) ~= "string" or payload:match("^%s*$") then
+        return false, "import payload is empty"
+    end
+
+    OpenGUI(specID, displayName)
+
+    local imported, err = DeserializeRulesFromExport(payload, editSpecID)
+    if not imported then
+        return false, err or "invalid import payload"
+    end
+
+    workingRules = DeepCopyRules(imported)
+    sessionRules[editSpecID] = workingRules
+    selectedIdx = (#workingRules > 0) and 1 or 0
+    selectedCondIdx = nil
+    isAddingCond = false
+
+    RefreshRuleList()
+    RefreshRightPanel()
+
+    return true
+end
+
+-- Public: open GUI for a spec and replace current working rules with a provided table.
+-- Used by submenu "Recommended" buttons to preload curated priority lists.
+_G.SBAS_LoadRulesIntoOverrideGUI = function(specID, displayName, rules)
+    if type(rules) ~= "table" then
+        return false, "rules must be a table"
+    end
+
+    OpenGUI(specID, displayName)
+
+    workingRules = DeepCopyRules(rules)
+    sessionRules[editSpecID] = workingRules
+    selectedIdx = (#workingRules > 0) and 1 or 0
+    selectedCondIdx = nil
+    isAddingCond = false
+
+    RefreshRuleList()
+    RefreshRightPanel()
+
+    return true
+end
+
 -- Expose condition-summary renderer for the Priority Analyzer.
 -- Returns a human-readable short string for one condition.
 _G.SBAS_CondSummaryText    = CondSummaryText

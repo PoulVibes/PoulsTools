@@ -317,6 +317,17 @@ local function OnBuildUI(parent)
     local specButtons = {}
     local ACTION_BTN_W = 160
 
+    local function GetRecommendedImportTextForSpec(specID)
+        if not specID then return nil end
+        local getFn = _G.SBAS_GetRecommendedImportForSpec
+        if type(getFn) ~= "function" then return nil end
+        local rec = getFn(specID)
+        if not rec or type(rec.importText) ~= "string" or rec.importText:match("^%s*$") then
+            return nil
+        end
+        return rec.importText
+    end
+
     anchor = W:Checkbox(parent, anchor, y,
         "Enabled",
         "Enable the SBA Simple icon.",
@@ -548,6 +559,7 @@ local function OnBuildUI(parent)
                 for _, spec in ipairs(data.specs) do
                     local targetID   = spec.id
                     local displayName = spec.displayName
+                    local recommendedImportText = GetRecommendedImportTextForSpec(targetID)
 
                     local db = SBA_SimpleDB or {}
                     local hasText = false
@@ -565,11 +577,26 @@ local function OnBuildUI(parent)
                     gy = gy - 18
 
                     local actionDefs = {
-                        { "Override", function()
-                            for _, se in ipairs(specButtons) do for _, sb in ipairs(se.btns or {}) do sb:Disable() end end
-                            if _G.SBAS_OpenOverrideGUI then _G.SBAS_OpenOverrideGUI(targetID, cname .. " — " .. displayName) end
+                        { "Custom", function()
+                            if _G.SBAS_OpenOverrideGUI then
+                                _G.SBAS_OpenOverrideGUI(targetID, cname .. " — " .. displayName)
+                            end
                         end },
-                        { "Clear Override", function()
+                        { "Optimized", function()
+                            if type(_G.SBAS_LoadImportTextIntoOverrideGUI) ~= "function" then
+                                print("|cffff4444SBA_Simple:|r Recommended import helper is unavailable.")
+                                return
+                            end
+
+                            local ok, err = _G.SBAS_LoadImportTextIntoOverrideGUI(targetID, cname .. " - " .. displayName, recommendedImportText)
+                            if not ok then
+                                print("|cffff4444SBA_Simple:|r Failed to load recommended override: " .. tostring(err or "unknown error"))
+                                return
+                            end
+
+                            print("|cff00ff99SBA_Simple:|r Loaded recommended GUI priorities for " .. displayName .. ".")
+                        end, recommendedImportText ~= nil },
+                        { "Blizzard SBA", function()
                             SBA_SimpleDB = SBA_SimpleDB or {}
                             SBA_SimpleDB.specs = SBA_SimpleDB.specs or {}
                             SBA_SimpleDB.specs[targetID] = SBA_SimpleDB.specs[targetID] or {}
@@ -584,6 +611,10 @@ local function OnBuildUI(parent)
                         ab:SetPoint("TOPLEFT", group, "TOPLEFT", 12 + (i - 1) * ACTION_BTN_W, gy)
                         ab:SetText(def[1])
                         ab:SetScript("OnClick", def[2])
+                        if def[3] == false then
+                            ab._alwaysDisabled = true
+                            ab:Disable()
+                        end
                         actionBtns[i] = ab
                     end
 
@@ -632,7 +663,11 @@ local function OnBuildUI(parent)
     local function setSpecButtonsEnabled(enabled)
         for _, e in ipairs(specButtons) do
             for _, b in ipairs(e.btns or {}) do
-                if enabled then b:Enable() else b:Disable() end
+                if enabled then
+                    if b._alwaysDisabled then b:Disable() else b:Enable() end
+                else
+                    b:Disable()
+                end
             end
         end
     end
@@ -667,6 +702,34 @@ local function OnBuildUI(parent)
             setSpecButtonsEnabled(false)
             _origOpenGUI(sid, dname)
             ensureGUIFrameHooked()
+        end
+    end
+
+    -- Recommended/default imports can open the GUI without going through SBAS_OpenOverrideGUI.
+    -- Wrap those helpers too so button disable/enable state always stays in sync.
+    if type(_G.SBAS_LoadImportTextIntoOverrideGUI) == "function" then
+        local _origLoadImportTextIntoGUI = _G.SBAS_LoadImportTextIntoOverrideGUI
+        _G.SBAS_LoadImportTextIntoOverrideGUI = function(specID, displayName, payload)
+            setSpecButtonsEnabled(false)
+            local ok, err = _origLoadImportTextIntoGUI(specID, displayName, payload)
+            ensureGUIFrameHooked()
+            if not ok then
+                onEditorClose()
+            end
+            return ok, err
+        end
+    end
+
+    if type(_G.SBAS_LoadRulesIntoOverrideGUI) == "function" then
+        local _origLoadRulesIntoGUI = _G.SBAS_LoadRulesIntoOverrideGUI
+        _G.SBAS_LoadRulesIntoOverrideGUI = function(specID, displayName, rules)
+            setSpecButtonsEnabled(false)
+            local ok, err = _origLoadRulesIntoGUI(specID, displayName, rules)
+            ensureGUIFrameHooked()
+            if not ok then
+                onEditorClose()
+            end
+            return ok, err
         end
     end
 
