@@ -18,6 +18,7 @@
 --       default       (opt) default numeric value
 --       needsSpell    (opt) true → show This Spell / Other Spell toggle
 --       needsResource (opt) true → show resource type + operator selectors + value input
+--       needsCompareValue (opt) true → show operator selector + value input
 --       needsLua      (opt) true → show a free-text Lua expression input
 --       generate(cond, ruleSpellID) → Lua fragment string
 -------------------------------------------------------------------------------
@@ -82,8 +83,6 @@ local COND_TYPES = {
       generate = function(c, s) return ("C_Spell.IsSpellUsable(%d)"):format(ResolveSpell(c,s)) end },
     { id = "talented",     label = "Talented",                  needsSpell = true,
       generate = function(c, s) return ("IsPlayerSpell(%d)"):format(ResolveSpell(c,s)) end },
-    { id = "last_combo_eq",label = "Last Combo Strike = Spell", needsSpell = true,
-      generate = function(c, s) return ("LastComboStrikeSpellID == %d"):format(ResolveSpell(c,s)) end },
     -- SBA
     { id = "sba_suggests", label = "SBA Suggests", needsSpell = true,
       generate = function(c, s)
@@ -99,17 +98,24 @@ local COND_TYPES = {
           local op  = c.operator or ">="
           return ("%s %s %d"):format(var, op, c.value or 0)
       end },
+        { id = "target_count", label = "Target Count", shortLabel = "Targets", needsCompareValue = true, valueLabel = "Count", default = 1,
+            generate = function(c, s)
+                    local op = c.operator or ">="
+                    return ("(_G.ECT_TargetCount or 0) %s %d"):format(op, c.value or 0)
+            end },
         { id = "custom_lua",   label = "Custom Lua Expression", needsLua = true,
             generate = function(c, s)
                     local expr = (c.luaCode and c.luaCode:match("^%s*(.-)%s*$")) or ""
                     if expr == "" then return "false" end
                     return "(" .. expr .. ")"
             end },
-    -- Plugin / Proc (Zenith, BOK, RWK, DOCJ — pick via dropdown)
-    { id = "plugin",       label = "Plugin / Proc", needsPlugin = true,
+        -- Plugin / Proc (Zenith, BOK, RWK, DOCJ — pick via dropdown)
+        { id = "plugin",       label = "Plugin / Proc", needsPlugin = true,
       generate = function(c, s)
-                    return BuildPluginConditionExpr(c)
+                                        return BuildPluginConditionExpr(c, s)
       end },
+        { id = "last_combo_eq",label = "Last Combo Strike = Spell", shortLabel = "Combo", needsSpell = true,
+            generate = function(c, s) return ("LastComboStrikeSpellID == %d"):format(ResolveSpell(c,s)) end },
 }
 
 local COND_BY_ID = {}
@@ -118,6 +124,7 @@ for _, ct in ipairs(COND_TYPES) do COND_BY_ID[ct.id] = ct end
 -- Plugin options shown inside the Plugin / Proc condition picker
 local PLUGIN_OPTS = {
     { id = "zenith",    label = "Zenith"            },
+    { id = "last_combo_eq", label = "Combo"         },
     { id = "bok_proc",  label = "Blackout Kick!",    supportsProcMode = true, default = 4 },
     { id = "rwk_proc",  label = "Rushing Wind Kick", supportsProcMode = true, default = 4 },
     { id = "docj_proc", label = "Dance of Chi-Ji",   supportsProcMode = true, default = 4 },
@@ -130,10 +137,16 @@ local function IsWindwalkerGUI()
 end
 
 local function GetVisibleCondTypes()
-    if IsWindwalkerGUI() then return COND_TYPES end
     local out = {}
     for _, ct in ipairs(COND_TYPES) do
-        if ct.id ~= "plugin" then out[#out + 1] = ct end
+        -- Last Combo Strike is selected through Plugin / Proc -> Select plugin...
+        if ct.id ~= "last_combo_eq" then
+            if IsWindwalkerGUI() then
+                out[#out + 1] = ct
+            elseif ct.id ~= "plugin" then
+                out[#out + 1] = ct
+            end
+        end
     end
     return out
 end
@@ -187,9 +200,12 @@ local function NormalizePluginState(cond)
     return plugin, op, value
 end
 
-BuildPluginConditionExpr = function(cond)
+BuildPluginConditionExpr = function(cond, ruleSpellID)
     local plugin, op, value = NormalizePluginState(cond)
     if plugin == "zenith" then return "ZenithActiveTracker" end
+    if plugin == "last_combo_eq" then
+        return ("LastComboStrikeSpellID == %d"):format(ruleSpellID or 0)
+    end
 
     local meta = PROC_PLUGIN_BY_ID[plugin]
     if not meta then return "false" end
@@ -202,6 +218,7 @@ end
 BuildPluginSummary = function(cond)
     local plugin, op, value = NormalizePluginState(cond)
     if plugin == "zenith" then return "Zenith" end
+    if plugin == "last_combo_eq" then return "Combo" end
 
     local meta = PROC_PLUGIN_BY_ID[plugin]
     if not meta then return plugin or "?" end
@@ -610,6 +627,7 @@ local RESOURCE_SET = {
 
 local PLUGIN_SET = {
     ["zenith"] = true,
+    ["last_combo_eq"] = true,
     ["bok_proc"] = true,
     ["rwk_proc"] = true,
     ["docj_proc"] = true,
@@ -717,6 +735,16 @@ local function ParseConditionRelaxed(parts)
         cond.value = cond.value or 0
     end
 
+    if def.needsCompareValue then
+        for _, tok in ipairs(tokens) do
+            if VALID_COMP_OPS[tok] then cond.operator = tok end
+            local n = tonumber(tok)
+            if n ~= nil then cond.value = n end
+        end
+        cond.operator = cond.operator or ">="
+        cond.value = cond.value or 0
+    end
+
     if def.needsPlugin then
         for _, tok in ipairs(tokens) do
             local plugin = InferMissingPrefix(tok, PLUGIN_SET)
@@ -783,6 +811,9 @@ local function CondSummaryText(cond, ruleSpellID)
                         or (SPEC_SECONDARY[editSpecID] or SPEC_SECONDARY_DEFAULT).label
         local op      = cond.operator or ">="
         t = resName .. " " .. op .. " " .. tostring(cond.value or 0)
+    elseif def.needsCompareValue then
+        local op = cond.operator or ">="
+        t = (def.shortLabel or def.label) .. " " .. op .. " " .. tostring(cond.value or 0)
     elseif def.needsLua then
         local expr = (cond.luaCode and cond.luaCode:gsub("%s+", " "):match("^%s*(.-)%s*$")) or ""
         if expr == "" then expr = "(empty)" end
@@ -1623,6 +1654,10 @@ local function UpdateRowFrame(f, idx, rule)
                     local op  = cond.operator or ">="
                     local val = tostring(cond.value or 0)
                     label = res .. " " .. op .. " " .. val
+                elseif def.needsCompareValue then
+                    local op  = cond.operator or ">="
+                    local val = tostring(cond.value or 0)
+                    label = (def.shortLabel or def.label) .. " " .. op .. " " .. val
                 end
 
                 local labelText = cond.negate and ("|cffff4444NOT " .. label .. "|r") or label
@@ -2315,10 +2350,22 @@ local function CreateCondInputArea(parent)
 
     -- ── Layout ────────────────────────────────────────────────────────────
     UpdateLayout = function()
+        -- Operator row is reused by two condition families:
+        -- 1) needsResource      -> shown below resource row
+        -- 2) needsCompareValue  -> shown directly below type selector
+        operatorFrame:ClearAllPoints()
+        if selType and selType.needsResource then
+            operatorFrame:SetPoint("TOPLEFT", resourceFrame, "BOTTOMLEFT", 0, -4)
+        else
+            operatorFrame:SetPoint("TOPLEFT", typeBtn, "BOTTOMLEFT", 0, -4)
+        end
+
         local above = typeBtn
         if selType and selType.needsSpell then
             above = (spellSel == "other") and otherFrame or spellToggleFrame
         elseif selType and selType.needsResource then
+            above = operatorFrame
+        elseif selType and selType.needsCompareValue then
             above = operatorFrame
         elseif selType and selType.needsLua then
             above = luaFrame
@@ -2326,7 +2373,7 @@ local function CreateCondInputArea(parent)
             above = (selPlugin and selPlugin.supportsProcMode) and procModeFrame or pluginFrame
         end
         local showVal = selType and (
-            selType.needsValue or selType.needsResource or
+            selType.needsValue or selType.needsResource or selType.needsCompareValue or
             (selType.needsPlugin and selPlugin and selPlugin.supportsProcMode and procModeSel ~= "active"))
         if showVal then
             valLbl:ClearAllPoints()
@@ -2339,6 +2386,9 @@ local function CreateCondInputArea(parent)
         end
         if selType and selType.needsResource then
             h = h + 22 + 4   -- resource row
+            h = h + 22 + 4   -- operator row
+        end
+        if selType and selType.needsCompareValue then
             h = h + 22 + 4   -- operator row
         end
         if selType and selType.needsLua then
@@ -2407,6 +2457,14 @@ local function CreateCondInputArea(parent)
                 valLbl:SetText("Value:")
                 valLbl:Show()
                 valBox:SetText("0")
+                valBox:Show()
+            end
+            if ct.needsCompareValue then
+                operatorFrame:Show()
+                SetOpSel(">=")
+                valLbl:SetText((ct.valueLabel or "Value") .. ":")
+                valLbl:Show()
+                valBox:SetText(tostring(ct.default or 0))
                 valBox:Show()
             end
             if ct.needsLua then
@@ -2517,6 +2575,14 @@ local function CreateCondInputArea(parent)
             valLbl:SetText("Value:")
             valLbl:Show()
             valBox:SetText(tostring(cond.value or 0))
+            valBox:Show()
+        end
+        if ct.needsCompareValue then
+            operatorFrame:Show()
+            SetOpSel(cond.operator or ">=")
+            valLbl:SetText((ct.valueLabel or "Value") .. ":")
+            valLbl:Show()
+            valBox:SetText(tostring(cond.value or ct.default or 0))
             valBox:Show()
         end
         if ct.needsLua then
@@ -2950,6 +3016,10 @@ RefreshRightPanel = function()
                 newCond.resource = condInputArea.GetResource()
                 newCond.operator = condInputArea.GetOperator()
                 newCond.value    = condInputArea.GetValue() or 0
+            end
+            if ct.needsCompareValue then
+                newCond.operator = condInputArea.GetOperator()
+                newCond.value    = condInputArea.GetValue() or ct.default or 0
             end
             if ct.needsLua then
                 newCond.luaCode = condInputArea.GetLuaCode()
@@ -4470,6 +4540,10 @@ _G.SBAS_BuildCondRowText = function(cond, ruleSpellID, isFirst, parenDepthIn)
         local op  = cond.operator or ">="
         local val = tostring(cond.value or 0)
         label = res .. " " .. op .. " " .. val
+    elseif def.needsCompareValue then
+        local op  = cond.operator or ">="
+        local val = tostring(cond.value or 0)
+        label = (def.shortLabel or def.label) .. " " .. op .. " " .. val
     end
 
     local labelText = cond.negate and ("|cffff4444NOT " .. label .. "|r") or label
