@@ -257,7 +257,7 @@ local MONK_ADDONS = {
     "PoulsTools_ProcViewer",
     "PoulsTools_EnergyGuesstimator",
     "PoulsTools_GuesstimatorHaste",
-    "PoulsTools_ZenithTracker",
+    
 }
 
 local monkAddonsLoaded = false

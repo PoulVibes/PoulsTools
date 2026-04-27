@@ -1,12 +1,11 @@
 ## Interface: 120005
-## Title: PoulsTools_ZenithTracker
-## Notes: Tracks Zenith with 15/20s duration and audio alert.
-## LoadOnDemand: 1
+## Title: OnUseBuffTracker
+## Notes: Tracks on-use buff windows (Zenith, Bestial Wrath).
 ## Author: Poul
-## Version: 1.1.0
+## Version: 1.2.0
 
 ## IconTexture: Interface\Icons\inv_ability_monk_weaponsoforder
 ## Category-enUS: PoulsTools
 ## Group: PoulsTools
 
-ZenithTracker.lua
+OnUseBuffTracker.lua
