@@ -32,7 +32,7 @@ Be concise in your responses, providing only the necessary information and code 
 - **GuesstimatorHaste** — Compares `GetHaste()` vs a GCD dummy to assess haste effects.
 - **ItemTracker** — Tracks item cooldowns, stack counts, and ready glow.
 - **PoulsTools** — Central settings hub and addon registration UI.
-- **ProcViewer** — Centered HUD proc icons with activation glow.
+- **SpellGlowTracker** — Centered HUD proc icons with activation glow.
 - **SBA_Simple** — Displays the next suggested cast from `C_AssistedCombat`.
 - **shmIcons** — Shared icon/cooldown/glow framework used by other addons.
 - **TrinketTracker** — Tracks trinket/equipment cooldowns with UI integration.

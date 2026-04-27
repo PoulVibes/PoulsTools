@@ -254,7 +254,7 @@ end)
 local MONK_ADDONS = {
     "PoulsTools_VivifyProcTracker",
     "PoulsTools_ComboTracker",
-    "PoulsTools_ProcViewer",
+    "PoulsTools_SpellGlowTracker",
     "PoulsTools_EnergyGuesstimator",
     "PoulsTools_GuesstimatorHaste",
     

@@ -143,7 +143,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         local _, classToken = UnitClass("player")
         if classToken ~= "MONK" then
             --print("|cff00ff00[" .. ADDON .. " v" .. VERSION .. "]|r")
-            --print("  ProcViewer disabled: not a Monk.")
+            --print("  SpellGlowTracker disabled: not a Monk.")
             eventFrame:UnregisterAllEvents()
             return
         end
@@ -153,7 +153,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         else
             DisableAddon()
             --print("|cff00ff00[" .. ADDON .. " v" .. VERSION .. "]|r")
-            --print("  ProcViewer loaded but inactive (not Windwalker).")
+            --print("  SpellGlowTracker loaded but inactive (not Windwalker).")
         end
 
     elseif event == "PLAYER_SPECIALIZATION_CHANGED" then

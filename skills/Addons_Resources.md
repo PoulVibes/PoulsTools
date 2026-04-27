@@ -13,7 +13,7 @@ This file provides a short description of each addon in this repository. Use the
 
 - **PoulsTools** — Central addon management hub and settings menu; register other addons into a unified settings UI. See [../PoulsTools/PoulsTools.toc](../PoulsTools/PoulsTools.toc).
 
-- **ProcViewer** — Centered HUD proc icons with activation glow for tracked procs; depends on `shmIcons`. See [../ProcViewer/ProcViewer.toc](../ProcViewer/ProcViewer.toc).
+- **SpellGlowTracker** — Centered HUD proc icons with activation glow for tracked procs; depends on `shmIcons`. See [../PoulsTools_SpellGlowTracker/PoulsTools_SpellGlowTracker.toc](../PoulsTools_SpellGlowTracker/PoulsTools_SpellGlowTracker.toc).
 
 - **SBA_Simple** — Simple suggestion display showing the next suggested cast from `C_AssistedCombat`, integrated with `shmIcons`. See [../SBA_Simple/SBA_Simple.toc](../SBA_Simple/SBA_Simple.toc).
 

@@ -16,7 +16,7 @@ Profiles.knownDBs = {
     { dbName = "ComboTrackerDB",      label = "PoulsTools_ComboTracker"      },
     { dbName = "CooldownTrackerDB",   label = "PoulsTools_CooldownTracker"   },
     { dbName = "ItemTrackerDB",       label = "PoulsTools_ItemTracker"       },
-    { dbName = "ProcViewerDB",        label = "PoulsTools_ProcViewer"        },
+    { dbName = "SpellGlowTrackerDB",  label = "PoulsTools_SpellGlowTracker"  },
     { dbName = "SBA_SimpleDB",        label = "PoulsTools_SBA_Simple"        },
     { dbName = "TrinketTrackerDB",    label = "PoulsTools_TrinketTracker"    },
     { dbName = "VivifyProcTrackerDB", label = "PoulsTools_VivifyProcTracker" },
