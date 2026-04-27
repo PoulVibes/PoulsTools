@@ -3,7 +3,7 @@
 ## Notes: Tracks Vivacious Vivification procs.
 ## LoadOnDemand: 1
 ## Author: Poul
-## Version: 1.1
+## Version: 1.2.0
 ## RequiredDeps: PoulsTools_shmIcons
 ## SavedVariables: VivifyProcTrackerDB
 

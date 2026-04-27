@@ -3,7 +3,7 @@
 ## Notes: Displays the last used ability that triggers Mastery: Combo Strikes.
 ## LoadOnDemand: 1
 ## Author: Poul
-## Version: 1.0.1
+## Version: 1.1.0
 ## IconTexture: Interface\Icons\ability_monk_palmstrike
 ## Category-enUS: PoulsTools
 ## Group: PoulsTools
