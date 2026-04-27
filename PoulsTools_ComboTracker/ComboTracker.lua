@@ -3,6 +3,7 @@ local TRACKER_ICON = "Interface\\Icons\\ability_monk_palmstrike"
 
 -- Globals for cross-addon access
 LastComboStrikeSpellID = 0
+LastAbilityUsedSpellID = 0
 ComboStrikeStreak      = 0
 local timerHandle      = nil
 
@@ -96,7 +97,7 @@ end
 local function DisableAddon()
     if not addonEnabled then return end
     addonEnabled = false
-    eventFrame:UnregisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+    -- Keep UNIT_SPELLCAST_SUCCEEDED registered for LastAbilityUsedSpellID tracking
     if timerHandle then timerHandle:Cancel(); timerHandle = nil end
     ComboStrikeStreak = 0
     LastComboStrikeSpellID = 0
@@ -113,10 +114,11 @@ local function UpdateEnabledState()
         eventFrame:UnregisterAllEvents()
         return
     end
+    -- Always track last ability used for all Monk specs
+    eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
     if IsPlayerWindwalkerSpec() then
         EnableAddon()
     else
-
         DisableAddon()
     end
 end
@@ -147,7 +149,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             eventFrame:UnregisterAllEvents()
             return
         end
-        -- Enable only if Windwalker, otherwise stay disabled but listen for spec changes
+        -- Always track last ability used for all Monk specs
+        eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+        -- Enable combo icon only if Windwalker
         if IsPlayerWindwalkerSpec() then
             EnableAddon()
         else
@@ -165,6 +169,8 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
         local _, _, spellID = ...
+        LastAbilityUsedSpellID = spellID
+        if not addonEnabled then return end
         if not comboStrikesAbilities[spellID] then return end
 
             if spellID == LastComboStrikeSpellID then

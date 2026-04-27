@@ -1,7 +1,6 @@
 ## Interface: 120005
 ## Title: PoulsTools_ComboTracker
 ## Notes: Displays the last used ability that triggers Mastery: Combo Strikes.
-## LoadOnDemand: 1
 ## Author: Poul
 ## Version: 1.1.0
 ## IconTexture: Interface\Icons\ability_monk_palmstrike

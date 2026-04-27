@@ -116,8 +116,9 @@ local COND_TYPES = {
       end },
         { id = "last_combo_eq",label = "Last Combo Strike = Spell", shortLabel = "Combo", needsSpell = true,
             generate = function(c, s) return ("LastComboStrikeSpellID == %d"):format(ResolveSpell(c,s)) end },
+    { id = "last_ability_eq", label = "Last Ability Used = Spell", shortLabel = "LastAbility", needsSpell = true,
+        generate = function(c, s) return ("LastAbilityUsedSpellID == %d"):format(ResolveSpell(c,s)) end },
 }
-
 local COND_BY_ID = {}
 for _, ct in ipairs(COND_TYPES) do COND_BY_ID[ct.id] = ct end
 
