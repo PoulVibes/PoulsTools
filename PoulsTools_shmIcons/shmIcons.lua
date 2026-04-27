@@ -379,7 +379,9 @@ local function BuildIconFrame(globalID, db)
     }
 
     frame:SetScript("OnSizeChanged", function(self, width, height)
-        local sq = math.max(MIN_SIZE, math.min(math.floor(width), MAX_SIZE))
+        -- Round to nearest integer to avoid tiny floating-point undershoot
+        local rounded = math.floor((width or self:GetWidth()) + 0.5)
+        local sq = math.max(MIN_SIZE, math.min(rounded, MAX_SIZE))
         if math.abs(self:GetWidth() - sq) > 0.5 or math.abs(self:GetHeight() - sq) > 0.5 then
             self:SetSize(sq, sq)
             return
@@ -735,9 +737,14 @@ local function BuildIconFrame(globalID, db)
             local snap   = dragState.pendingSnap
             local isCtrl = dragState.pendingCtrl
 
-            local finalSize = isCtrl
-                and math.max(MIN_SIZE, math.floor(snap.targetSize * 0.35))
-                or  frame:GetWidth()
+            local finalSize
+            if isCtrl then
+                -- Corner attach: round the 35% shrink to nearest integer
+                finalSize = math.max(MIN_SIZE, math.floor(snap.targetSize * 0.35 + 0.5))
+            else
+                -- Round final floating width to nearest integer before committing
+                finalSize = math.max(MIN_SIZE, math.min(math.floor(frame:GetWidth() + 0.5), MAX_SIZE))
+            end
 
             frame:SetSize(finalSize, finalSize)
             ScaleText(cd, stackLabel, finalSize)
@@ -774,7 +781,7 @@ local function BuildIconFrame(globalID, db)
     end)
     resizeHandle:SetScript("OnMouseUp", function()
         frame:StopMovingOrSizing()
-        local sq = math.max(MIN_SIZE, math.min(math.floor(frame:GetWidth()), MAX_SIZE))
+        local sq = math.max(MIN_SIZE, math.min(math.floor(frame:GetWidth() + 0.5), MAX_SIZE))
         frame:SetSize(sq, sq)
         ScaleText(cd, icon.stackLabel, sq)
         ResizeGlow(icon.glow, frame, sq)
