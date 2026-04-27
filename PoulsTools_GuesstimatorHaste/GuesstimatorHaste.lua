@@ -2,11 +2,11 @@ local frame = CreateFrame("Frame", "GuesstimatorHasteFrame", UIParent, "Backdrop
 local logFrame = CreateFrame("Frame", "GuesstimatorHasteLog", UIParent, "BackdropTemplate")
 frame:Hide()
 logFrame:Hide()
--- Global Variable for external access
-GuestimatedHaste = 0
+-- Global Variable for external access (decimal fraction, e.g. 0.215 = 21.5% haste)
+GuesstimatedHaste = 0
 
 -- Configuration
-local baseGCD = 1.0
+local baseGCD = 1.5
 local GCD_DUMMY_ID = 61304
 local GCD_FLOOR = 0.75
 
@@ -17,20 +17,22 @@ local combatStartTime = 0
 local logLines = {}
 
 -- Single-spec gating (Monk - Windwalker)
-local REQUIRED_CLASS = "MONK"
-local REQUIRED_SPEC_ID = 269
+local ALLOWED_SPECS = {
+    [269] = "MONK",    -- Windwalker
+    [253] = "HUNTER",  -- Beast Mastery
+}
 local addonEnabled = false
 
-local function IsPlayerClass(token)
+local function IsAllowedClass()
     local _, classToken = UnitClass("player")
-    return classToken == token
+    return classToken == "MONK" or classToken == "HUNTER"
 end
 
-local function IsPlayerSpec(specID)
+local function IsAllowedSpec()
     local specIndex = GetSpecialization()
     if not specIndex then return false end
-    local id = select(1, GetSpecializationInfo(specIndex))
-    return id == specID
+    local specID = select(1, GetSpecializationInfo(specIndex))
+    return ALLOWED_SPECS[specID] ~= nil
 end
 
 local function EnableAddon()
@@ -54,20 +56,16 @@ local function DisableAddon()
 end
 
 local function UpdateEnabledState()
-    if not IsPlayerClass(REQUIRED_CLASS) then
-        --print("[GuesstimatorHaste] abort: wrong class")
+    if not IsAllowedClass() then
         frame:UnregisterAllEvents()
         frame:SetScript("OnUpdate", nil)
         frame:Hide()
         logFrame:Hide()
-        --print("Not a Monk please disable GuesstimatorHaste")
         return
     end
-    if IsPlayerSpec(REQUIRED_SPEC_ID) then
-        --print("I am the required class and spec.")
+    if IsAllowedSpec() then
         EnableAddon()
     else
-        --print("Not a windwalker GuesstimatedHaste will be disabled")
         DisableAddon()
     end
 end
@@ -118,14 +116,8 @@ end
 -- 3. Slash Command & Visibility
 SLASH_GUESSHASTE1 = "/gh"
 SlashCmdList["GUESSHASTE"] = function()
-    if not IsPlayerClass(REQUIRED_CLASS) then
-        --print("[GuesstimatorHaste] only available for Monks")
-        return
-    end
-    if not IsPlayerSpec(REQUIRED_SPEC_ID) then
-        --print("[GuesstimatorHaste] only active for Windwalker")
-        return
-    end
+    if not IsAllowedClass() then return end
+    if not IsAllowedSpec() then return end
     local show = not frame:IsShown()
     GuesstimatorHasteDB = GuesstimatorHasteDB or {}
     GuesstimatorHasteDB.isVisible = show
@@ -175,6 +167,7 @@ end)
 -- 5. The OnUpdate Loop
 -- tickFrame is never hidden so the haste calculation runs regardless of UI visibility
 local tickFrame = CreateFrame("Frame")
+local displayThrottle = 0  -- accumulator for 1-second display updates
 tickFrame:SetScript("OnUpdate", function(self, elapsed)
     if not addonEnabled then return end
 
@@ -184,24 +177,28 @@ tickFrame:SetScript("OnUpdate", function(self, elapsed)
         if currentDummyHaste > 0 then
             local official = GetHaste()
             local now = GetTime()
-            
+
             -- Detect the 0.75s cap
             local isCapped = (cdInfo.duration <= GCD_FLOOR)
-            local capText = isCapped and "|cffff0000(CAP)|r" or ""
 
-            -- Update the visible text
-            if frame:IsShown() then
-                hasteText:SetText(string.format("Off: %.1f%% vs Dummy: %.1f%% %s", official, currentDummyHaste, capText))
+            -- Update the visible debug text once per second
+            displayThrottle = displayThrottle + elapsed
+            if displayThrottle >= 1.0 then
+                displayThrottle = 0
+                if frame:IsShown() then
+                    local capText = isCapped and "|cffff0000(CAP)|r" or ""
+                    hasteText:SetText(string.format("Off: %.1f%% vs Dummy: %.1f%% %s", official, currentDummyHaste, capText))
+                end
             end
 
-            -- Logging Logic (1.0% threshold)
+            -- Logging Logic (1.0% threshold) — unchanged, fires whenever value changes
             if math.abs(currentDummyHaste - lastLoggedDummyValue) >= 1.0 then
-                -- UPDATE GLOBAL VARIABLE
-                GuestimatedHaste = currentDummyHaste
+                -- UPDATE GLOBAL VARIABLE (decimal fraction: divide by 100 so consumers can use 1 + GuesstimatedHaste)
+                GuesstimatedHaste = currentDummyHaste / 100
                 local timeInCombat = (combatStartTime > 0) and (now - combatStartTime) or 0
-                local logEntry = string.format("[%.1fs] Dummy: %.1f%% %s | Off: %.1f%%", 
+                local logEntry = string.format("[%.1fs] Dummy: %.1f%% %s | Off: %.1f%%",
                     timeInCombat, currentDummyHaste, (isCapped and "CAP" or ""), official)
-                
+
                 table.insert(logLines, logEntry)
                 lastLoggedDummyValue = currentDummyHaste
                 UpdateLogUI()

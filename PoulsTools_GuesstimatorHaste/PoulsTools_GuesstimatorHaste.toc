@@ -1,7 +1,6 @@
 ## Interface: 120005
 ## Title: PoulsTools_GuesstimatorHaste
 ## Notes: Compares GetHaste() vs whitelisted GCD Dummy (61304).
-## LoadOnDemand: 1
 ## Author: Poul
 ## Version: 1.1.0
 ## SavedVariables: GuesstimatorHasteDB
