@@ -37,7 +37,7 @@ Be concise in your responses, providing only the necessary information and code 
 - **shmIcons** — Shared icon/cooldown/glow framework used by other addons.
 - **TrinketTracker** — Tracks trinket/equipment cooldowns with UI integration.
 - **VivifyProcTracker** — Tracks Vivacious Vivification procs and notifies listeners via `_G.VivifyProc_OnEvent` (no bundled external libraries).
-- **ZenithTracker** — Tracks Zenith uptime (15/20s) and plays an audio alert.
+- **OnUseTracker** — Tracks Zenith uptime (15/20s) and plays an audio alert.
 - **Libs/** — Bundled libraries (LibStub, etc.) used by select addons.
 
 ## Other Repository Reference Files

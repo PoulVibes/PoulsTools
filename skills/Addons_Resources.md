@@ -22,7 +22,7 @@ This file provides a short description of each addon in this repository. Use the
 - **TrinketTracker** — Tracks equipment slot/trinket cooldowns with icon, cooldown sweep, and ready glow; integrates with `shmIcons` and `PoulsTools`. See [../TrinketTracker/TrinketTracker.toc](../TrinketTracker/TrinketTracker.toc).
 
 
-- **ZenithTracker** — Tracks Zenith uptime (15/20s durations) and provides an audio alert when active. See [../ZenithTracker/ZenithTracker.toc](../ZenithTracker/ZenithTracker.toc).
+- **OnUseTracker** — Tracks Zenith uptime (15/20s durations) and provides an audio alert when active. See [../OnUseTracker/OnUseTracker.toc](../OnUseTracker/OnUseTracker.toc).
 
 - **EnergyGuesstimator** — Experimental energy estimator (Monk-focused). No longer uses bundled external libraries; uses native WoW API events and listens for the `_G.VivifyProc_OnEvent` global notifications to adjust energy estimation. See [../EnergyGuesstimator/EnergyGuesstimator.toc](../EnergyGuesstimator/EnergyGuesstimator.toc).
 - **VivifyProcTracker** — Tracks Vivacious Vivification procs and notifies listeners via the global callback `_G.VivifyProc_OnEvent` (no bundled external libraries). See [../VivifyProcTracker/VivifyProcTracker.toc](../VivifyProcTracker/VivifyProcTracker.toc).
