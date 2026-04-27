@@ -31,6 +31,7 @@ local ICON_SIZE_DEFAULT = 64
 local GAP               = 8
 
 local WINDWALKER_SPEC_ID = 269
+local BM_HUNTER_SPEC_ID  = 253
 local iconsRegistered = false
 local addonEnabled = false
 local lockCallbackRegistered = false
@@ -43,6 +44,9 @@ _G["bok_proc_active"]  = false
 _G["docj_proc_active"] = false
 _G["tod_proc_active"]  = false
 _G["rwk_proc_active"]  = false
+_G["howl_proc_active"] = false
+_G["black_arrow_proc_active"] = false
+_G["wailing_arrow_proc_active"] = false
 
 ------------------------------------------------------------------------
 -- Global countdown timers (seconds remaining; 0 when inactive)
@@ -51,6 +55,9 @@ _G["rwk_proc_active"]  = false
 _G["bok_proc_timer"]  = 0
 _G["docj_proc_timer"] = 0
 _G["rwk_proc_timer"]  = 0
+_G["howl_proc_timer"] = 0
+_G["wailing_arrow_proc_timer"] = 0
+_G["hogstrider_proc_timer"] = 0
 
 ------------------------------------------------------------------------
 -- Default DB initialiser for a slot
@@ -75,11 +82,19 @@ end
 local halfStep = (ICON_SIZE_DEFAULT / 2) + (GAP / 2)
 
 local SLOT_DEFS = {
-    { key = "Black Out Kick!", x = -halfStep,  y =  halfStep, iconSpellID = 100784, timerKey = "bok_proc_timer",  buffDuration = 15 },
-    { key = "Dance of Chi-JI",  x =  halfStep,  y =  halfStep, iconSpellID = 101546, timerKey = "docj_proc_timer", buffDuration = 15 },
-    { key = "Touch of Death",   x = -halfStep,  y = -halfStep, iconSpellID = 322109, timerKey = nil },
-    { key = "Rushing Wind Kick",x =  halfStep,  y = -halfStep, iconSpellID = 468179, timerKey = "rwk_proc_timer",  buffDuration = 15 },
+    { key = "Black Out Kick!",           x = -halfStep,      y =  halfStep,      iconSpellID = 100784, iconTexture = 572033,   timerKey = "bok_proc_timer",          buffDuration = 15, classSpec = "MONK_WW"    },
+    { key = "Dance of Chi-JI",           x =  halfStep,      y =  halfStep,      iconSpellID = 101546, iconTexture = 607849,   timerKey = "docj_proc_timer",         buffDuration = 15, classSpec = "MONK_WW"    },
+    { key = "Touch of Death",            x = -halfStep,      y = -halfStep,      iconSpellID = 322109, timerKey = nil,                                         classSpec = "MONK_ALL"   },
+    { key = "Rushing Wind Kick",         x =  halfStep,      y = -halfStep,      iconSpellID = 468179, timerKey = "rwk_proc_timer",          buffDuration = 15, classSpec = "MONK_WW"    },
+    -- Hunter entries (Beast Mastery spec only)
+    { key = "Howl of the Pack Leader",   x =  3 * halfStep,  y =  halfStep,      iconSpellID = 34026,  iconTexture = 5927643, timerKey = "howl_proc_timer",         buffDuration = 29, classSpec = "HUNTER_BM"  },
+    { key = "Black Arrow",               x =  3 * halfStep,  y = -halfStep,      iconSpellID = 466930, timerKey = nil,                                         classSpec = "HUNTER_BM"  },
+    { key = "Wailing Arrow",             x =  0,             y = -3 * halfStep,  iconSpellID = 392060, timerKey = "wailing_arrow_proc_timer", buffDuration = 15, classSpec = "HUNTER_BM"  },
+    { key = "Hogstrider",                x = -3 * halfStep,  y =  halfStep,      iconSpellID = 193455, iconTexture = 463878,  timerKey = "hogstrider_proc_timer",   buffDuration = 19, classSpec = "HUNTER_BM"  },
 }
+
+local SLOT_DEF_BY_KEY = {}
+for _, def in ipairs(SLOT_DEFS) do SLOT_DEF_BY_KEY[def.key] = def end
 
 ------------------------------------------------------------------------
 -- Timer FontStrings
@@ -101,6 +116,42 @@ end
 
 local TIMED_ENTRIES = nil
 local tickerFrame = nil
+
+------------------------------------------------------------------------
+-- Class/spec helpers (must be defined before RegisterIcons calls them)
+------------------------------------------------------------------------
+local function IsPlayerMonk()
+    local _, classToken = UnitClass("player")
+    return classToken == "MONK"
+end
+
+local function IsPlayerHunter()
+    local _, classToken = UnitClass("player")
+    return classToken == "HUNTER"
+end
+
+local function IsPlayerWindwalkerSpec()
+    local specIndex = GetSpecialization()
+    if not specIndex then return false end
+    local specID = select(1, GetSpecializationInfo(specIndex))
+    return specID == WINDWALKER_SPEC_ID
+end
+
+local function IsPlayerBMHunterSpec()
+    local specIndex = GetSpecialization()
+    if not specIndex then return false end
+    local specID = select(1, GetSpecializationInfo(specIndex))
+    return specID == BM_HUNTER_SPEC_ID
+end
+
+local function IsSlotEligible(def)
+    local cs = def.classSpec
+    if cs == "MONK_ALL"  then return IsPlayerMonk() end
+    if cs == "MONK_WW"   then return IsPlayerMonk() and IsPlayerWindwalkerSpec() end
+    if cs == "HUNTER_BM" then return IsPlayerHunter() and IsPlayerBMHunterSpec() end
+    return false
+end
+
 ------------------------------------------------------------------------
 -- Icon registration
 ------------------------------------------------------------------------
@@ -114,30 +165,32 @@ local function RegisterIcons()
         end
     end
     for _, def in ipairs(SLOT_DEFS) do
-        local k = def.key
-        if not SpellGlowTrackerDB[k] then
-            SpellGlowTrackerDB[k] = DefaultSlotDB(def.x, def.y, def.iconSpellID)
-        end
-        local db = SpellGlowTrackerDB[k]
+        if IsSlotEligible(def) then
+            local k = def.key
+            if not SpellGlowTrackerDB[k] then
+                SpellGlowTrackerDB[k] = DefaultSlotDB(def.x, def.y, def.iconSpellID)
+            end
+            local db = SpellGlowTrackerDB[k]
 
-        local iconObj = shmIcons:Register(ADDON, k, db, {
-            onResize = function(sq)
-                db.size = sq
-                local fs = timerTexts[k]
-                if fs then
-                    fs:SetFont("Fonts\\FRIZQT__.TTF", sq * 0.6, "OUTLINE")
-                end
-            end,
-            onMove = function() end,
-        })
+            local iconObj = shmIcons:Register(ADDON, k, db, {
+                onResize = function(sq)
+                    db.size = sq
+                    local fs = timerTexts[k]
+                    if fs then
+                        fs:SetFont("Fonts\\FRIZQT__.TTF", sq * 0.6, "OUTLINE")
+                    end
+                end,
+                onMove = function() end,
+            })
 
-        shmIcons:SetIcon(ADDON, k, C_Spell.GetSpellTexture(def.iconSpellID))
-        shmIcons:SetVisible(ADDON, k, false)
+            shmIcons:SetIcon(ADDON, k, def.iconTexture or C_Spell.GetSpellTexture(def.iconSpellID))
+            shmIcons:SetVisible(ADDON, k, false)
 
-        iconObjs[k] = iconObj
+            iconObjs[k] = iconObj
 
-        if def.timerKey then
-            AttachTimerText(k, iconObj, db.size)
+            if def.timerKey then
+                AttachTimerText(k, iconObj, db.size)
+            end
         end
     end
 
@@ -147,9 +200,9 @@ local function RegisterIcons()
         lockCallbackRegistered = true
         shmIcons:RegisterLockCallback(function(locked)
             if locked then
-                for _, def in ipairs(SLOT_DEFS) do
-                    shmIcons:SetGlow(ADDON, def.key, false)
-                    shmIcons:SetVisible(ADDON, def.key, false)
+                for k in pairs(iconObjs) do
+                    shmIcons:SetGlow(ADDON, k, false)
+                    shmIcons:SetVisible(ADDON, k, false)
                 end
                 for _, entry in pairs(TIMED_ENTRIES) do entry.endTime = 0 end
                 tickerFrame:Hide()
@@ -195,8 +248,10 @@ tickerFrame:SetScript("OnUpdate", function(self, elapsed)
             if remaining < 0 then remaining = 0 end
             if remaining > 0 then anyActive = true end
         end
-        _G[entry.timerKey] = remaining
-        SetTimerText(entry.key, remaining)
+        if entry.timerKey then
+            _G[entry.timerKey] = remaining
+            SetTimerText(entry.key, remaining)
+        end
     end
     if not anyActive then tickerFrame:Hide() end
 end)
@@ -209,6 +264,11 @@ local PROC_REGISTRY = {
     [101546] = { globalKey = "docj_proc_active", key = "Dance of Chi-JI",   timerKey = "docj_proc_timer", buffDuration = 15, endTime = 0 },
     [322109] = { globalKey = "tod_proc_active",  key = "Touch of Death" },
     [107428] = { globalKey = "rwk_proc_active",  key = "Rushing Wind Kick", timerKey = "rwk_proc_timer",  buffDuration = 15, endTime = 0 },
+    -- Hunter procs
+    [34026]  = { globalKey = "howl_proc_active",          key = "Howl of the Pack Leader", timerKey = "howl_proc_timer",         buffDuration = 29, endTime = 0 },
+    [466930] = { globalKey = "black_arrow_proc_active",   key = "Black Arrow" },
+    [392060] = { globalKey = "wailing_arrow_proc_active", key = "Wailing Arrow",            timerKey = "wailing_arrow_proc_timer", buffDuration = 15, endTime = 0 },
+    [193455] = { globalKey = "hogstrider_proc_active",    key = "Hogstrider",               timerKey = "hogstrider_proc_timer",   buffDuration = 19, endTime = 0 },
 }
 
 TIMED_ENTRIES = {}
@@ -225,20 +285,8 @@ eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 eventFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
 
 ------------------------------------------------------------------------
--- Enable/disable helpers (Monk + Windwalker checks)
+-- Enable/disable helpers
 ------------------------------------------------------------------------
-local function IsPlayerMonk()
-    local _, classToken = UnitClass("player")
-    return classToken == "MONK"
-end
-
-local function IsPlayerWindwalkerSpec()
-    local specIndex = GetSpecialization()
-    if not specIndex then return false end
-    local specID = select(1, GetSpecializationInfo(specIndex))
-    return specID == WINDWALKER_SPEC_ID
-end
-
 local function EnableAddon()
     if addonEnabled then return end
     addonEnabled = true
@@ -253,39 +301,30 @@ local function DisableAddon()
     eventFrame:UnregisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_SHOW")
     eventFrame:UnregisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_HIDE")
     if iconsRegistered then
-        for _, def in ipairs(SLOT_DEFS) do
-            shmIcons:Unregister(ADDON, def.key)
-            timerTexts[def.key] = nil
-            iconObjs[def.key]   = nil
+        for k in pairs(iconObjs) do
+            shmIcons:Unregister(ADDON, k)
+            timerTexts[k] = nil
+            iconObjs[k] = nil
         end
         iconsRegistered = false
     end
-    _G["bok_proc_active"] = false
-    _G["docj_proc_active"] = false
-    _G["tod_proc_active"] = false
-    _G["rwk_proc_active"] = false
-
-    _G["bok_proc_timer"]  = 0
-    _G["docj_proc_timer"] = 0
-    _G["rwk_proc_timer"]  = 0
-
-    for _, entry in pairs(TIMED_ENTRIES) do
-        entry.endTime = 0
+    for _, entry in pairs(PROC_REGISTRY) do
+        _G[entry.globalKey] = false
+        if entry.timerKey then
+            entry.endTime = 0
+            _G[entry.timerKey] = 0
+        end
     end
-
     tickerFrame:Hide()
 end
 
 local function UpdateEnabledState()
-    if not IsPlayerMonk() then
-        DisableAddon()
-        return
+    local hasEligible = false
+    for _, def in ipairs(SLOT_DEFS) do
+        if IsSlotEligible(def) then hasEligible = true break end
     end
-    if IsPlayerWindwalkerSpec() then
-        EnableAddon()
-    else
-        DisableAddon()
-    end
+    DisableAddon()
+    if hasEligible then EnableAddon() end
 end
 
 ------------------------------------------------------------------------
@@ -304,7 +343,7 @@ end
 local function InitializeSpellGlowTracker()
     if spellGlowTrackerInitialized then return end
     local _, classToken = UnitClass("player")
-    if classToken ~= "MONK" then
+    if classToken ~= "MONK" and classToken ~= "HUNTER" then
         eventFrame:UnregisterAllEvents()
         return
     end
@@ -312,6 +351,12 @@ local function InitializeSpellGlowTracker()
     _G["bok_proc_timer"]  = 0
     _G["docj_proc_timer"] = 0
     _G["rwk_proc_timer"]  = 0
+    _G["howl_proc_timer"] = 0
+    _G["wailing_arrow_proc_timer"] = 0
+    _G["hogstrider_proc_timer"] = 0
+    _G["howl_proc_active"] = false
+    _G["black_arrow_proc_active"]   = false
+    _G["wailing_arrow_proc_active"] = false
     for _, entry in pairs(TIMED_ENTRIES) do
         entry.endTime = 0
     end
@@ -325,7 +370,7 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
 
     elseif event == "PLAYER_LOGIN" then
         local _, classToken = UnitClass("player")
-        if classToken ~= "MONK" then
+        if classToken ~= "MONK" and classToken ~= "HUNTER" then
             eventFrame:UnregisterAllEvents()
             return
         end

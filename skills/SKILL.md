@@ -36,8 +36,8 @@ Be concise in your responses, providing only the necessary information and code 
 - **SBA_Simple** — Displays the next suggested cast from `C_AssistedCombat`.
 - **shmIcons** — Shared icon/cooldown/glow framework used by other addons.
 - **TrinketTracker** — Tracks trinket/equipment cooldowns with UI integration.
-- **VivifyProcTracker** — Tracks Vivacious Vivification procs and notifies listeners via `_G.VivifyProc_OnEvent` (no bundled external libraries).
-- **OnUseTracker** — Tracks Zenith uptime (15/20s) and plays an audio alert.
+- **VivifyProcTracker** — Tracks Vivacious Vivification procs and notifies listeners via `_G.VivifyProc_OnEvent`.
+- **OnUseTracker** — Tracks Buffs, Cooldowns, and uptime after spells and abilities are used.
 - **Libs/** — Bundled libraries (LibStub, etc.) used by select addons.
 
 ## Other Repository Reference Files

@@ -128,14 +128,19 @@ local PLUGIN_OPTS_WW = {
     { id = "bok_proc",  label = "Blackout Kick!",    supportsProcMode = true, default = 4 },
     { id = "rwk_proc",  label = "Rushing Wind Kick", supportsProcMode = true, default = 4 },
     { id = "docj_proc", label = "Dance of Chi-Ji",   supportsProcMode = true, default = 4 },
+    { id = "tod_proc",  label = "Touch of Death" },
 }
 
 local PLUGIN_OPTS_BM = {
-    { id = "bestial_wrath_active", label = "Bestial Wrath Active" },
-    { id = "bestial_wrath_cooldown", label = "Bestial Wrath Cooldown", supportsProcMode = true, default = 90 },
-    { id = "barbed_shot_debuff", label = "Barbed Shot Debuff", supportsProcMode = true, default = 12 },
-    { id = "withering_fire_active", label = "Withering Fire Active" },
-    { id = "withering_fire", label = "Withering Fire", supportsProcMode = true, default = 10 },
+    { id = "bestial_wrath_active",    label = "Bestial Wrath Active" },
+    { id = "bestial_wrath_cooldown",  label = "Bestial Wrath Cooldown", supportsProcMode = true, default = 90 },
+    { id = "barbed_shot_debuff",      label = "Barbed Shot Debuff",     supportsProcMode = true, default = 12 },
+    { id = "withering_fire_active",   label = "Withering Fire Active" },
+    { id = "withering_fire",          label = "Withering Fire",         supportsProcMode = true, default = 10 },
+    { id = "howl_proc",               label = "Howl of the Pack Leader",supportsProcMode = true, default = 29 },
+    { id = "black_arrow_proc",        label = "Black Arrow" },
+    { id = "wailing_arrow_proc",      label = "Wailing Arrow",          supportsProcMode = true, default = 15 },
+    { id = "hogstrider_proc",         label = "Hogstrider (Cobra Shot)", supportsProcMode = true, default = 19 },
 }
 
 local WINDWALKER_SPEC_ID = 269
@@ -190,6 +195,10 @@ local PROC_PLUGIN_BY_ID = {
         activeFlag = "docj_proc_active",
         timerVar = "docj_proc_timer",
     },
+    tod_proc = {
+        label = "Touch of Death",
+        activeFlag = "tod_proc_active",
+    },
     withering_fire = {
         label = "Withering Fire",
         activeFlag = "WitheringFireActiveTracker",
@@ -204,6 +213,25 @@ local PROC_PLUGIN_BY_ID = {
         label = "Barbed Shot Debuff",
         activeFlag = "BarbedShotDebuffActiveTracker",
         timerVar = "BarbedShotDebuffRemaining",
+    },
+    howl_proc = {
+        label = "Howl of the Pack Leader",
+        activeFlag = "howl_proc_active",
+        timerVar = "howl_proc_timer",
+    },
+    black_arrow_proc = {
+        label = "Black Arrow",
+        activeFlag = "black_arrow_proc_active",
+    },
+    wailing_arrow_proc = {
+        label = "Wailing Arrow",
+        activeFlag = "wailing_arrow_proc_active",
+        timerVar = "wailing_arrow_proc_timer",
+    },
+    hogstrider_proc = {
+        label = "Hogstrider",
+        activeFlag = "hogstrider_proc_active",
+        timerVar = "hogstrider_proc_timer",
     },
 }
 
