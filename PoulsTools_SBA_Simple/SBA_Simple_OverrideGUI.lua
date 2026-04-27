@@ -122,7 +122,7 @@ local COND_BY_ID = {}
 for _, ct in ipairs(COND_TYPES) do COND_BY_ID[ct.id] = ct end
 
 -- Plugin options shown inside the Plugin / Proc condition picker
-local PLUGIN_OPTS = {
+local PLUGIN_OPTS_WW = {
     { id = "zenith",    label = "Zenith"            },
     { id = "last_combo_eq", label = "Combo"         },
     { id = "bok_proc",  label = "Blackout Kick!",    supportsProcMode = true, default = 4 },
@@ -130,10 +130,23 @@ local PLUGIN_OPTS = {
     { id = "docj_proc", label = "Dance of Chi-Ji",   supportsProcMode = true, default = 4 },
 }
 
+local PLUGIN_OPTS_BM = {
+    { id = "bestial_wrath_active", label = "Bestial Wrath Active" },
+}
+
 local WINDWALKER_SPEC_ID = 269
+local BM_HUNTER_SPEC_ID = 253
 
 local function IsWindwalkerGUI()
     return editSpecID == WINDWALKER_SPEC_ID
+end
+
+local function IsBeastMasteryHunterGUI()
+    return editSpecID == BM_HUNTER_SPEC_ID
+end
+
+local function SupportsPluginGUI()
+    return IsWindwalkerGUI() or IsBeastMasteryHunterGUI()
 end
 
 local function GetVisibleCondTypes()
@@ -141,7 +154,7 @@ local function GetVisibleCondTypes()
     for _, ct in ipairs(COND_TYPES) do
         -- Last Combo Strike is selected through Plugin / Proc -> Select plugin...
         if ct.id ~= "last_combo_eq" then
-            if IsWindwalkerGUI() then
+            if SupportsPluginGUI() then
                 out[#out + 1] = ct
             elseif ct.id ~= "plugin" then
                 out[#out + 1] = ct
@@ -152,7 +165,8 @@ local function GetVisibleCondTypes()
 end
 
 local function GetVisiblePluginOptions()
-    if IsWindwalkerGUI() then return PLUGIN_OPTS end
+    if IsWindwalkerGUI() then return PLUGIN_OPTS_WW end
+    if IsBeastMasteryHunterGUI() then return PLUGIN_OPTS_BM end
     return {}
 end
 
@@ -203,6 +217,7 @@ end
 BuildPluginConditionExpr = function(cond, ruleSpellID)
     local plugin, op, value = NormalizePluginState(cond)
     if plugin == "zenith" then return "ZenithActiveTracker" end
+    if plugin == "bestial_wrath_active" then return "BestialWrathActiveTracker" end
     if plugin == "last_combo_eq" then
         return ("LastComboStrikeSpellID == %d"):format(ruleSpellID or 0)
     end
@@ -218,6 +233,7 @@ end
 BuildPluginSummary = function(cond)
     local plugin, op, value = NormalizePluginState(cond)
     if plugin == "zenith" then return "Zenith" end
+    if plugin == "bestial_wrath_active" then return "Bestial Wrath Active" end
     if plugin == "last_combo_eq" then return "Combo" end
 
     local meta = PROC_PLUGIN_BY_ID[plugin]
