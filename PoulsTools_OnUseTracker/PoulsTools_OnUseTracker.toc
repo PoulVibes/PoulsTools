@@ -1,5 +1,5 @@
 ## Interface: 120005
-## Title: OnUseBuffTracker
+## Title: OnUseTracker
 ## Notes: Tracks on-use buff windows (Zenith, Bestial Wrath).
 ## Author: Poul
 ## Version: 1.2.0
@@ -8,4 +8,4 @@
 ## Category-enUS: PoulsTools
 ## Group: PoulsTools
 
-OnUseBuffTracker.lua
+OnUseTracker.lua

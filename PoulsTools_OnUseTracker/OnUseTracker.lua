@@ -212,10 +212,10 @@ _G["WitheringFireActiveTracker"] = false
 _G["WitheringFireRemaining"] = 0
 _G["BarbedShotDebuffActiveTracker"] = false
 _G["BarbedShotDebuffRemaining"] = 0
-local UOBT_IconEnabled = false
+local OUT_IconEnabled = false
 
 -- Create the visual icon
-iconFrame = CreateFrame("Frame", "OnUseBuffIcon", UIParent)
+iconFrame = CreateFrame("Frame", "OnUseTrackerIcon", UIParent)
 iconFrame:SetSize(64, 64)
 iconFrame:SetPoint("CENTER", 0, 0)
 iconFrame:Hide()
@@ -233,10 +233,10 @@ local function UpdateIconTexture()
 end
 
 -- Slash command
-SLASH_OUBT1 = "/oubt"
-SlashCmdList["OUBT"] = function(_)
-    UOBT_IconEnabled = not UOBT_IconEnabled
-    if not UOBT_IconEnabled then iconFrame:Hide() end
+SLASH_OUT1 = "/out"
+SlashCmdList["OUT"] = function(_)
+    OUT_IconEnabled = not OUT_IconEnabled
+    if not OUT_IconEnabled then iconFrame:Hide() end
 end
 
 local function UpdateTimerDuration()
@@ -252,7 +252,7 @@ local function UpdateTimerDuration()
 end
 
 frame:SetScript("OnEvent", function(_, event, unit, _, spellID)
-    if event == "ADDON_LOADED" and unit == "PoulsTools_OnUseBuffTracker" then
+    if event == "ADDON_LOADED" and unit == "PoulsTools_OnUseTracker" then
         UpdateEnabledState()
         UpdateIconTexture()
         return
@@ -302,7 +302,7 @@ frame:SetScript("OnEvent", function(_, event, unit, _, spellID)
         else
             ClearWitheringFireTracking()
         end
-        if UOBT_IconEnabled then
+        if OUT_IconEnabled then
             iconFrame:Show()
         end
 
