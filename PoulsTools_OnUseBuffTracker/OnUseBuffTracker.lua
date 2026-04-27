@@ -43,12 +43,17 @@ local BESTIAL_WRATH_SPELL_ID = 19574
 local BESTIAL_WRATH_BASE_COOLDOWN = 90
 local BESTIAL_WRATH_WITH_BEAST_WITHIN_COOLDOWN = 30
 local THE_BEAST_WITHIN_TALENT_ID = 231548
+local BARBED_SHOT_SPELL_ID = 217200
+local BARBED_SHOT_DEBUFF_DURATION = 12
 local WITHERING_FIRE_TALENT_ID = 466990
 local WITHERING_FIRE_DURATION = 10
 local witheringFireExpiresAt = 0
+local barbedShotExpiresAt = 0
 local onUseWindowTimer = nil
 local witheringFireTimer = nil
 local witheringFireTicker = nil
+local barbedShotTimer = nil
+local barbedShotTicker = nil
 local bestialWrathCooldownExpiresAt = 0
 local bestialWrathCooldownTimer = nil
 local bestialWrathCooldownTicker = nil
@@ -86,6 +91,34 @@ local function StartWitheringFireTracking(duration)
 
     witheringFireTimer = C_Timer.NewTimer(duration, function()
         ClearWitheringFireTracking()
+    end)
+end
+
+local function ClearBarbedShotTracking()
+    _G["BarbedShotDebuffActiveTracker"] = false
+    _G["BarbedShotDebuffRemaining"] = 0
+    barbedShotExpiresAt = 0
+    barbedShotTimer = CancelTimer(barbedShotTimer)
+    barbedShotTicker = CancelTimer(barbedShotTicker)
+end
+
+local function StartBarbedShotTracking(duration)
+    ClearBarbedShotTracking()
+    _G["BarbedShotDebuffActiveTracker"] = true
+    _G["BarbedShotDebuffRemaining"] = duration
+    barbedShotExpiresAt = GetTime() + duration
+
+    barbedShotTicker = C_Timer.NewTicker(0.1, function()
+        local remains = barbedShotExpiresAt - GetTime()
+        if remains > 0 then
+            _G["BarbedShotDebuffRemaining"] = remains
+        else
+            ClearBarbedShotTracking()
+        end
+    end)
+
+    barbedShotTimer = C_Timer.NewTimer(duration, function()
+        ClearBarbedShotTracking()
     end)
 end
 
@@ -154,6 +187,7 @@ local function DisableAddon()
     _G["BestialWrathActiveTracker"] = false
     _G["ZenithActiveTracker"] = false
     ClearWitheringFireTracking()
+    ClearBarbedShotTracking()
     ClearBestialWrathCooldownTracking()
     iconFrame:Hide()
 end
@@ -176,6 +210,8 @@ _G["BestialWrathCooldownActiveTracker"] = false
 _G["BestialWrathCooldownRemaining"] = 0
 _G["WitheringFireActiveTracker"] = false
 _G["WitheringFireRemaining"] = 0
+_G["BarbedShotDebuffActiveTracker"] = false
+_G["BarbedShotDebuffRemaining"] = 0
 local UOBT_IconEnabled = false
 
 -- Create the visual icon
@@ -249,6 +285,10 @@ frame:SetScript("OnEvent", function(_, event, unit, _, spellID)
     end
 
     if not addonEnabled then return end
+
+    if unit == "player" and currentSpecID == TRACKED_SPECS["HUNTER"] and spellID == BARBED_SHOT_SPELL_ID then
+        StartBarbedShotTracking(BARBED_SHOT_DEBUFF_DURATION)
+    end
 
     if unit == "player" and currentSpecID and SPEC_SPELL_IDS[currentSpecID][spellID] and not _G["ZenithActiveTracker"] then
         _G["ZenithActiveTracker"] = true

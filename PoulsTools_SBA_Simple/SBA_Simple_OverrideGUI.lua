@@ -133,6 +133,7 @@ local PLUGIN_OPTS_WW = {
 local PLUGIN_OPTS_BM = {
     { id = "bestial_wrath_active", label = "Bestial Wrath Active" },
     { id = "bestial_wrath_cooldown", label = "Bestial Wrath Cooldown", supportsProcMode = true, default = 90 },
+    { id = "barbed_shot_debuff", label = "Barbed Shot Debuff", supportsProcMode = true, default = 12 },
     { id = "withering_fire_active", label = "Withering Fire Active" },
     { id = "withering_fire", label = "Withering Fire", supportsProcMode = true, default = 10 },
 }
@@ -199,6 +200,11 @@ local PROC_PLUGIN_BY_ID = {
         activeFlag = "BestialWrathCooldownActiveTracker",
         timerVar = "BestialWrathCooldownRemaining",
     },
+    barbed_shot_debuff = {
+        label = "Barbed Shot Debuff",
+        activeFlag = "BarbedShotDebuffActiveTracker",
+        timerVar = "BarbedShotDebuffRemaining",
+    },
 }
 
 local VALID_COMP_OPS = {
@@ -246,6 +252,10 @@ BuildPluginConditionExpr = function(cond, ruleSpellID)
         if plugin == "bestial_wrath_cooldown" then
             return ("(((%s == true) and (tonumber(%s) or 0)) or 0) %s %d")
                 :format(meta.activeFlag, meta.timerVar, op, value or 90)
+        end
+        if plugin == "barbed_shot_debuff" then
+            return ("(((%s == true) and (tonumber(%s) or 0)) or 0) %s %d")
+                :format(meta.activeFlag, meta.timerVar, op, value or 12)
         end
         return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 4)
     end
@@ -671,6 +681,7 @@ local PLUGIN_SET = {
     ["rwk_proc"] = true,
     ["docj_proc"] = true,
     ["docj_timer"] = true,
+    ["barbed_shot_debuff"] = true,
 }
 
 local function InferMissingPrefix(raw, validSet)
