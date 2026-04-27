@@ -132,6 +132,7 @@ local PLUGIN_OPTS_WW = {
 
 local PLUGIN_OPTS_BM = {
     { id = "bestial_wrath_active", label = "Bestial Wrath Active" },
+    { id = "bestial_wrath_cooldown", label = "Bestial Wrath Cooldown", supportsProcMode = true, default = 90 },
     { id = "withering_fire_active", label = "Withering Fire Active" },
     { id = "withering_fire", label = "Withering Fire", supportsProcMode = true, default = 10 },
 }
@@ -193,6 +194,11 @@ local PROC_PLUGIN_BY_ID = {
         activeFlag = "WitheringFireActiveTracker",
         timerVar = "WitheringFireRemaining",
     },
+    bestial_wrath_cooldown = {
+        label = "Bestial Wrath Cooldown",
+        activeFlag = "BestialWrathCooldownActiveTracker",
+        timerVar = "BestialWrathCooldownRemaining",
+    },
 }
 
 local VALID_COMP_OPS = {
@@ -218,6 +224,7 @@ local function NormalizePluginState(cond)
         op = IsCompOp(op) and op or "<"
         value = value or 4
     end
+
     return plugin, op, value
 end
 
@@ -235,6 +242,10 @@ BuildPluginConditionExpr = function(cond, ruleSpellID)
     if IsCompOp(op) then
         if plugin == "withering_fire" then
             return ("(WitheringFireActiveTracker == true) and ((tonumber(%s) or 0) %s %d)"):format(meta.timerVar, op, value or 10)
+        end
+        if plugin == "bestial_wrath_cooldown" then
+            return ("(((%s == true) and (tonumber(%s) or 0)) or 0) %s %d")
+                :format(meta.activeFlag, meta.timerVar, op, value or 90)
         end
         return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 4)
     end

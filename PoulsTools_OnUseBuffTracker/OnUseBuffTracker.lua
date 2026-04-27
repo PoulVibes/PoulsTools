@@ -39,12 +39,19 @@ local SPEC_TIMER_DURATIONS = {
 local addonEnabled = false
 local iconFrame
 local currentSpecID = nil  -- Track current spec ID for spell/icon/timer logic
+local BESTIAL_WRATH_SPELL_ID = 19574
+local BESTIAL_WRATH_BASE_COOLDOWN = 90
+local BESTIAL_WRATH_WITH_BEAST_WITHIN_COOLDOWN = 30
+local THE_BEAST_WITHIN_TALENT_ID = 231548
 local WITHERING_FIRE_TALENT_ID = 466990
 local WITHERING_FIRE_DURATION = 10
 local witheringFireExpiresAt = 0
 local onUseWindowTimer = nil
 local witheringFireTimer = nil
 local witheringFireTicker = nil
+local bestialWrathCooldownExpiresAt = 0
+local bestialWrathCooldownTimer = nil
+local bestialWrathCooldownTicker = nil
 
 local function CancelTimer(timerObj)
     if timerObj and timerObj.Cancel then
@@ -82,6 +89,41 @@ local function StartWitheringFireTracking(duration)
     end)
 end
 
+local function ClearBestialWrathCooldownTracking()
+    _G["BestialWrathCooldownActiveTracker"] = false
+    _G["BestialWrathCooldownRemaining"] = 0
+    bestialWrathCooldownExpiresAt = 0
+    bestialWrathCooldownTimer = CancelTimer(bestialWrathCooldownTimer)
+    bestialWrathCooldownTicker = CancelTimer(bestialWrathCooldownTicker)
+end
+
+local function ResolveBestialWrathCooldownDuration()
+    if IsPlayerSpell(THE_BEAST_WITHIN_TALENT_ID) then
+        return BESTIAL_WRATH_WITH_BEAST_WITHIN_COOLDOWN
+    end
+    return BESTIAL_WRATH_BASE_COOLDOWN
+end
+
+local function StartBestialWrathCooldownTracking(duration)
+    ClearBestialWrathCooldownTracking()
+    _G["BestialWrathCooldownActiveTracker"] = true
+    _G["BestialWrathCooldownRemaining"] = duration
+    bestialWrathCooldownExpiresAt = GetTime() + duration
+
+    bestialWrathCooldownTicker = C_Timer.NewTicker(0.1, function()
+        local remains = bestialWrathCooldownExpiresAt - GetTime()
+        if remains > 0 then
+            _G["BestialWrathCooldownRemaining"] = remains
+        else
+            ClearBestialWrathCooldownTracking()
+        end
+    end)
+
+    bestialWrathCooldownTimer = C_Timer.NewTimer(duration, function()
+        ClearBestialWrathCooldownTracking()
+    end)
+end
+
 local function IsPlayerSpec(specID)
     local specIndex = GetSpecialization()
     if not specIndex then return false end
@@ -112,6 +154,7 @@ local function DisableAddon()
     _G["BestialWrathActiveTracker"] = false
     _G["ZenithActiveTracker"] = false
     ClearWitheringFireTracking()
+    ClearBestialWrathCooldownTracking()
     iconFrame:Hide()
 end
 
@@ -129,6 +172,8 @@ end
 -- Keep legacy globals for SBA plugin compatibility.
 _G["ZenithActiveTracker"] = false
 _G["BestialWrathActiveTracker"] = false
+_G["BestialWrathCooldownActiveTracker"] = false
+_G["BestialWrathCooldownRemaining"] = 0
 _G["WitheringFireActiveTracker"] = false
 _G["WitheringFireRemaining"] = 0
 local UOBT_IconEnabled = false
@@ -207,8 +252,12 @@ frame:SetScript("OnEvent", function(_, event, unit, _, spellID)
 
     if unit == "player" and currentSpecID and SPEC_SPELL_IDS[currentSpecID][spellID] and not _G["ZenithActiveTracker"] then
         _G["ZenithActiveTracker"] = true
-        _G["BestialWrathActiveTracker"] = (spellID == 19574)
-        if spellID == 19574 and IsPlayerSpell(WITHERING_FIRE_TALENT_ID) then
+        _G["BestialWrathActiveTracker"] = (spellID == BESTIAL_WRATH_SPELL_ID)
+        if spellID == BESTIAL_WRATH_SPELL_ID then
+            StartBestialWrathCooldownTracking(ResolveBestialWrathCooldownDuration())
+        end
+
+        if spellID == BESTIAL_WRATH_SPELL_ID and IsPlayerSpell(WITHERING_FIRE_TALENT_ID) then
             StartWitheringFireTracking(WITHERING_FIRE_DURATION)
         else
             ClearWitheringFireTracking()
