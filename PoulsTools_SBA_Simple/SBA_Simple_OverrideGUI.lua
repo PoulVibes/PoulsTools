@@ -132,6 +132,8 @@ local PLUGIN_OPTS_WW = {
 
 local PLUGIN_OPTS_BM = {
     { id = "bestial_wrath_active", label = "Bestial Wrath Active" },
+    { id = "withering_fire_active", label = "Withering Fire Active" },
+    { id = "withering_fire", label = "Withering Fire", supportsProcMode = true, default = 10 },
 }
 
 local WINDWALKER_SPEC_ID = 269
@@ -186,6 +188,11 @@ local PROC_PLUGIN_BY_ID = {
         activeFlag = "docj_proc_active",
         timerVar = "docj_proc_timer",
     },
+    withering_fire = {
+        label = "Withering Fire",
+        activeFlag = "WitheringFireActiveTracker",
+        timerVar = "WitheringFireRemaining",
+    },
 }
 
 local VALID_COMP_OPS = {
@@ -218,6 +225,7 @@ BuildPluginConditionExpr = function(cond, ruleSpellID)
     local plugin, op, value = NormalizePluginState(cond)
     if plugin == "zenith" then return "ZenithActiveTracker" end
     if plugin == "bestial_wrath_active" then return "BestialWrathActiveTracker" end
+    if plugin == "withering_fire_active" then return "WitheringFireActiveTracker" end
     if plugin == "last_combo_eq" then
         return ("LastComboStrikeSpellID == %d"):format(ruleSpellID or 0)
     end
@@ -225,6 +233,9 @@ BuildPluginConditionExpr = function(cond, ruleSpellID)
     local meta = PROC_PLUGIN_BY_ID[plugin]
     if not meta then return "false" end
     if IsCompOp(op) then
+        if plugin == "withering_fire" then
+            return ("(WitheringFireActiveTracker == true) and ((tonumber(%s) or 0) %s %d)"):format(meta.timerVar, op, value or 10)
+        end
         return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 4)
     end
     return ("(%s == true)"):format(meta.activeFlag)
@@ -234,6 +245,7 @@ BuildPluginSummary = function(cond)
     local plugin, op, value = NormalizePluginState(cond)
     if plugin == "zenith" then return "Zenith" end
     if plugin == "bestial_wrath_active" then return "Bestial Wrath Active" end
+    if plugin == "withering_fire_active" then return "Withering Fire Active" end
     if plugin == "last_combo_eq" then return "Combo" end
 
     local meta = PROC_PLUGIN_BY_ID[plugin]
@@ -2609,7 +2621,8 @@ local function CreateCondInputArea(parent)
         if ct.needsPlugin then
             pluginFrame:Show()
             local pluginID, savedOp, savedValue = NormalizePluginState(cond)
-            for _, opt in ipairs(PLUGIN_OPTS) do
+            local visiblePlugins = GetVisiblePluginOptions() or {}
+            for _, opt in ipairs(visiblePlugins) do
                 if opt.id == pluginID then
                     selPlugin = opt
                     pluginBtn:SetText(opt.label)

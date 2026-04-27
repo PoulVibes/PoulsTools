@@ -39,6 +39,48 @@ local SPEC_TIMER_DURATIONS = {
 local addonEnabled = false
 local iconFrame
 local currentSpecID = nil  -- Track current spec ID for spell/icon/timer logic
+local WITHERING_FIRE_TALENT_ID = 466990
+local WITHERING_FIRE_DURATION = 10
+local witheringFireExpiresAt = 0
+local onUseWindowTimer = nil
+local witheringFireTimer = nil
+local witheringFireTicker = nil
+
+local function CancelTimer(timerObj)
+    if timerObj and timerObj.Cancel then
+        timerObj:Cancel()
+    end
+    return nil
+end
+
+local function ClearWitheringFireTracking()
+    _G["WitheringFireActiveTracker"] = false
+    _G["WitheringFireRemaining"] = 0
+    witheringFireExpiresAt = 0
+    witheringFireTimer = CancelTimer(witheringFireTimer)
+    witheringFireTicker = CancelTimer(witheringFireTicker)
+end
+
+local function StartWitheringFireTracking(duration)
+    ClearWitheringFireTracking()
+    _G["WitheringFireActiveTracker"] = true
+    _G["WitheringFireRemaining"] = duration
+    witheringFireExpiresAt = GetTime() + duration
+
+    -- Low-frequency ticker keeps remaining time updated without per-frame OnUpdate work.
+    witheringFireTicker = C_Timer.NewTicker(0.1, function()
+        local remains = witheringFireExpiresAt - GetTime()
+        if remains > 0 then
+            _G["WitheringFireRemaining"] = remains
+        else
+            ClearWitheringFireTracking()
+        end
+    end)
+
+    witheringFireTimer = C_Timer.NewTimer(duration, function()
+        ClearWitheringFireTracking()
+    end)
+end
 
 local function IsPlayerSpec(specID)
     local specIndex = GetSpecialization()
@@ -66,7 +108,10 @@ local function DisableAddon()
     if not addonEnabled then return end
     addonEnabled = false
     frame:UnregisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+    onUseWindowTimer = CancelTimer(onUseWindowTimer)
     _G["BestialWrathActiveTracker"] = false
+    _G["ZenithActiveTracker"] = false
+    ClearWitheringFireTracking()
     iconFrame:Hide()
 end
 
@@ -84,6 +129,8 @@ end
 -- Keep legacy globals for SBA plugin compatibility.
 _G["ZenithActiveTracker"] = false
 _G["BestialWrathActiveTracker"] = false
+_G["WitheringFireActiveTracker"] = false
+_G["WitheringFireRemaining"] = 0
 local UOBT_IconEnabled = false
 
 -- Create the visual icon
@@ -161,12 +208,19 @@ frame:SetScript("OnEvent", function(_, event, unit, _, spellID)
     if unit == "player" and currentSpecID and SPEC_SPELL_IDS[currentSpecID][spellID] and not _G["ZenithActiveTracker"] then
         _G["ZenithActiveTracker"] = true
         _G["BestialWrathActiveTracker"] = (spellID == 19574)
+        if spellID == 19574 and IsPlayerSpell(WITHERING_FIRE_TALENT_ID) then
+            StartWitheringFireTracking(WITHERING_FIRE_DURATION)
+        else
+            ClearWitheringFireTracking()
+        end
         if UOBT_IconEnabled then
             iconFrame:Show()
         end
 
         local duration = UpdateTimerDuration()
-        C_Timer.After(duration, function()
+        onUseWindowTimer = CancelTimer(onUseWindowTimer)
+        onUseWindowTimer = C_Timer.NewTimer(duration, function()
+            onUseWindowTimer = nil
             _G["ZenithActiveTracker"] = false
             _G["BestialWrathActiveTracker"] = false
             iconFrame:Hide()
