@@ -2,9 +2,15 @@ local ADDON_NAME = "PoulsTools_EnemyCountTracker"
 
 EnemyCountTrackerDB = EnemyCountTrackerDB or {}
 
+-- Midnight SecretValue guard: issecretvalue is a Blizzard global in Midnight.
+-- If it doesn't exist (older clients) treat everything as non-secret.
+local issecretvalue = issecretvalue or function() return false end
+
 local frame = CreateFrame("Frame")
-local unitToGUID = {}
-local guidCounts = {}
+-- trackedUnits: set of unit tokens (plain strings) currently counted.
+-- Using unit tokens instead of GUIDs makes tracking SecretValue-safe —
+-- UnitGUID() returns a SecretValue in Midnight and cannot be used as a table key.
+local trackedUnits = {}
 local enemyCount = 0
 local initialized = false
 local debugFrame = nil
@@ -28,18 +34,15 @@ local function EnsureDB()
 end
 
 local function ResetTables()
-    wipe(unitToGUID)
-    wipe(guidCounts)
+    wipe(trackedUnits)
     enemyCount = 0
     _G.ECT_TargetCount = enemyCount
 end
 
 local function Recount()
     local n = 0
-    for _, count in pairs(guidCounts) do
-        if count and count > 0 then
-            n = n + 1
-        end
+    for _ in pairs(trackedUnits) do
+        n = n + 1
     end
     enemyCount = n
     _G.ECT_TargetCount = enemyCount
@@ -151,50 +154,33 @@ local function ShouldCountUnit(unit)
     return false
 end
 
-local function AddGUID(guid)
-    if not guid then return end
-    local current = guidCounts[guid] or 0
-    guidCounts[guid] = current + 1
-    if current == 0 then
+local function AddUnit(unit)
+    if not unit then return end
+    if not trackedUnits[unit] then
+        trackedUnits[unit] = true
         enemyCount = enemyCount + 1
         _G.ECT_TargetCount = enemyCount
     end
 end
 
-local function RemoveGUID(guid)
-    if not guid then return end
-    local current = guidCounts[guid]
-    if not current then return end
-
-    if current <= 1 then
-        guidCounts[guid] = nil
+local function RemoveUnit(unit)
+    if not unit then return end
+    if trackedUnits[unit] then
+        trackedUnits[unit] = nil
         if enemyCount > 0 then
             enemyCount = enemyCount - 1
             _G.ECT_TargetCount = enemyCount
         end
-    else
-        guidCounts[guid] = current - 1
     end
 end
 
 local function TrackUnit(unit)
     if not unit then return end
-    local oldGUID = unitToGUID[unit]
-    local newGUID = nil
-
     if ShouldCountUnit(unit) then
-        newGUID = UnitGUID(unit)
+        AddUnit(unit)
+    else
+        RemoveUnit(unit)
     end
-
-    if oldGUID and oldGUID ~= newGUID then
-        RemoveGUID(oldGUID)
-    end
-
-    if newGUID and newGUID ~= oldGUID then
-        AddGUID(newGUID)
-    end
-
-    unitToGUID[unit] = newGUID
 end
 
 local function ForEachVisibleNameplateUnit(cb)
@@ -237,12 +223,9 @@ local function RefreshAll()
         TrackUnit(unit)
     end)
 
-    for unit, guid in pairs(unitToGUID) do
+    for unit in pairs(trackedUnits) do
         if not seenUnits[unit] then
-            if guid then
-                RemoveGUID(guid)
-            end
-            unitToGUID[unit] = nil
+            trackedUnits[unit] = nil
         end
     end
 
@@ -367,11 +350,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
 
     if event == "NAME_PLATE_UNIT_REMOVED" then
         local unit = ...
-        local guid = unitToGUID[unit]
-        if guid then
-            RemoveGUID(guid)
-        end
-        unitToGUID[unit] = nil
+        RemoveUnit(unit)
         UpdateDebugDisplay()
         return
     end

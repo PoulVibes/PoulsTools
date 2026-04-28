@@ -67,6 +67,10 @@ local SPEC_SECONDARY = {
     -- Enhancement Shaman: Maelstrom is the PRIMARY resource — not SVS-queryable; omitted.
     -- Demon Hunter: Fury (Havoc) and Pain (Vengeance) are PRIMARY resources — not SVS-queryable; omitted.
     -- Evoker: Essence is PRIMARY (mana equivalent) — not SVS-queryable; omitted.
+    -- BM Hunter: Focus is the primary resource.  It is a secret value in combat;
+    --   FocusGuesstimator exposes the estimate as the global currentFocus instead.
+    --   inlineExpr marks that no UnitPower() local is emitted in generated code.
+    [253] = { varName = "currentFocus", inlineExpr = "(_G.currentFocus or 0)", label = "Focus" },
 }
 
 -- Forward declarations used by condition generators defined before helper bodies.
@@ -94,7 +98,8 @@ local COND_TYPES = {
         { id = "resource",     label = "Resource Check", needsResource = true,
       generate = function(c, s)
           local sec = SPEC_SECONDARY[editSpecID] or SPEC_SECONDARY_DEFAULT
-          local var = (c.resource == "energy") and "(_G.currentEnergy or 0)" or sec.varName
+          local var = (c.resource == "energy") and "(_G.currentEnergy or 0)"
+                      or sec.inlineExpr or sec.varName
           local op  = c.operator or ">="
           return ("%s %s %d"):format(var, op, c.value or 0)
       end },
@@ -937,7 +942,10 @@ local function GenerateCode(rules)
     local _sec = SPEC_SECONDARY[editSpecID]   -- nil for specs with no queryable secondary
 
     L[#L+1] = "local spellID = C_AssistedCombat.GetNextCastSpell()"
-    if _sec then
+    if _sec and not _sec.inlineExpr then
+        -- Declare a local for the secondary resource only when it is read via
+        -- UnitPower.  Specs using inlineExpr (e.g. BM Hunter / currentFocus)
+        -- reference the global directly, so no local is needed or emitted.
         L[#L+1] = ('local %s = UnitPower("player", Enum.PowerType.%s)'):format(_sec.varName, _sec.powerType)
     end
     L[#L+1] = ""
@@ -2531,6 +2539,13 @@ local function CreateCondInputArea(parent)
             if ct.needsResource then
                 resourceFrame:Show()
                 operatorFrame:Show()
+                local sec = SPEC_SECONDARY[editSpecID] or SPEC_SECONDARY_DEFAULT
+                chiBtn:SetText(sec.label)
+                if sec.inlineExpr then
+                    energyBtn:Hide()
+                else
+                    energyBtn:Show()
+                end
                 SetResSel("chi")
                 SetOpSel(">=")
                 valLbl:SetText("Value:")
@@ -2595,6 +2610,14 @@ local function CreateCondInputArea(parent)
     f.RefreshSpec = function()
         local sec = SPEC_SECONDARY[editSpecID] or SPEC_SECONDARY_DEFAULT
         chiBtn:SetText(sec.label)
+        -- Specs that use an inline expression (e.g. BM Hunter tracks Focus via
+        -- the FocusGuesstimator global) have no meaningful Energy alternative;
+        -- hide the Energy button so only the single resource option is shown.
+        if sec.inlineExpr then
+            energyBtn:Hide()
+        else
+            energyBtn:Show()
+        end
     end
 
     f.Reset = function()
@@ -2649,6 +2672,13 @@ local function CreateCondInputArea(parent)
         if ct.needsResource then
             resourceFrame:Show()
             operatorFrame:Show()
+            local sec = SPEC_SECONDARY[editSpecID] or SPEC_SECONDARY_DEFAULT
+            chiBtn:SetText(sec.label)
+            if sec.inlineExpr then
+                energyBtn:Hide()
+            else
+                energyBtn:Show()
+            end
             SetResSel(cond.resource or "chi")
             SetOpSel(cond.operator or ">=")
             valLbl:SetText("Value:")

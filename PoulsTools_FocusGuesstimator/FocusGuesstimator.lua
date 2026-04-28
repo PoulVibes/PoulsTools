@@ -29,12 +29,17 @@ local COBRA_SENSES_SPELL_ID = 378244
 local COBRA_SHOT_ID         = 193455
 local COBRA_SHOT_BASE_COST  = 35
 
+-- Lethal Barbs talent: each ranged Auto Shot generates 1 focus.
+-- The auto-shot interval = base weapon speed / (1 + haste).
+local LETHAL_BARBS_SPELL_ID = 1264781
+
 -- Focus costs for BM Hunter abilities (positive = focus spent on cast).
 local ABILITY_COSTS = {
     -- ── Core rotation ──────────────────────────────────────────────────────
-    [34026]        = 30,   -- Kill Command
-    [COBRA_SHOT_ID]= COBRA_SHOT_BASE_COST, -- Cobra Shot (modified by Cobra Senses)
-    [BARBED_SHOT_ID] = 30, -- Barbed Shot (also triggers focus regen buff; see above)
+    [34026]          = 30,  -- Kill Command
+    [COBRA_SHOT_ID]  = COBRA_SHOT_BASE_COST, -- Cobra Shot (modified by Cobra Senses)
+    [BARBED_SHOT_ID] = 0,  -- Barbed Shot (also triggers focus regen buff; see above)
+    [1264359]        = 35, -- Wild Thrash
     -- ── Proc / free abilities (no focus cost; listed for completeness) ─────
     [466930] = 0,    -- Black Arrow proc   – verify if a hidden cost exists
     [392060] = 0,    -- Wailing Arrow proc – verify if a hidden cost exists
@@ -49,13 +54,19 @@ _G.GuesstimatedHaste = _G.GuesstimatedHaste or 0.21
 
 -- ── 2. Runtime State ──────────────────────────────────────────────────────────
 
-local maxFocus              = 100
-currentFocus                = maxFocus   -- intentional global; readable by SBA / other addons
-local addonEnabled          = false
-local regenMultiplier       = 1.0        -- adjusted by talent scan
-local cobraSensesActive     = false      -- set by RefreshTalents
-local bardedShotRegenExpiry = {}         -- expiry timestamps for each active Barbed Shot stack
-local ui                                 -- forward declaration; assigned after CreateFrame
+local maxFocus                = 100
+currentFocus                  = maxFocus   -- intentional global; readable by SBA / other addons
+local addonEnabled              = false
+local regenMultiplier           = 1.0        -- adjusted by talent scan
+local cobraSensesActive         = false      -- set by RefreshTalents
+local lethalBarbsActive         = false      -- set by RefreshTalents; enables auto-shot focus gain
+local lastKnownRangedCritChance = 0          -- saved outside combat; reused while in combat
+local cobraCritExpectedRefund   = 0          -- (lastKnownRangedCritChance/100)*10
+local baseRangedWeaponSpeed     = 0          -- base (un-hasted) weapon speed in seconds
+local autoShotTimer             = 0          -- accumulates elapsed time toward next auto-shot
+local playerInCombat            = false      -- true between PLAYER_REGEN_DISABLED/ENABLED
+local bardedShotRegenExpiry     = {}         -- expiry timestamps for each active Barbed Shot stack
+local ui                                     -- forward declaration; assigned after CreateFrame
 
 -- ── 3. Class / Spec Helpers ───────────────────────────────────────────────────
 
@@ -97,6 +108,20 @@ local function RefreshTalents()
     -- ── Cobra Senses: reduces Cobra Shot cost by 5 ────────────────────────
     cobraSensesActive = (COBRA_SENSES_SPELL_ID > 0) and IsSpellKnown(COBRA_SENSES_SPELL_ID) or false
 
+    -- ── Lethal Barbs: Auto Shot generates 1 focus per shot ────────────────
+    lethalBarbsActive = IsSpellKnown(LETHAL_BARBS_SPELL_ID)
+
+    -- ── Cobra Shot crit refund: expected +10 focus per crit ──────────────
+    -- GetRangedCritChance() is a secret value in combat.  Save the raw value
+    -- while outside combat so it can be reused for the duration of each fight.
+    if not InCombatLockdown() then
+        local crit = GetRangedCritChance()
+        if crit and not issecretvalue(crit) then
+            lastKnownRangedCritChance = crit
+            cobraCritExpectedRefund   = (lastKnownRangedCritChance / 100) * 10
+        end
+    end
+
     -- ── Add further talent checks below as spell IDs are confirmed ─────────
     --
     -- BM Hunter candidates to research (TWW / Interface 120005):
@@ -110,26 +135,47 @@ local function RefreshTalents()
     if currentFocus > maxFocus then currentFocus = maxFocus end
 end
 
+-- Reads the ranged weapon speed and stores the BASE (un-hasted) value.
+-- UnitAttackSpeed returns the currently-hasted mainhand speed; we reverse
+-- the haste scaling so OnUpdate can re-apply GuesstimatedHaste each frame.
+-- For hunters, their bow/gun/crossbow is INVSLOT_MAINHAND (slot 13).
+-- Only called outside combat; weapon swaps cannot occur in combat anyway.
+local function RefreshWeaponSpeed()
+    if InCombatLockdown() then return end
+    local hastedSpeed = UnitAttackSpeed("player")
+    if hastedSpeed and not issecretvalue(hastedSpeed) and hastedSpeed > 0 then
+        local haste = _G.GuesstimatedHaste or 0
+        baseRangedWeaponSpeed = hastedSpeed * (1 + haste)
+    end
+end
+
 -- ── 5. Enable / Disable ───────────────────────────────────────────────────────
 
 local function EnableAddon()
     if addonEnabled then return end
-    addonEnabled    = true
-    currentFocus    = maxFocus   -- optimistic start; synced on first combat-exit
+    addonEnabled  = true
+    currentFocus  = maxFocus   -- optimistic start; synced on first combat-exit
+    autoShotTimer = 0
     frame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
     frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    frame:RegisterEvent("PLAYER_REGEN_DISABLED")
     frame:RegisterEvent("UNIT_MAXPOWER")
     frame:RegisterEvent("UNIT_POWER_UPDATE")
+    frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 end
 
 local function DisableAddon()
     if not addonEnabled then return end
-    addonEnabled = false
+    addonEnabled   = false
+    autoShotTimer  = 0
+    playerInCombat = false
     wipe(bardedShotRegenExpiry)
     frame:UnregisterEvent("UNIT_SPELLCAST_SUCCEEDED")
     frame:UnregisterEvent("PLAYER_REGEN_ENABLED")
+    frame:UnregisterEvent("PLAYER_REGEN_DISABLED")
     frame:UnregisterEvent("UNIT_MAXPOWER")
     frame:UnregisterEvent("UNIT_POWER_UPDATE")
+    frame:UnregisterEvent("PLAYER_EQUIPMENT_CHANGED")
     ui:Hide()
 end
 
@@ -141,7 +187,8 @@ local function UpdateEnabledState()
         return
     end
     if IsPlayerSpec(REQUIRED_SPEC_ID) then
-        RefreshTalents()   -- always re-scan on spec/talent changes
+        RefreshTalents()      -- always re-scan on spec/talent changes
+        RefreshWeaponSpeed()  -- cache weapon speed for auto-shot interval
         EnableAddon()
     else
         DisableAddon()
@@ -210,9 +257,32 @@ frame:SetScript("OnEvent", function(self, event, ...)
     -- ── Runtime events (registered only while addon is active) ────────────
 
     if event == "PLAYER_REGEN_ENABLED" then
-        -- Leaving combat: sync estimate to the real value if it is readable.
+        -- Leaving combat: sync estimate and refresh out-of-combat stats.
+        playerInCombat = false
         local real = UnitPower("player", FOCUS_POWER_TYPE)
         if not issecretvalue(real) then currentFocus = real end
+        local crit = GetRangedCritChance()
+        if crit and not issecretvalue(crit) then
+            lastKnownRangedCritChance = crit
+            cobraCritExpectedRefund   = (lastKnownRangedCritChance / 100) * 10
+        end
+        return
+    end
+
+    if event == "PLAYER_REGEN_DISABLED" then
+        -- Entering combat: mark combat active and reset the auto-shot timer so
+        -- the first simulated shot fires after one full weapon-speed interval.
+        playerInCombat = true
+        autoShotTimer  = 0
+        return
+    end
+
+    if event == "PLAYER_EQUIPMENT_CHANGED" then
+        -- Re-derive base weapon speed if the ranged weapon (main hand) changed.
+        local slot = select(1, ...)
+        if slot == INVSLOT_MAINHAND then
+            RefreshWeaponSpeed()
+        end
         return
     end
 
@@ -225,8 +295,10 @@ frame:SetScript("OnEvent", function(self, event, ...)
         local cost = ABILITY_COSTS[spellID]
 
         -- Cobra Senses talent: reduce Cobra Shot cost by 5
-        if spellID == COBRA_SHOT_ID and cobraSensesActive then
-            cost = cost - 5
+        -- Also subtract the expected focus refund from crits (updated outside combat).
+        if spellID == COBRA_SHOT_ID then
+            if cobraSensesActive then cost = cost - 5 end
+            cost = cost - cobraCritExpectedRefund
         end
 
         if cost and cost > 0 then
@@ -291,6 +363,18 @@ frame:SetScript("OnUpdate", function(self, elapsed)
 
     if currentFocus < maxFocus then
         currentFocus = math.min(maxFocus, currentFocus + (regenRate * elapsed))
+    end
+
+    -- Lethal Barbs: each Auto Shot generates 1 focus.
+    -- Auto-shot interval = base weapon speed / (1 + haste); accumulate time
+    -- and fire discrete +1 ticks.  Only active during combat.
+    if lethalBarbsActive and playerInCombat and baseRangedWeaponSpeed > 0 then
+        local currentInterval = baseRangedWeaponSpeed / (1 + (_G.GuesstimatedHaste or 0))
+        autoShotTimer = autoShotTimer + elapsed
+        while autoShotTimer >= currentInterval do
+            autoShotTimer = autoShotTimer - currentInterval
+            currentFocus  = math.min(maxFocus, currentFocus + 1)
+        end
     end
 
     if ui:IsShown() then
