@@ -2,8 +2,9 @@
 ## Title: OnUseTracker
 ## Notes: Tracks on-use buff windows (Zenith, Bestial Wrath).
 ## Author: Poul
-## Version: 1.2.0
+## Version: 1.2.8
 
+## Dependencies: PoulsTools_shmIcons
 ## IconTexture: Interface\Icons\inv_ability_monk_weaponsoforder
 ## Category-enUS: PoulsTools
 ## Group: PoulsTools
