@@ -1,11 +1,29 @@
 # World of Warcraft Talents
 
-*Namespace: `static-us` | Locale: `en_US` | Total talents: 3252*
+*Namespace: `static-us` | Locale: `en_US`*
 
-| Talent Tree | Talent Name | Talent ID | Description |
-|---|---|---|---|
-| Death Knight - Blood (Spec) | Abomination Limb | 140986 | Sprout an additional limb, pulling enemies further than 8 yds from you every 1 sec.    The same enemy can only be pulled once every 4 sec. |
-| Death Knight - Blood (Spec) | Blood Boil | 101307 | Deals 57 Shadow damage and infects all enemies within 10 yds with Blood Plague.   Blood Plague A shadowy disease that drains 93 health from the target over 24 sec. |
+> **This file is an index.** Per-class talent data has been split into individual files.
+
+| Class | File |
+|---|---|
+| Death Knight | [wow_talents_death_knight.md](wow_talents_death_knight.md) |
+| Demon Hunter | [wow_talents_demon_hunter.md](wow_talents_demon_hunter.md) |
+| Druid | [wow_talents_druid.md](wow_talents_druid.md) |
+| Evoker | [wow_talents_evoker.md](wow_talents_evoker.md) |
+| Hunter | [wow_talents_hunter.md](wow_talents_hunter.md) |
+| Mage | [wow_talents_mage.md](wow_talents_mage.md) |
+| Monk | [wow_talents_monk.md](wow_talents_monk.md) |
+| Paladin | [wow_talents_paladin.md](wow_talents_paladin.md) |
+| Priest | [wow_talents_priest.md](wow_talents_priest.md) |
+| Rogue | [wow_talents_rogue.md](wow_talents_rogue.md) |
+| Shaman | [wow_talents_shaman.md](wow_talents_shaman.md) |
+| Warlock | [wow_talents_warlock.md](wow_talents_warlock.md) |
+| Warrior | [wow_talents_warrior.md](wow_talents_warrior.md) |
+
+---
+
+> **⚠️ Legacy data below — superseded by per-class files above. Do not read.**
+
 | Death Knight - Blood (Spec) | Blood Feast | 101311 | Anti-Magic Shell heals you for 100% of the damage it absorbs. |
 | Death Knight - Blood (Spec) | Blood Mist | 101261 | When you cast Dancing Rune Weapon, you become enveloped in a blood mist that surrounds you for 8 sec, increasing your Parry by 5%.   Deals 22 Shadow damage every 1 sec to enemies within 10 yds. Every time it deals damage you gain 2 Runic Power, up to a maximum of 10 Runic Power. Deals reduced damage beyond 8 targets. |
 | Death Knight - Blood (Spec) | Bloodied Blade | 131122 | Parrying an attack grants you a charge of Bloodied Blade, increasing your Strength by 0.5%, up to 4.0% for 15 sec.  At 8 stacks, your next parry consumes all charges to unleash a Heart Strike at 300% effectiveness, and increases your Strength by 10% for 6 sec. |

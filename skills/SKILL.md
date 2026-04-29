@@ -46,6 +46,7 @@ Be concise in your responses, providing only the necessary information and code 
 - **[./WoW_Core_Concepts_Skill.md](./WoW_Core_Concepts_Skill.md)** — Read when you need background on WoW fundamentals: classes, specs, combat roles, content types, and leveling systems.
 - **[./WoW_Detailed_Reference_Skill.md](./WoW_Detailed_Reference_Skill.md)** — Read when you need spec IDs for `GetSpecializationInfo()`, role matrices, or content difficulty/Midnight systems reference.
 - **[./HOWTO_Addon_Single_Spec.md](./HOWTO_Addon_Single_Spec.md)** — Read when building an addon that should only activate for a specific class or specialization; covers startup checks, spec gating, and event timing.
+- **[./wow_talents.md](./wow_talents.md)** — Talent index; links to per-class talent files. Read when you need talent IDs, talent names, or talent descriptions for any WoW class.
 
 ### Addon-Specific Guides
 - **[../PoulsTools_shmIcons/shmIconsIntegrationSkill.md](../PoulsTools_shmIcons/shmIconsIntegrationSkill.md)** — Read when integrating with `shmIcons`: registering icon frames, pushing cooldown/stack/glow updates, TOC dependencies, and the full public API.
