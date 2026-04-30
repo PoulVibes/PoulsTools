@@ -1,21 +1,17 @@
-> ⚠️ **Pre-Release Alpha** — This collection is actively being built out. Expect Updates
-
----
-
 ## PoulsTools — Rotation & Tracker Addon Suite
 
-My goal is simple: bring back the quality-of-life rotation helpers and information trackers that many of us have relied on for the past two decades. They'll never be quite as pinpoint-accurate as they once were, but they're a significant step above what Blizzard currently provides.
-
+PoulsTools is a suite of tools designed to help improve your rotation and awareness. Blizzard has added their own combat assistant and cooldown manager, but often times they are incomplete, flat wrong, or just not customizable enough. That's where PoulsTools comes in. PoulsTools Augments the information available in Blizzards baked in tools to consider things they don't and allow you to track a lot of info blizz doesn't.
 ---
 
 ### Rotation Helper
 
 A single-spell suggestion display that improves on Blizzard's Assisted Combat system.
 
-- Displays the Assisted Combat suggestion by default — zero configuration required
-- Supports per-spec overrides via raw Lua or the graphical priority-list builder
-- Includes advanced condition editing and custom Lua expression conditions
-- Override code lets you pick your rotational priorities
+- Displays the Assisted Combat suggestion by default for classes where it makes sense — zero configuration required
+- For specs that experience issues it provides overrides to the reccomendation system
+- Has a handy graphical tool for building your priorities.
+- Includes baked in conditions for common checks, plugin support for class specific procs (growing list daily), and custom Lua expression condition support
+- Override code lets you update your rotational priorities real time.
 
 ---
 
@@ -23,9 +19,11 @@ A single-spell suggestion display that improves on Blizzard's Assisted Combat sy
 
 Track any ability in the game and place it exactly where you want it.
 
-- Resizable, movable icons that can be positioned anywhere on screen
-- Tracks cooldowns, stack counts, glow effects, and icon overrides on procs
+- Resizable, movable icons that can be positioned anywhere on screen.
+- Tracks cooldowns, stack counts, resource checks, and icon overrides
 - Per-spec configuration — different layouts for each specialization
+- Supports Audio queues when ability usage is fully charged and ready.
+- Supports glow effects when abilities are usable.
 
 ---
 
@@ -36,39 +34,39 @@ Track any item in the game and place it anywhere you want.
 - Supports an unlimited number of tracked items (usable or not)
 - Displays cooldown timers, inventory count, and charges
 - Per-character configuration
+- Handy for tracking Combat potions, healthstones, or even just as a farming display
 
 ---
 
 ### Gear / On-Use Tracker
 
-Track your equipped on-use items and place them where you want them.
+Track your equipped on-use gear and place them where you want them.
 
 - Works with any gear slot — trinkets, Nitro Boost belts, on-use rings, and more
-- Cooldown display identical to the item tracker
+- Shows cooldown information
+- Supports Highlight glow when usable
+
 
 ---
 
-### Proc Tracking
+### Realtime Proc Tracking
 
-> Currently focused on Windwalker Monk — a broader class library is coming next.
+> Built-in class plugins let you see information on key DPS procs.
 
-- **Hit Combo** — Tracks Mastery: Combo Strikes for rotation helper, Displays Hit Combo stacks and plays an audio alert when you break the chain
-- **Proc Icons** — Movable HUD icons for: Touch of Death · Blackout Kick! · Dance of Chi-Ji · Rushing Wind Kick
-- **Zenith Tracker** — Monitors Zenith uptime for use in custom rotations
-- **Vivacious Vivification** — Tracks the free Vivify proc for talented Monks
+- Supported Specs: WW-Monk, BM Hunter, more coming soon.
 
 ---
 
 ### Plugin & Profile Support
 
 - **Plugin API** — Integrate your own addons into the icon system, menus, and rotation helper with a few lines of Lua
-- **Custom Lua Overrides** — write your own Lua code to override scripts or use the default
-- **Example Scripts** — Comes with some example scripts for overrides
-- **Profile Import / Export** — Share your entire UI layout with friends or move it between characters instantly
+- **Custom Overrides** — Use the priority override gui to choose the priorities you want or add custom code to override
+- **Reccomended Overrides** — Growing list of Pre-programmed overrides for ability helper
+- **Override Sharing** — Full import and export support to share your priorities and layouts with your friends.
 
 ---
 
-*Just getting started — feedback and requests welcome!*
+*Just getting started — feedback and requests encouraged!*
 
 ---
 
