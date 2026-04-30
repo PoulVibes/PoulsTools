@@ -123,6 +123,10 @@ local COND_TYPES = {
             generate = function(c, s) return ("LastComboStrikeSpellID == %d"):format(ResolveSpell(c,s)) end },
     { id = "last_ability_eq", label = "Last Ability Used = Spell", shortLabel = "LastAbility", needsSpell = true,
         generate = function(c, s) return ("LastAbilityUsedSpellID == %d"):format(ResolveSpell(c,s)) end },
+    { id = "has_pet",   label = "Has Pet",   shortLabel = "Pet",
+      generate = function(c, s) return 'UnitExists("pet")' end },
+    { id = "pet_alive", label = "Pet Alive", shortLabel = "Pet Alive",
+      generate = function(c, s) return 'not UnitIsDead("pet")' end },
 }
 local COND_BY_ID = {}
 for _, ct in ipairs(COND_TYPES) do COND_BY_ID[ct.id] = ct end
@@ -3292,20 +3296,25 @@ do
         elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
             local unit, _, spellID = ...
             if unit ~= "player" or not spellID or seenCastSpells[spellID] then return end
-            -- FindBaseSpellByID returns the spell this one overrides.
-            -- If it returns a different ID, spellID is an override spell.
-            local baseID = C_SpellBook.FindBaseSpellByID and C_SpellBook.FindBaseSpellByID(spellID)
-            if not baseID or baseID == spellID then
-                return
-            end
-            -- Confirm the base spell is actually a class/player ability
-            if not IsPlayerSpell(baseID) then
-                return
-            end
-            local isPassive = C_Spell.IsSpellPassive and C_Spell.IsSpellPassive(spellID)
-            if isPassive then return end
             local info = C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(spellID)
             if not info or not info.name then return end
+            -- "Call " pet spells (Call Pet 1-5, Call Felhunter, etc.) live in the
+            -- pet spellbook and have no player-spell base, so bypass the override /
+            -- IsPlayerSpell gates and add them unconditionally.
+            if not info.name:find("^Call ") then
+                -- FindBaseSpellByID returns the spell this one overrides.
+                -- If it returns a different ID, spellID is an override spell.
+                local baseID = C_SpellBook.FindBaseSpellByID and C_SpellBook.FindBaseSpellByID(spellID)
+                if not baseID or baseID == spellID then
+                    return
+                end
+                -- Confirm the base spell is actually a class/player ability
+                if not IsPlayerSpell(baseID) then
+                    return
+                end
+                local isPassive = C_Spell.IsSpellPassive and C_Spell.IsSpellPassive(spellID)
+                if isPassive then return end
+            end
             local entry = {
                 name    = info.name,
                 spellID = spellID,
