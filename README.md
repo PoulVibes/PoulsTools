@@ -1,6 +1,6 @@
-## PoulsTools — Rotation & Tracker Addon Suite
+## CombatCoach — Rotation & Tracker Addon Suite
 
-PoulsTools is a suite of tools designed to help improve your rotation and awareness. Blizzard has added their own combat assistant and cooldown manager, but often times they are incomplete, flat wrong, or just not customizable enough. That's where PoulsTools comes in. PoulsTools Augments the information available in Blizzards baked in tools to consider things they don't and allow you to track a lot of info blizz doesn't.
+CombatCoach is a suite of tools designed to help improve your rotation and awareness. Blizzard has added their own combat assistant and cooldown manager, but often times they are incomplete, flat wrong, or just not customizable enough. That's where CombatCoach comes in. PoulsTools Augments the information available in Blizzards baked in tools to consider things they don't and allow you to track a lot of info blizz doesn't.
 ---
 
 ### Rotation Helper
@@ -74,6 +74,6 @@ Track your equipped on-use gear and place them where you want them.
 
 List of slash commands available in this addon suite:
 
-- `/pt`, `/poulstools` — Open PoulsTools settings; `/pt help` shows help.
+- `/cc`, `/CombatCoach` — Open CombatCoach settings; `/cc help` shows help.
 
 Notes: Commands are case-insensitive. Use the addon's UI for more options.
