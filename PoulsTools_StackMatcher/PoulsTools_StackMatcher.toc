@@ -1,0 +1,5 @@
+## Interface: 120005
+## Title: PoulsTools_StackMatcher
+## Notes: Tracks Barbed Shot stack count using cooldown state
+## Author: PoulVibes
+PoulsTools_StackMatcher.lua

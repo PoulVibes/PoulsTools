@@ -46,6 +46,13 @@ local THE_BEAST_WITHIN_TALENT_ID = 231548
 local BARBED_SHOT_SPELL_ID = 217200
 local BARBED_SHOT_DEBUFF_BASE_DURATION = 12  -- 14 sec with Savagery
 local SAVAGERY_TALENT_ID              = 131244  -- Barbed Shot lasts 2 sec longer (14 s total)
+local NATURES_ALLY_RANK3_TALENT_ID    = 1273126 -- Nature's Ally (Rank 3): buff applied on BS/CS/BA, consumed on KC
+local COBRA_SHOT_SPELL_ID             = 193455
+local BLACK_ARROW_SPELL_ID            = 141219
+local KILL_COMMAND_SPELL_ID           = 34026
+local WILD_THRASH_SPELL_ID            = 131251
+local UMBRAL_REACH_TALENT_ID          = 1235397 -- Beast Cleave on Dark Arrow when enemies > 1
+local BEAST_CLEAVE_DURATION           = 8
 local WITHERING_FIRE_TALENT_ID = 466990
 local WITHERING_FIRE_DURATION = 10
 local witheringFireExpiresAt = 0
@@ -58,6 +65,9 @@ local barbedShotTicker = nil
 local bestialWrathCooldownExpiresAt = 0
 local bestialWrathCooldownTimer = nil
 local bestialWrathCooldownTicker = nil
+local beastCleaveExpiresAt = 0
+local beastCleaveTimer = nil
+local beastCleaveTicker = nil
 
 local function CancelTimer(timerObj)
     if timerObj and timerObj.Cancel then
@@ -158,6 +168,34 @@ local function StartBestialWrathCooldownTracking(duration)
     end)
 end
 
+local function ClearBeastCleaveTracking()
+    _G["BeastCleaveActiveTracker"] = false
+    _G["BeastCleaveRemaining"] = 0
+    beastCleaveExpiresAt = 0
+    beastCleaveTimer = CancelTimer(beastCleaveTimer)
+    beastCleaveTicker = CancelTimer(beastCleaveTicker)
+end
+
+local function StartBeastCleaveTracking()
+    ClearBeastCleaveTracking()
+    _G["BeastCleaveActiveTracker"] = true
+    _G["BeastCleaveRemaining"] = BEAST_CLEAVE_DURATION
+    beastCleaveExpiresAt = GetTime() + BEAST_CLEAVE_DURATION
+
+    beastCleaveTicker = C_Timer.NewTicker(0.1, function()
+        local remains = beastCleaveExpiresAt - GetTime()
+        if remains > 0 then
+            _G["BeastCleaveRemaining"] = remains
+        else
+            ClearBeastCleaveTracking()
+        end
+    end)
+
+    beastCleaveTimer = C_Timer.NewTimer(BEAST_CLEAVE_DURATION, function()
+        ClearBeastCleaveTracking()
+    end)
+end
+
 local function IsPlayerSpec(specID)
     local specIndex = GetSpecialization()
     if not specIndex then return false end
@@ -190,6 +228,8 @@ local function DisableAddon()
     ClearWitheringFireTracking()
     ClearBarbedShotTracking()
     ClearBestialWrathCooldownTracking()
+    _G["NaturesAllyActiveTracker"] = false
+    ClearBeastCleaveTracking()
     iconFrame:Hide()
 end
 
@@ -213,6 +253,9 @@ _G["WitheringFireActiveTracker"] = false
 _G["WitheringFireRemaining"] = 0
 _G["BarbedShotDebuffActiveTracker"] = false
 _G["BarbedShotDebuffRemaining"] = 0
+_G["NaturesAllyActiveTracker"] = false
+_G["BeastCleaveActiveTracker"] = false
+_G["BeastCleaveRemaining"] = 0
 
 local OUT_IconEnabled = false
 
@@ -291,6 +334,24 @@ frame:SetScript("OnEvent", function(_, event, unit, _, spellID)
     if unit == "player" and currentSpecID == TRACKED_SPECS["HUNTER"] and spellID == BARBED_SHOT_SPELL_ID then
         local debuffDuration = BARBED_SHOT_DEBUFF_BASE_DURATION + (IsPlayerSpell(SAVAGERY_TALENT_ID) and 2 or 0)
         StartBarbedShotTracking(debuffDuration)
+        if IsPlayerSpell(NATURES_ALLY_RANK3_TALENT_ID) then
+            _G["NaturesAllyActiveTracker"] = true
+        end
+    end
+
+    if unit == "player" and currentSpecID == TRACKED_SPECS["HUNTER"] then
+        if (spellID == COBRA_SHOT_SPELL_ID or spellID == BLACK_ARROW_SPELL_ID) and IsPlayerSpell(NATURES_ALLY_RANK3_TALENT_ID) then
+            _G["NaturesAllyActiveTracker"] = true
+        elseif spellID == KILL_COMMAND_SPELL_ID then
+            _G["NaturesAllyActiveTracker"] = false
+        end
+        if spellID == WILD_THRASH_SPELL_ID then
+            StartBeastCleaveTracking()
+        elseif spellID == BLACK_ARROW_SPELL_ID
+            and IsPlayerSpell(UMBRAL_REACH_TALENT_ID)
+            and (_G.ECT_TargetCount or 0) > 1 then
+            StartBeastCleaveTracking()
+        end
     end
 
     if unit == "player" and currentSpecID and SPEC_SPELL_IDS[currentSpecID][spellID] and not _G["ZenithActiveTracker"] then

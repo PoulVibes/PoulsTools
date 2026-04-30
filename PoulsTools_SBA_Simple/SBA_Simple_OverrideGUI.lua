@@ -147,6 +147,8 @@ local PLUGIN_OPTS_BM = {
     { id = "black_arrow_proc",        label = "Black Arrow" },
     { id = "wailing_arrow_proc",      label = "Wailing Arrow",          supportsProcMode = true, default = 15 },
     { id = "hogstrider_proc",         label = "Hogstrider (Cobra Shot)", supportsProcMode = true, default = 19 },
+    { id = "natures_ally",            label = "Nature's Ally Active" },
+    { id = "beast_cleave",            label = "Beast Cleave",            supportsProcMode = true, default = 8 },
 }
 
 local WINDWALKER_SPEC_ID = 269
@@ -239,6 +241,15 @@ local PROC_PLUGIN_BY_ID = {
         activeFlag = "hogstrider_proc_active",
         timerVar = "hogstrider_proc_timer",
     },
+    natures_ally = {
+        label = "Nature's Ally",
+        activeFlag = "NaturesAllyActiveTracker",
+    },
+    beast_cleave = {
+        label = "Beast Cleave",
+        activeFlag = "BeastCleaveActiveTracker",
+        timerVar = "BeastCleaveRemaining",
+    },
 }
 
 local VALID_COMP_OPS = {
@@ -290,6 +301,10 @@ BuildPluginConditionExpr = function(cond, ruleSpellID)
         if plugin == "barbed_shot_debuff" then
             return ("(((%s == true) and (tonumber(%s) or 0)) or 0) %s %d")
                 :format(meta.activeFlag, meta.timerVar, op, value or 12)
+        end
+        if plugin == "beast_cleave" then
+            return ("(((%s == true) and (tonumber(%s) or 0)) or 0) %s %d")
+                :format(meta.activeFlag, meta.timerVar, op, value or 8)
         end
         return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 4)
     end
