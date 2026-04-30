@@ -1,5 +1,5 @@
 ## Interface: 120005
-## Title: SpellGlowTracker
+## Title: PoulsTools_SpellGlowTracker
 ## Notes: Centered HUD proc icons with spell activation glow.
 ## Author: Poul
 ## Version: 1.2.0

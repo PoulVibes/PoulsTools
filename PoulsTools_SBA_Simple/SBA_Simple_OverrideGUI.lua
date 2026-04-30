@@ -141,6 +141,7 @@ local PLUGIN_OPTS_BM = {
     { id = "bestial_wrath_active",    label = "Bestial Wrath Active" },
     { id = "bestial_wrath_cooldown",  label = "Bestial Wrath Cooldown", supportsProcMode = true, default = 90 },
     { id = "barbed_shot_debuff",      label = "Barbed Shot Debuff",     supportsProcMode = true, default = 12 },
+    { id = "barbed_shot_stacks",      label = "Barbed Shot Stacks" },
     { id = "withering_fire_active",   label = "Withering Fire Active" },
     { id = "withering_fire",          label = "Withering Fire",         supportsProcMode = true, default = 10 },
     { id = "howl_proc",               label = "Howl of the Pack Leader",supportsProcMode = true, default = 29 },
@@ -221,6 +222,10 @@ local PROC_PLUGIN_BY_ID = {
         label = "Barbed Shot Debuff",
         activeFlag = "BarbedShotDebuffActiveTracker",
         timerVar = "BarbedShotDebuffRemaining",
+    },
+    barbed_shot_stacks = {
+        label = "Barbed Shot Stacks",
+        timerVar = "StackMatcher_BarbedShotStacks",
     },
     howl_proc = {
         label = "Howl of the Pack Leader",
