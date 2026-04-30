@@ -142,6 +142,7 @@ local PLUGIN_OPTS_BM = {
     { id = "bestial_wrath_cooldown",  label = "Bestial Wrath Cooldown", supportsProcMode = true, default = 90 },
     { id = "barbed_shot_debuff",      label = "Barbed Shot Debuff",     supportsProcMode = true, default = 12 },
     { id = "barbed_shot_stacks",      label = "Barbed Shot Stacks", supportsProcMode = true, default = 2, valueLabel = "Stacks", procCompareOnly = true },
+    { id = "kill_command_stacks",     label = "Kill Command Stacks", supportsProcMode = true, default = 1, valueLabel = "Stacks", procCompareOnly = true },
     { id = "withering_fire_active",   label = "Withering Fire Active" },
     { id = "withering_fire",          label = "Withering Fire",         supportsProcMode = true, default = 10 },
     { id = "howl_proc",               label = "Howl of the Pack Leader",supportsProcMode = true, default = 29 },
@@ -226,6 +227,10 @@ local PROC_PLUGIN_BY_ID = {
     barbed_shot_stacks = {
         label = "Barbed Shot Stacks",
         timerVar = "StackMatcher_BarbedShotStacks",
+    },
+    kill_command_stacks = {
+        label = "Kill Command Stacks",
+        timerVar = "StackMatcher_KillCommandStacks",
     },
     howl_proc = {
         label = "Howl of the Pack Leader",
@@ -905,14 +910,15 @@ end
 -------------------------------------------------------------------------------
 -- 3.  Code generator
 -------------------------------------------------------------------------------
-local function CondSummaryText(cond, ruleSpellID)
+local function CondSummaryText(cond, ruleSpellID, specIDOverride)
     local def = COND_BY_ID[cond.type]
     if not def then return "[obsolete: " .. (cond.type or "?") .. "]" end
     local prefix = cond.negate and "NOT " or ""
     local t
     if def.needsResource then
+        local specForLabel = (specIDOverride and specIDOverride > 0) and specIDOverride or editSpecID
         local resName = (cond.resource == "energy") and "Energy"
-                        or (SPEC_SECONDARY[editSpecID] or SPEC_SECONDARY_DEFAULT).label
+                        or (SPEC_SECONDARY[specForLabel] or SPEC_SECONDARY_DEFAULT).label
         local op      = cond.operator or ">="
         t = resName .. " " .. op .. " " .. tostring(cond.value or 0)
     elseif def.needsCompareValue then
@@ -1756,11 +1762,12 @@ local function UpdateRowFrame(f, idx, rule)
                     if #expr > 30 then expr = expr:sub(1, 27) .. "..." end
                     label = "Lua: " .. expr
                 elseif def.needsResource then
-                    -- Show as e.g. "chi >= 2" or "energy <= 60"
-                    local res = cond.resource or "chi"
+                    -- Show as e.g. "Focus >= 2" or "Energy <= 60"
                     local op  = cond.operator or ">="
                     local val = tostring(cond.value or 0)
-                    label = res .. " " .. op .. " " .. val
+                    local sec = SPEC_SECONDARY[editSpecID] or SPEC_SECONDARY_DEFAULT
+                    local resName = (cond.resource == "energy") and "Energy" or sec.label
+                    label = resName .. " " .. op .. " " .. val
                 elseif def.needsCompareValue then
                     local op  = cond.operator or ">="
                     local val = tostring(cond.value or 0)
@@ -2276,7 +2283,8 @@ local function CreateCondInputArea(parent)
     local chiBtn = CreateFrame("Button", nil, resourceFrame, "UIPanelButtonTemplate")
     chiBtn:SetSize(88, 22)
     chiBtn:SetPoint("LEFT", resLabel, "RIGHT", 4, 0)
-    chiBtn:SetText("Chi")
+    local initSec = SPEC_SECONDARY[editSpecID] or SPEC_SECONDARY_DEFAULT
+    chiBtn:SetText(initSec.label)
 
     local energyBtn = CreateFrame("Button", nil, resourceFrame, "UIPanelButtonTemplate")
     energyBtn:SetSize(88, 22)
@@ -4190,9 +4198,13 @@ local function CreateGUI()
     f:SetScript("OnKeyDown", function(self, key)
         if key == "ESCAPE" then
             self:Hide()
-            self:SetPropagateKeyboardInput(false)
+            if not InCombatLockdown() then
+                self:SetPropagateKeyboardInput(false)
+            end
         else
-            self:SetPropagateKeyboardInput(true)
+            if not InCombatLockdown() then
+                self:SetPropagateKeyboardInput(true)
+            end
         end
     end)
 
@@ -4667,10 +4679,11 @@ _G.SBAS_BuildCondRowText = function(cond, ruleSpellID, isFirst, parenDepthIn)
         if #expr > 30 then expr = expr:sub(1, 27) .. "..." end
         label = "Lua: " .. expr
     elseif def.needsResource then
-        local res = cond.resource or "chi"
         local op  = cond.operator or ">="
         local val = tostring(cond.value or 0)
-        label = res .. " " .. op .. " " .. val
+        local sec = SPEC_SECONDARY[editSpecID] or SPEC_SECONDARY_DEFAULT
+        local resName = (cond.resource == "energy") and "Energy" or sec.label
+        label = resName .. " " .. op .. " " .. val
     elseif def.needsCompareValue then
         local op  = cond.operator or ">="
         local val = tostring(cond.value or 0)

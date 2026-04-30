@@ -60,7 +60,9 @@ local function CreateOverrideAnalyzerWindow(specID, specName)
 
     -- Key handler for Escape; propagate so game hotkeys still work while open
     f:EnableKeyboard(true)
-    f:SetPropagateKeyboardInput(true)
+    if not InCombatLockdown() then
+        f:SetPropagateKeyboardInput(true)
+    end
     f:SetScript("OnKeyDown", function(self, key)
         if key == "ESCAPE" then self:Hide() end
     end)
@@ -197,7 +199,7 @@ local function CreateOverrideAnalyzerWindow(specID, specName)
                     else
                         -- Fallback if GUI module not loaded yet
                         local s = type(_G.SBAS_CondSummaryText) == "function"
-                                  and _G.SBAS_CondSummaryText(cond, rule.spellID)
+                                  and _G.SBAS_CondSummaryText(cond, rule.spellID, specID)
                                   or (cond.type or "?")
                         if ci > 1 then s = (cond.junction or "AND"):upper() .. " " .. s end
                         tok = s

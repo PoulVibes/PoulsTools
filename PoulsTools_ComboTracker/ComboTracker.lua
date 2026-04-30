@@ -110,8 +110,10 @@ end
 
 local function UpdateEnabledState()
     if not IsPlayerMonk() then
-        --print("[" .. ADDON_NAME .. "] abort: wrong class (not Monk).")
-        eventFrame:UnregisterAllEvents()
+        -- Not a Monk: keep UNIT_SPELLCAST_SUCCEEDED registered to track LastAbilityUsedSpellID
+        eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+        -- Ensure the combo icon addon is disabled for non-Monks
+        DisableAddon()
         return
     end
     -- Always track last ability used for all Monk specs
@@ -141,23 +143,18 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         UpdateEnabledState()
 
     elseif event == "PLAYER_LOGIN" then
-        -- Abort if not a Monk (no point continuing)
         local _, classToken = UnitClass("player")
+        -- Always track last ability used for all classes
+        eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+        -- If not a Monk, keep only LastAbilityUsedSpellID tracking
         if classToken ~= "MONK" then
-            --print("|cff00ff00[" .. ADDON .. " v" .. VERSION .. "]|r")
-            --print("  SpellGlowTracker disabled: not a Monk.")
-            eventFrame:UnregisterAllEvents()
             return
         end
-        -- Always track last ability used for all Monk specs
-        eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
         -- Enable combo icon only if Windwalker
         if IsPlayerWindwalkerSpec() then
             EnableAddon()
         else
             DisableAddon()
-            --print("|cff00ff00[" .. ADDON .. " v" .. VERSION .. "]|r")
-            --print("  SpellGlowTracker loaded but inactive (not Windwalker).")
         end
 
     elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
