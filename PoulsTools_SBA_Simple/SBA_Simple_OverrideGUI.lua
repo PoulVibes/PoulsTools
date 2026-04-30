@@ -123,7 +123,7 @@ local COND_TYPES = {
             generate = function(c, s) return ("LastComboStrikeSpellID == %d"):format(ResolveSpell(c,s)) end },
     { id = "last_ability_eq", label = "Last Ability Used = Spell", shortLabel = "LastAbility", needsSpell = true,
         generate = function(c, s) return ("LastAbilityUsedSpellID == %d"):format(ResolveSpell(c,s)) end },
-    { id = "has_pet",   label = "Has Pet",   shortLabel = "Pet",
+    { id = "has_pet",   label = "Pet Summoned",   shortLabel = "Has Pet",
       generate = function(c, s) return 'UnitExists("pet")' end },
     { id = "pet_alive", label = "Pet Alive", shortLabel = "Pet Alive",
       generate = function(c, s) return 'not UnitIsDead("pet")' end },
