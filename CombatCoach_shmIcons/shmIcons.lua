@@ -820,8 +820,10 @@ function shmIcons:Register(addonName, id, db, callbacks)
     icon.enabled = (db.enabled == true)
     icon.onMove   = callbacks and callbacks.onMove
     icon.onResize = callbacks and callbacks.onResize
-
     icons[globalID] = icon
+    -- Apply current lock state now that `icon.enabled` is known so the
+    -- frame visibility matches whether icons are locked or unlocked.
+    ApplyLockState(icon)
     -- Ensure frame starts hidden if the icon is disabled
     if icon.enabled == false then
         icon.frame:Hide()

@@ -1,5 +1,8 @@
 ## Interface: 120005
 ## Title: CombatCoach_StackMatcher
-## Notes: Tracks Barbed Shot stack count using cooldown state
+## Notes: Tracks the number of charges on spells that have max of 2 charges
 ## Author: PoulVibes
+## Category-enUS: CombatCoach
+## Group: CombatCoach
+
 CombatCoach_StackMatcher.lua
