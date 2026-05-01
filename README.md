@@ -72,6 +72,22 @@ Track your equipped on-use gear and place them where you want them.
 
 ### Slash Commands
 
+ - What's overriden and why?
+    - Windwalker Monk - SBA = unplayable
+        - Blizz reccomends Touch of death when someone around can be touch of deathed not when your current target can be.
+        - During zenith blizz doesn't change the rotation to account for not generally needing to build chi with tiger palm
+        - Blizz always recommends spending chi even when Fists of Fury is off cooldown
+        - General flow improvements
+    - Beast Mastery Hunter - SBA = generally not bad, but subtle improvements help.
+        - Improved AoE Rotation
+        - Blizz's SBA always wants to recommend something usable so it will recommend cobra shot even when using it will cost you dps
+        - SBA doesn't delay Wailing Arrow to get the extra black arrow.
+
+
+---
+
+### Slash Commands
+
 List of slash commands available in this addon suite:
 
 - `/cc`, `/CombatCoach` — Open CombatCoach settings; `/cc help` shows help.

@@ -4,7 +4,7 @@
 
 CombatCoach = CombatCoach or {}
 CombatCoach.Menu = CombatCoach.Menu or {}
-local PT = CombatCoach
+local CC = CombatCoach
 local Menu = CombatCoach.Menu
 
 -- Registry of all registered sub-addons
@@ -104,7 +104,7 @@ function Menu:CreateMainPanel()
     -- Version label (top right)
     local version = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     version:SetPoint("TOPRIGHT", banner, "TOPRIGHT", -16, -16)
-    version:SetText("v" .. (PT.version or "1.0.0"))
+    version:SetText("v" .. (CC.version or "1.0.0"))
     version:SetTextColor(0.5, 0.6, 0.7, 1.0)
 
     -- Description area
@@ -144,7 +144,7 @@ function Menu:CreateMainPanel()
     -- Footer
     local footer = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     footer:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 16, 16)
-    footer:SetText("Use |cFFFFFF00/pt|r to open this panel quickly.")
+    footer:SetText("Use |cFFFFFF00/coach|r to open this panel quickly.")
     footer:SetTextColor(0.4, 0.5, 0.6, 1.0)
 
     return frame

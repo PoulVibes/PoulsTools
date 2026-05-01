@@ -4,7 +4,7 @@
 
 CombatCoach          = CombatCoach or {}
 CombatCoach.Profiles = CombatCoach.Profiles or {}
-local PT       = CombatCoach
+local CC       = CombatCoach
 local Profiles = CombatCoach.Profiles
 
 -- Profile schema version — bump if the format changes incompatibly
@@ -377,10 +377,10 @@ end
 -- ============================================================
 -- AddButtonsToMainPanel
 -- Injects Import / Export buttons into the CombatCoach main panel.
--- Must be called after PT.Menu:BuildSettingsPanel() has run.
+-- Must be called after CC.Menu:BuildSettingsPanel() has run.
 -- ============================================================
 function Profiles:AddButtonsToMainPanel()
-    local menuFrame = PT.Menu and PT.Menu.addonListFrame
+    local menuFrame = CC.Menu and CC.Menu.addonListFrame
     if not menuFrame then return end
 
     local exportBtn = CreateFrame("Button", nil, menuFrame, "UIPanelButtonTemplate")

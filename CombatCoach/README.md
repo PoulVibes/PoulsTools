@@ -19,7 +19,7 @@ WoW Interface Version: **12.0.1** (The War Within)
 - Press **Escape → Options** and scroll to the **AddOns** section in the left panel.
 - Click **CombatCoach** to see the hub and all registered sub-addons.
 - Click a sub-addon entry to jump to its settings page.
-- Type `/pt` or `/CombatCoach` in chat to open the panel directly.
+- Type `/coach` or `/CombatCoach` in chat to open the panel directly.
 
 ---
 
@@ -109,9 +109,9 @@ Each sub-addon manages its own `SavedVariables` independently in its own `.toc`.
 
 | Command | Action |
 |---|---|
-| `/pt` | Open CombatCoach settings |
-| `/pt options` | Open CombatCoach settings |
-| `/pt help` | Print command list |
+| `/coach` | Open CombatCoach settings |
+| `/coach options` | Open CombatCoach settings |
+| `/coach help` | Print command list |
 
 ---
 

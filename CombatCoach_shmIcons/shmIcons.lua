@@ -205,13 +205,13 @@ local function GetSnapGroup(startID) return { startID } end
 -- ============================================================
 
 local function ScaleText(cd, stackLabel, size)
-    local pt = math.max(FONT_MIN_PT, math.floor(size * FONT_RATIO))
+    local coach = math.max(FONT_MIN_PT, math.floor(size * FONT_RATIO))
     for _, region in next, { cd:GetRegions() } do
         if region:GetObjectType() == "FontString" then
-            region:SetFont(FONT_PATH, pt, FONT_FLAGS)
+            region:SetFont(FONT_PATH, coach, FONT_FLAGS)
         end
     end
-    if stackLabel then stackLabel:SetFont(FONT_PATH, pt, FONT_FLAGS) end
+    if stackLabel then stackLabel:SetFont(FONT_PATH, coach, FONT_FLAGS) end
 end
 
 local function BuildGlow(frame, iconSize)
