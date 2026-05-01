@@ -48,7 +48,7 @@ local ABILITY_COSTS = {
     -- [120679] = -10,  -- Dire Beast (negative = focus gained; uncomment if confirmed)
 }
 
--- Haste multiplier shared with PoulsTools_GuesstimatorHaste.
+-- Haste multiplier shared with CombatCoach_GuesstimatorHaste.
 -- Falls back to 21 % until that addon updates the global.
 _G.GuesstimatedHaste = _G.GuesstimatedHaste or 0.21
 
@@ -227,7 +227,7 @@ frame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
 
 frame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
-        if select(1, ...) == "PoulsTools_FocusGuesstimator" then
+        if select(1, ...) == "CombatCoach_FocusGuesstimator" then
             ui:Hide()
             UpdateEnabledState()
         end

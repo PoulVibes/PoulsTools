@@ -1,4 +1,4 @@
-local ADDON_NAME = "PoulsTools_VivifyProcTracker"
+local ADDON_NAME = "CombatCoach_VivifyProcTracker"
 
 -- Addon table
 local VPT = {}

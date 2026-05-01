@@ -1,29 +1,29 @@
--- PoulsTools_Profiles.lua
--- Profile export / import system for PoulsTools
+-- CombatCoach_Profiles.lua
+-- Profile export / import system for CombatCoach
 -- Serializes all known addon SavedVariables into a portable string
 
-PoulsTools          = PoulsTools or {}
-PoulsTools.Profiles = PoulsTools.Profiles or {}
-local PT       = PoulsTools
-local Profiles = PoulsTools.Profiles
+CombatCoach          = CombatCoach or {}
+CombatCoach.Profiles = CombatCoach.Profiles or {}
+local PT       = CombatCoach
+local Profiles = CombatCoach.Profiles
 
 -- Profile schema version — bump if the format changes incompatibly
 Profiles.VERSION = 1
 
 -- Known addon SavedVariable globals included in a profile.
--- Add new entries here as more PoulsTools addons gain saved variables.
+-- Add new entries here as more CombatCoach addons gain saved variables.
 Profiles.knownDBs = {
-    { dbName = "ComboTrackerDB",      label = "PoulsTools_ComboTracker"      },
-    { dbName = "CooldownTrackerDB",   label = "PoulsTools_CooldownTracker"   },
-    { dbName = "ItemTrackerDB",       label = "PoulsTools_ItemTracker"       },
-    { dbName = "SpellGlowTrackerDB",  label = "PoulsTools_SpellGlowTracker"  },
-    { dbName = "SBA_SimpleDB",        label = "PoulsTools_SBA_Simple"        },
-    { dbName = "TrinketTrackerDB",    label = "PoulsTools_TrinketTracker"    },
-    { dbName = "VivifyProcTrackerDB", label = "PoulsTools_VivifyProcTracker" },
+    { dbName = "ComboTrackerDB",      label = "CombatCoach_ComboTracker"      },
+    { dbName = "CooldownTrackerDB",   label = "CombatCoach_CooldownTracker"   },
+    { dbName = "ItemTrackerDB",       label = "CombatCoach_ItemTracker"       },
+    { dbName = "SpellGlowTrackerDB",  label = "CombatCoach_SpellGlowTracker"  },
+    { dbName = "SBA_SimpleDB",        label = "CombatCoach_SBA_Simple"        },
+    { dbName = "TrinketTrackerDB",    label = "CombatCoach_TrinketTracker"    },
+    { dbName = "VivifyProcTrackerDB", label = "CombatCoach_VivifyProcTracker" },
 }
 
 -- Define the reload-after-import static popup once at load time
-StaticPopupDialogs["POULSTOOLS_PROFILE_RELOAD"] = {
+StaticPopupDialogs["CombatCoach_PROFILE_RELOAD"] = {
     text         = "Profile imported!\n\nUpdated: %s\n\nA UI reload is required to apply the changes. Reload now?",
     button1      = "Reload UI",
     button2      = "Later",
@@ -84,7 +84,7 @@ end
 -- ============================================================
 function Profiles:Serialize()
     local profile = {
-        _addon   = "PoulsTools",
+        _addon   = "CombatCoach",
         _version = self.VERSION,
         _date    = date("%Y-%m-%d"),
     }
@@ -142,8 +142,8 @@ function Profiles:Deserialize(str)
     if type(result) ~= "table" then
         return nil, "Profile is not a valid table."
     end
-    if result._addon ~= "PoulsTools" then
-        return nil, "String does not appear to be a PoulsTools profile."
+    if result._addon ~= "CombatCoach" then
+        return nil, "String does not appear to be a CombatCoach profile."
     end
     return result
 end
@@ -168,7 +168,7 @@ end
 -- Internal helpers
 -- ============================================================
 
--- Shared dialog frame factory (matches PoulsTools dark aesthetic)
+-- Shared dialog frame factory (matches CombatCoach dark aesthetic)
 local function makeDialogFrame(globalName, w, h)
     local f = CreateFrame("Frame", globalName, UIParent, "BackdropTemplate")
     f:SetSize(w, h)
@@ -236,7 +236,7 @@ end
 function Profiles:GetExportFrame()
     if self._exportFrame then return self._exportFrame end
 
-    local f, hdr = makeDialogFrame("PoulsToolsExportFrame", 520, 420)
+    local f, hdr = makeDialogFrame("CombatCoachExportFrame", 520, 420)
 
     -- Title
     local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -287,7 +287,7 @@ function Profiles:ShowExportFrame()
     local f = self:GetExportFrame()
     local str, payload = self:Serialize()
     if not str then
-        print("|cFFFF4444PoulsTools Profiles:|r " .. tostring(payload))
+        print("|cFFFF4444CombatCoach Profiles:|r " .. tostring(payload))
         return
     end
     f.editBox:SetText(str)
@@ -305,7 +305,7 @@ end
 function Profiles:GetImportFrame()
     if self._importFrame then return self._importFrame end
 
-    local f, hdr = makeDialogFrame("PoulsToolsImportFrame", 520, 420)
+    local f, hdr = makeDialogFrame("CombatCoachImportFrame", 520, 420)
 
     -- Title
     local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -352,7 +352,7 @@ function Profiles:GetImportFrame()
             return
         end
         f:Hide()
-        StaticPopup_Show("POULSTOOLS_PROFILE_RELOAD", table.concat(applied, ", "))
+        StaticPopup_Show("CombatCoach_PROFILE_RELOAD", table.concat(applied, ", "))
     end)
 
     -- "Cancel" button
@@ -376,7 +376,7 @@ end
 
 -- ============================================================
 -- AddButtonsToMainPanel
--- Injects Import / Export buttons into the PoulsTools main panel.
+-- Injects Import / Export buttons into the CombatCoach main panel.
 -- Must be called after PT.Menu:BuildSettingsPanel() has run.
 -- ============================================================
 function Profiles:AddButtonsToMainPanel()

@@ -1,9 +1,9 @@
 ## Interface: 120005
-## Title: PoulsTools_FocusGuesstimator
+## Title: CombatCoach_FocusGuesstimator
 ## Notes: Speculative focus tracking for BM Hunters.
 ## Version: 1.0.0
 ## IconTexture: Interface\Icons\ability_hunter_beastmastery
-## Category-enUS: PoulsTools
-## Group: PoulsTools
+## Category-enUS: CombatCoach
+## Group: CombatCoach
 
 FocusGuesstimator.lua

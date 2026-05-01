@@ -4,9 +4,9 @@
 ## Author: Poul
 ## Version: 1.2.8
 
-## Dependencies: PoulsTools_shmIcons
+## Dependencies: CombatCoach_shmIcons
 ## IconTexture: Interface\Icons\inv_ability_monk_weaponsoforder
-## Category-enUS: PoulsTools
-## Group: PoulsTools
+## Category-enUS: CombatCoach
+## Group: CombatCoach
 
 OnUseTracker.lua

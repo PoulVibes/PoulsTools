@@ -1,12 +1,12 @@
 ## Interface: 120005
-## Title: PoulsTools_SpellGlowTracker
+## Title: CombatCoach_SpellGlowTracker
 ## Notes: Centered HUD proc icons with spell activation glow.
 ## Author: Poul
 ## Version: 1.2.0
-## RequiredDeps: PoulsTools_shmIcons
+## RequiredDeps: CombatCoach_shmIcons
 ## IconTexture: Interface\Icons\inv_misc_book_08
-## Category-enUS: PoulsTools
-## Group: PoulsTools
+## Category-enUS: CombatCoach
+## Group: CombatCoach
 ## SavedVariablesPerCharacter: SpellGlowTrackerDB, ProcViewerDB
 
 SpellGlowTracker.lua

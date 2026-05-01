@@ -25,7 +25,7 @@ ProcViewerDB = SpellGlowTrackerDB
 ------------------------------------------------------------------------
 -- Constants
 ------------------------------------------------------------------------
-local ADDON             = "PoulsTools_SpellGlowTracker"
+local ADDON             = "CombatCoach_SpellGlowTracker"
 local VERSION           = "0.1.8"
 local ICON_SIZE_DEFAULT = 64
 local GAP               = 8

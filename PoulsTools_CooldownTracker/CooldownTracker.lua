@@ -11,7 +11,7 @@
 -- /cdt list                 → list all tracked abilities
 -- ============================================================
 
-local ADDON_NAME   = "PoulsTools_CooldownTracker"
+local ADDON_NAME   = "CombatCoach_CooldownTracker"
 local DEFAULT_SIZE = 64
 local POLL_INTERVAL_SECONDS = 0.20
 
@@ -273,7 +273,7 @@ local function LoadSpec(specID)
     shmIcons:RestoreSnapGroups()
     UpdateAllTrackers()
     EnsureTickerState()
-    -- Notify listeners so UI (PoulsTools) can refresh when specialization changes
+    -- Notify listeners so UI (CombatCoach) can refresh when specialization changes
     NotifyChangeListeners()
 end
 
@@ -410,7 +410,7 @@ eventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
 eventFrame:RegisterEvent("SPELL_UPDATE_CHARGES")
 
--- Public API wrappers for PoulsTools UI and other integrations
+-- Public API wrappers for CombatCoach UI and other integrations
 function CooldownTracker_Add(spellName, specID)
     AddTracker(spellName, specID)
 end
@@ -508,4 +508,4 @@ function CooldownTracker_GetTrackedSpells(specID)
     return out
 end
 
--- PoulsTools integration moved to CooldownTracker_PoulsTools.lua
+-- CombatCoach integration moved to CooldownTracker_CombatCoach.lua

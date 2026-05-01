@@ -11,7 +11,7 @@
 -- /tt list             → list tracked slots
 -- ============================================================
 
-local ADDON_NAME   = "PoulsTools_TrinketTracker"
+local ADDON_NAME   = "CombatCoach_TrinketTracker"
 local DEFAULT_SIZE = 64
 
 local SLOT_NAMES = {
@@ -290,7 +290,7 @@ eventFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 eventFrame:RegisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
 
 -- ============================================================
--- Public API for PoulsTools UI and other integrations
+-- Public API for CombatCoach UI and other integrations
 -- ============================================================
 
 function TrinketTracker_Add(slotID, specID)

@@ -1,4 +1,4 @@
-local ADDON_NAME = "PoulsTools_EnemyCountTracker"
+local ADDON_NAME = "CombatCoach_EnemyCountTracker"
 
 EnemyCountTrackerDB = EnemyCountTrackerDB or {}
 

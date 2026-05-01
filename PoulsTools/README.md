@@ -1,4 +1,4 @@
-# PoulsTools
+# CombatCoach
 
 **A central Settings hub for managing your WoW addons.**  
 WoW Interface Version: **12.0.1** (The War Within)
@@ -7,19 +7,19 @@ WoW Interface Version: **12.0.1** (The War Within)
 
 ## Installation
 
-1. Copy the `PoulsTools` folder into:  
-   `World of Warcraft/_retail_/Interface/AddOns/PoulsTools/`
-2. Enable **PoulsTools** in the AddOns list at character select.
-3. Log in — a new **PoulsTools** entry will appear in your game's Settings (Escape → Options → AddOns section).
+1. Copy the `CombatCoach` folder into:  
+   `World of Warcraft/_retail_/Interface/AddOns/CombatCoach/`
+2. Enable **CombatCoach** in the AddOns list at character select.
+3. Log in — a new **CombatCoach** entry will appear in your game's Settings (Escape → Options → AddOns section).
 
 ---
 
 ## Usage
 
 - Press **Escape → Options** and scroll to the **AddOns** section in the left panel.
-- Click **PoulsTools** to see the hub and all registered sub-addons.
+- Click **CombatCoach** to see the hub and all registered sub-addons.
 - Click a sub-addon entry to jump to its settings page.
-- Type `/pt` or `/poulstools` in chat to open the panel directly.
+- Type `/pt` or `/CombatCoach` in chat to open the panel directly.
 
 ---
 
@@ -27,23 +27,23 @@ WoW Interface Version: **12.0.1** (The War Within)
 
 | File | Purpose |
 |---|---|
-| `PoulsTools.toc` | AddOn manifest (required by WoW) |
-| `PoulsTools.lua` | Core: events, slash commands, saved variables |
-| `PoulsTools_Menu.lua` | Settings panel & subcategory (submenu) system |
-| `PoulsTools_Widgets.lua` | Reusable UI helpers for sub-addons |
-| `ExampleAddon_PoulsTools.lua` | Full working example — shows how to integrate |
+| `CombatCoach.toc` | AddOn manifest (required by WoW) |
+| `CombatCoach.lua` | Core: events, slash commands, saved variables |
+| `CombatCoach_Menu.lua` | Settings panel & subcategory (submenu) system |
+| `CombatCoach_Widgets.lua` | Reusable UI helpers for sub-addons |
+| `ExampleAddon_CombatCoach.lua` | Full working example — shows how to integrate |
 
 ---
 
 ## Integrating Your Addon
 
-In your addon (which must load **after** PoulsTools), call:
+In your addon (which must load **after** CombatCoach), call:
 
 ```lua
--- Guard in case PoulsTools isn't installed
-if not PoulsTools then return end
+-- Guard in case CombatCoach isn't installed
+if not CombatCoach then return end
 
-PoulsTools.Menu:RegisterAddon({
+CombatCoach.Menu:RegisterAddon({
     name      = "MyAddon",          -- Display name in the menu
     id        = "MyAddon",          -- Unique ID (use your addon's folder name)
     desc      = "What it does",     -- Short description (optional)
@@ -53,8 +53,8 @@ PoulsTools.Menu:RegisterAddon({
 
     OnBuildUI = function(parent)
         -- `parent` is a Frame — add your widgets here.
-        -- Use PoulsTools.Widgets helpers (see below) or raw WoW API frames.
-        local W = PoulsTools.Widgets
+        -- Use CombatCoach.Widgets helpers (see below) or raw WoW API frames.
+        local W = CombatCoach.Widgets
         local anchor = parent
 
         local div, dy = W:SectionHeader(parent, anchor, 0, "General")
@@ -68,21 +68,21 @@ PoulsTools.Menu:RegisterAddon({
 
 ### Load Order
 
-In your `.toc` file, declare PoulsTools as a dependency so it loads first:
+In your `.toc` file, declare CombatCoach as a dependency so it loads first:
 
 ```
-## Dependencies: PoulsTools
+## Dependencies: CombatCoach
 ```
 
 Or as optional (gracefully skips if not present):
 
 ```
-## OptionalDeps: PoulsTools
+## OptionalDeps: CombatCoach
 ```
 
 ---
 
-## Widget Helpers (`PoulsTools.Widgets`)
+## Widget Helpers (`CombatCoach.Widgets`)
 
 All helpers take `(parent, anchor, yOffset, ...)` and return the created frame to use as the next anchor.
 
@@ -100,7 +100,7 @@ All helpers take `(parent, anchor, yOffset, ...)` and return the created frame t
 
 ## Saved Variables
 
-PoulsTools stores its own data in `PoulsToolsDB` (defined in the `.toc`).  
+CombatCoach stores its own data in `CombatCoachDB` (defined in the `.toc`).  
 Each sub-addon manages its own `SavedVariables` independently in its own `.toc`.
 
 ---
@@ -109,28 +109,28 @@ Each sub-addon manages its own `SavedVariables` independently in its own `.toc`.
 
 | Command | Action |
 |---|---|
-| `/pt` | Open PoulsTools settings |
-| `/pt options` | Open PoulsTools settings |
+| `/pt` | Open CombatCoach settings |
+| `/pt options` | Open CombatCoach settings |
 | `/pt help` | Print command list |
 
 ---
 
 ## Detailed Integration Guide
 
-This section collects best practices, examples, and troubleshooting tips to make integrating a new addon into the PoulsTools Menu system quick and predictable.
+This section collects best practices, examples, and troubleshooting tips to make integrating a new addon into the CombatCoach Menu system quick and predictable.
 
 ### Quick Checklist
-- **Guard:** In your addon, check `if not PoulsTools then return end` to skip when PoulsTools isn't installed.
-- **Declare Load Order:** Add `## Dependencies: PoulsTools` to your `.toc` (or `RequiredDeps`).
-- **Register:** Call `PoulsTools.Menu:RegisterAddon({...})` and implement `OnBuildUI(parent)`.
-- **SavedVariables:** Keep your own saved variables (do not rely on PoulsTools' DB).
+- **Guard:** In your addon, check `if not CombatCoach then return end` to skip when CombatCoach isn't installed.
+- **Declare Load Order:** Add `## Dependencies: CombatCoach` to your `.toc` (or `RequiredDeps`).
+- **Register:** Call `CombatCoach.Menu:RegisterAddon({...})` and implement `OnBuildUI(parent)`.
+- **SavedVariables:** Keep your own saved variables (do not rely on CombatCoach' DB).
 
 ### OnBuildUI pattern (recommended)
-`OnBuildUI` receives a single `parent` frame you should use as the anchor for your UI. Use the `PoulsTools.Widgets` helpers to ensure a consistent look:
+`OnBuildUI` receives a single `parent` frame you should use as the anchor for your UI. Use the `CombatCoach.Widgets` helpers to ensure a consistent look:
 
 ```lua
 local function OnBuildUI(parent)
-    local W = PoulsTools.Widgets
+    local W = CombatCoach.Widgets
     local anchor = parent
     local y = 0
 
@@ -164,7 +164,7 @@ local function OnBuildUI(parent)
     end)
 end
 
-PoulsTools.Menu:RegisterAddon({
+CombatCoach.Menu:RegisterAddon({
     name = "MyAddon",
     id   = "MyAddon",
     desc = "Does useful things",
@@ -197,22 +197,22 @@ The referenced markdown includes a table mapping class, spec name, and `API ID` 
 - When resizing or moving, persist `db.size`, `db.x`, `db.y`, and `db.point` in your saved variables so OnBuildUI can reflect them.
 
 ### Troubleshooting
-- If a helper is missing, verify PoulsTools loaded before your addon (dependencies in `.toc`) and that `PoulsTools_Widgets.lua` is present.
-- Use `ExampleAddon_PoulsTools.lua` as a minimal working reference.
+- If a helper is missing, verify CombatCoach loaded before your addon (dependencies in `.toc`) and that `CombatCoach_Widgets.lua` is present.
+- Use `ExampleAddon_CombatCoach.lua` as a minimal working reference.
 
 ---
 
 ## Integration Lessons — CooldownTracker Case Study
 
-This repository's recent work integrating `CooldownTracker` into PoulsTools surfaced several practical patterns and APIs you can reuse when integrating other addons. Below are the key lessons, code patterns, and pitfalls discovered while copying the style of `SBA_Simple` and wiring a live, dynamic UI.
+This repository's recent work integrating `CooldownTracker` into CombatCoach surfaced several practical patterns and APIs you can reuse when integrating other addons. Below are the key lessons, code patterns, and pitfalls discovered while copying the style of `SBA_Simple` and wiring a live, dynamic UI.
 
 ### Key Patterns
 
-- **Guard & Load Order:** Always check `if not PoulsTools then return end` at the top of your PoulsTools integration file and declare `## Dependencies: PoulsTools` in your `.toc` so load order is predictable.
+- **Guard & Load Order:** Always check `if not CombatCoach then return end` at the top of your CombatCoach integration file and declare `## Dependencies: CombatCoach` in your `.toc` so load order is predictable.
 
 - **Central Command Handler / Public API:** Put slash parsing and behavior in a function (for example `CooldownTracker_HandleCommand(msg)`) and expose small public helpers (`CooldownTracker_Add`, `CooldownTracker_Remove`, `CooldownTracker_ToggleLock`, `CooldownTracker_Reset`, etc.). This lets the settings UI call your logic directly instead of invoking `SlashCmdList`. Don't forget to always make your buttons have actions.
 
-- **Dynamic UI via Change Listeners:** If your runtime state can change outside the settings panel, expose a small listener API so the PoulsTools UI can refresh dynamically. In the CooldownTracker example we added:
+- **Dynamic UI via Change Listeners:** If your runtime state can change outside the settings panel, expose a small listener API so the CombatCoach UI can refresh dynamically. In the CooldownTracker example we added:
 
     - `CooldownTracker_RegisterChangeListener(fn)` — register a callback called when trackers change (add/remove).
     - `CooldownTracker_GetTrackedSpells(specID)` — return an array of tracked entries for the current spec.
@@ -224,7 +224,7 @@ This repository's recent work integrating `CooldownTracker` into PoulsTools surf
     -- BuildTrackedList reads CooldownTracker_GetTrackedSpells() and rebuilds rows
     ```
 
-- **PoulsTools Widget Anchor Chaining:** `PoulsTools.Widgets` helpers follow the (parent, anchor, yOffset, ...) pattern and return a frame (or row) you should assign to `anchor` for the next widget. If you don't reassign and update `y`, multiple rows will overlap.
+- **CombatCoach Widget Anchor Chaining:** `CombatCoach.Widgets` helpers follow the (parent, anchor, yOffset, ...) pattern and return a frame (or row) you should assign to `anchor` for the next widget. If you don't reassign and update `y`, multiple rows will overlap.
 
     Example:
 
@@ -256,12 +256,12 @@ This repository's recent work integrating `CooldownTracker` into PoulsTools surf
 ### Files touched in this case study
 
 - `CooldownTracker/CooldownTracker.lua` — added change-listener registration, public wrappers, and notifications on add/remove.
-- `CooldownTracker/CooldownTracker_PoulsTools.lua` — implemented a dynamic tracked-abilities list that shows icon + name and registers for runtime updates.
-- `PoulsTools/PoulsTools_Widgets.lua` — `EditBox` exposes `row.box`/`row.placeholder` and propagates `setValue` on focus-lost (pattern already present; follow it as a best-practice).
+- `CooldownTracker/CooldownTracker_CombatCoach.lua` — implemented a dynamic tracked-abilities list that shows icon + name and registers for runtime updates.
+- `CombatCoach/CombatCoach_Widgets.lua` — `EditBox` exposes `row.box`/`row.placeholder` and propagates `setValue` on focus-lost (pattern already present; follow it as a best-practice).
 
 ### How to test (in-game)
 
-1. Reload UI and open PoulsTools → CooldownTracker.
+1. Reload UI and open CombatCoach → CooldownTracker.
 2. Add a tracker via the Add Tracker button or `/cdt Fireball` and confirm the tracked list updates with an icon and name.
 3. Unlock icons with the Lock button and drag an icon; it should snap to nearby icons within threshold.
 4. Toggle the glow checkbox in the list to enable/disable ready glow for that ability.

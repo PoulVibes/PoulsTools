@@ -1,4 +1,4 @@
-local ADDON_NAME = "PoulsTools_ComboTracker"
+local ADDON_NAME = "CombatCoach_ComboTracker"
 local TRACKER_ICON = "Interface\\Icons\\ability_monk_palmstrike"
 
 -- Globals for cross-addon access

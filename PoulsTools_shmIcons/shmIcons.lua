@@ -99,7 +99,7 @@ lockBtn:SetScript("OnClick", function()
 end)
 
 local function LayoutInfoFrame()
-    local linesTitle = "PoulsTools Icons Unlocked:"
+    local linesTitle = "CombatCoach Icons Unlocked:"
     local bodyText = table.concat({
         "- Left Click = Drag move / Corner Resize (edge-snap to same-size icons)",
         "- Right Click = Group drag (drag all adjacent same-size icons together)",

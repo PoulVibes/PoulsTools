@@ -15,7 +15,7 @@
 -- /it list                        → list tracked items with counts
 -- ============================================================
 
-local ADDON_NAME   = "PoulsTools_ItemTracker"
+local ADDON_NAME   = "CombatCoach_ItemTracker"
 local DEFAULT_SIZE = 64
 
 -- itemKey → { itemName, itemID }
@@ -207,7 +207,7 @@ local function AddItem(input, specID)
 
     tracked[key] = { itemName = itemName, itemID = itemID }
     UpdateItem(key)
-    -- notify external UIs (PoulsTools) so they can refresh lists
+    -- notify external UIs (CombatCoach) so they can refresh lists
     NotifyChangeListeners()
 end
 
@@ -216,7 +216,7 @@ local function RemoveItem(key)
     tracked[key] = nil
     local items = GetSpecItems(currentSpecID)
     if items[key] then items[key].enabled = false end
-    -- notify external UIs (PoulsTools) so they can refresh lists
+    -- notify external UIs (CombatCoach) so they can refresh lists
     NotifyChangeListeners()
 end
 
@@ -394,7 +394,7 @@ eventFrame:RegisterEvent("BAG_UPDATE")
 eventFrame:RegisterEvent("ITEM_COUNT_CHANGED")
 
 
--- Public API wrappers for PoulsTools UI and other integrations
+-- Public API wrappers for CombatCoach UI and other integrations
 function ItemTracker_Add(itemName, specID)
     AddItem(itemName, specID)
 end

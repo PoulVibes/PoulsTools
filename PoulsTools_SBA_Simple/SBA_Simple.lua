@@ -1,7 +1,7 @@
 -- SBA_Simple.lua
 -- Displays the next suggested cast from C_AssistedCombat using shmIcons.
 
-local ADDON_NAME = "PoulsTools_SBA_Simple"
+local ADDON_NAME = "CombatCoach_SBA_Simple"
 local ICON_KEY   = "Suggested_Spell"
 
 -- spellID -> isOnGCD; populated for every spell that has been shown in the icon.
@@ -252,11 +252,11 @@ end)
 
 -- ── Monk add-on loader ───────────────────────────────────────────────────
 local MONK_ADDONS = {
-    "PoulsTools_VivifyProcTracker",
-    "PoulsTools_ComboTracker",
-    "PoulsTools_SpellGlowTracker",
-    "PoulsTools_EnergyGuesstimator",
-    "PoulsTools_GuesstimatorHaste",
+    "CombatCoach_VivifyProcTracker",
+    "CombatCoach_ComboTracker",
+    "CombatCoach_SpellGlowTracker",
+    "CombatCoach_EnergyGuesstimator",
+    "CombatCoach_GuesstimatorHaste",
     
 }
 

@@ -3,13 +3,13 @@
 ## Notes: Central addon management hub. Provides a Settings menu with submenus for your other addons.
 ## Author: Poul
 ## Version: 1.1.0
-## SavedVariables: PoulsToolsDB
+## SavedVariables: CombatCoachDB
 ## IconTexture: Interface\Icons\ui_profession_inscription
-## Category-enUS: PoulsTools
+## Category-enUS: CombatCoach
 
 
 # Core files - order matters
-PoulsTools.lua
-PoulsTools_Menu.lua
-PoulsTools_Widgets.lua
-PoulsTools_Profiles.lua
+CombatCoach.lua
+CombatCoach_Menu.lua
+CombatCoach_Widgets.lua
+CombatCoach_Profiles.lua

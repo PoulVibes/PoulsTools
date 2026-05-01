@@ -1,20 +1,20 @@
--- PoulsTools_Menu.lua
+-- CombatCoach_Menu.lua
 -- Handles the Settings panel registration and submenu system
 -- WoW API: 12.0.1 (The War Within) - Uses Settings API
 
-PoulsTools = PoulsTools or {}
-PoulsTools.Menu = PoulsTools.Menu or {}
-local PT = PoulsTools
-local Menu = PoulsTools.Menu
+CombatCoach = CombatCoach or {}
+CombatCoach.Menu = CombatCoach.Menu or {}
+local PT = CombatCoach
+local Menu = CombatCoach.Menu
 
 -- Registry of all registered sub-addons
 Menu.registry = {}
 
 -- ============================================================
--- Public API: Register a sub-addon into PoulsTools
+-- Public API: Register a sub-addon into CombatCoach
 --
 -- Usage (from your other addon):
---   PoulsTools.Menu:RegisterAddon({
+--   CombatCoach.Menu:RegisterAddon({
 --       name    = "MyAddon",          -- Display name
 --       id      = "MyAddon",          -- Unique ID (usually addon folder name)
 --       icon    = "Interface\\Icons\\INV_Misc_Gear_01",  -- optional
@@ -26,13 +26,13 @@ Menu.registry = {}
 --   })
 -- ============================================================
 function Menu:RegisterAddon(info)
-    assert(type(info) == "table", "PoulsTools.Menu:RegisterAddon - info must be a table")
-    assert(type(info.id) == "string" and info.id ~= "", "PoulsTools.Menu:RegisterAddon - info.id is required")
-    assert(type(info.name) == "string" and info.name ~= "", "PoulsTools.Menu:RegisterAddon - info.name is required")
-    assert(type(info.OnBuildUI) == "function", "PoulsTools.Menu:RegisterAddon - info.OnBuildUI must be a function")
+    assert(type(info) == "table", "CombatCoach.Menu:RegisterAddon - info must be a table")
+    assert(type(info.id) == "string" and info.id ~= "", "CombatCoach.Menu:RegisterAddon - info.id is required")
+    assert(type(info.name) == "string" and info.name ~= "", "CombatCoach.Menu:RegisterAddon - info.name is required")
+    assert(type(info.OnBuildUI) == "function", "CombatCoach.Menu:RegisterAddon - info.OnBuildUI must be a function")
 
     if self.registry[info.id] then
-        print("|cFFFF4444PoulsTools:|r Addon '" .. info.id .. "' is already registered. Overwriting.")
+        print("|cFFFF4444CombatCoach:|r Addon '" .. info.id .. "' is already registered. Overwriting.")
     end
 
     self.registry[info.id] = info
@@ -44,18 +44,18 @@ function Menu:RegisterAddon(info)
 end
 
 -- ============================================================
--- Build the main PoulsTools Settings panel
+-- Build the main CombatCoach Settings panel
 -- ============================================================
 function Menu:BuildSettingsPanel()
     -- Create the main content frame (shown in the right pane)
     local mainPanel = self:CreateMainPanel()
 
     -- Register main category with the Settings API
-    local category, layout = Settings.RegisterCanvasLayoutCategory(mainPanel, "PoulsTools")
+    local category, layout = Settings.RegisterCanvasLayoutCategory(mainPanel, "CombatCoach")
     Settings.RegisterAddOnCategory(category)
     self.mainCategory = category
 
-    -- First pass: addons without a parentId (register directly under PoulsTools)
+    -- First pass: addons without a parentId (register directly under CombatCoach)
     for id, info in pairs(self.registry) do
         if not info.parentId then
             self:AddSubcategory(info)
@@ -75,7 +75,7 @@ end
 -- ============================================================
 function Menu:CreateMainPanel()
     local frame = CreateFrame("Frame")
-    frame.name = "PoulsTools"
+    frame.name = "CombatCoach"
 
     -- Header banner
     local banner = frame:CreateTexture(nil, "ARTWORK")
@@ -118,7 +118,7 @@ function Menu:CreateMainPanel()
     desc:SetWidth(548)
     desc:SetJustifyH("LEFT")
     desc:SetText(
-        "Welcome to |cFF00CCFFPoulsTools|r — your central hub for managing addon settings.\n" ..
+        "Welcome to |cFF00CCFFCombatCoach|r — your central hub for managing addon settings.\n" ..
         "Select a sub-addon from the list on the left to configure it."
     )
     desc:SetTextColor(0.85, 0.90, 0.95, 1.0)
@@ -282,7 +282,7 @@ function Menu:CreateAddonListRow(parent, info, index, isChild)
     -- Click to open submenu
     row:SetScript("OnClick", function()
         if InCombatLockdown() then
-            print("|cFFFF4444PoulsTools:|r Cannot open settings during combat.")
+            print("|cFFFF4444CombatCoach:|r Cannot open settings during combat.")
             return
         end
         local reg = Menu.registry[info.id]

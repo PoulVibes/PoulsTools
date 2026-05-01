@@ -1,11 +1,11 @@
 ## Interface: 120005
-## Title: PoulsTools_EnemyCountTracker
+## Title: CombatCoach_EnemyCountTracker
 ## Notes: Tracks hostile enemies in combat using nameplates only (Midnight-safe).
 ## Version: 1.1.1
 ## Author: Poul
 ## SavedVariablesPerCharacter: EnemyCountTrackerDB
 ## IconTexture: Interface\Icons\ability_hunter_markedshot
-## Category-enUS: PoulsTools
-## Group: PoulsTools
+## Category-enUS: CombatCoach
+## Group: CombatCoach
 
 EnemyCountTracker.lua

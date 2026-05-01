@@ -1,11 +1,11 @@
 ## Interface: 120005
-## Title: PoulsTools_GuesstimatorHaste
+## Title: CombatCoach_GuesstimatorHaste
 ## Notes: Compares GetHaste() vs whitelisted GCD Dummy (61304).
 ## Author: Poul
 ## Version: 1.1.0
 ## SavedVariables: GuesstimatorHasteDB
 ## IconTexture: Interface\Icons\spell_nature_crystalball
-## Category-enUS: PoulsTools
-## Group: PoulsTools
+## Category-enUS: CombatCoach
+## Group: CombatCoach
 
 GuesstimatorHaste.lua

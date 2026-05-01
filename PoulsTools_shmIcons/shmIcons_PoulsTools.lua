@@ -1,9 +1,9 @@
--- shmIcons_PoulsTools.lua
--- PoulsTools integration for shmIcons
+-- shmIcons_CombatCoach.lua
+-- CombatCoach integration for shmIcons
 -- Provides a hub page listing every icon registered with shmIcons,
 -- grouped by source addon, with per-icon glow toggle and remove controls.
 
-if not PoulsTools then return end
+if not CombatCoach then return end
 if not shmIcons   then return end
 
 -- Slot names for TrinketTracker entries (localID is the numeric slotID as a string)
@@ -18,11 +18,11 @@ local TRINKET_SLOT_NAMES = {
 }
 
 local function OnBuildUI(parent)
-    local W = PoulsTools.Widgets
+    local W = CombatCoach.Widgets
     if not W then
         local note = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         note:SetPoint("TOPLEFT", parent, "TOPLEFT", 16, -16)
-        note:SetText("PoulsTools.Widgets missing. Install PoulsTools to use this panel.")
+        note:SetText("CombatCoach.Widgets missing. Install CombatCoach to use this panel.")
         note:SetTextColor(1, 0.8, 0.2, 1)
         return
     end
@@ -147,27 +147,27 @@ local function OnBuildUI(parent)
             local capturedDB    = db
 
             local leftControl = nil
-            local registry = (PoulsTools and PoulsTools.Menu and PoulsTools.Menu.registry) or {}
+            local registry = (CombatCoach and CombatCoach.Menu and CombatCoach.Menu.registry) or {}
             -- Registered addons normally get an X remove button; however SBA_Simple
             -- should expose an enable/disable checkbox instead (special case).
-            if registry[capturedAddon] and capturedAddon ~= "PoulsTools_SBA_Simple" then
+            if registry[capturedAddon] and capturedAddon ~= "CombatCoach_SBA_Simple" then
                 -- Registered addon: show a small X remove button on the left
                 local rem = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
                 rem:SetPoint("LEFT", row, "LEFT", 10, 0)
                 rem:SetSize(26, 20)
                 rem:SetText("X")
                 rem:SetScript("OnClick", function()
-                    if capturedAddon == "PoulsTools_CooldownTracker" then
+                    if capturedAddon == "CombatCoach_CooldownTracker" then
                         local spellName = capturedDB and capturedDB.spellName
                         if spellName and type(CooldownTracker_Remove) == "function" then
                             CooldownTracker_Remove(spellName)
                         end
-                    elseif capturedAddon == "PoulsTools_ItemTracker" then
+                    elseif capturedAddon == "CombatCoach_ItemTracker" then
                         local itemName = capturedDB and capturedDB.itemName
                         if itemName and type(ItemTracker_Remove) == "function" then
                             ItemTracker_Remove(itemName)
                         end
-                    elseif capturedAddon == "PoulsTools_TrinketTracker" then
+                    elseif capturedAddon == "CombatCoach_TrinketTracker" then
                         local slotNum = tonumber(capturedID)
                         if slotNum and type(TrinketTracker_Remove) == "function" then
                             TrinketTracker_Remove(slotNum)
@@ -196,7 +196,7 @@ local function OnBuildUI(parent)
                         if capturedDB then capturedDB.enabled = enabled end
                     end
                     -- If this is SBA_Simple, also make sure its own helper stays in sync
-                    if capturedAddon == "PoulsTools_SBA_Simple" and type(SBA_Simple_SetEnabled) == "function" then
+                    if capturedAddon == "CombatCoach_SBA_Simple" and type(SBA_Simple_SetEnabled) == "function" then
                         SBA_Simple_SetEnabled(capturedDB and capturedDB.enabled)
                     end
                 end)
@@ -270,9 +270,9 @@ local function OnBuildUI(parent)
     end)
 end
 
-PoulsTools.Menu:RegisterAddon({
-    name      = "PoulsTools_shmIcons",
-    id        = "PoulsTools_shmIcons",
+CombatCoach.Menu:RegisterAddon({
+    name      = "CombatCoach_shmIcons",
+    id        = "CombatCoach_shmIcons",
     desc      = "View and manage all icons registered with shmIcons.",
     version   = "1.0.0",
     icon      = "Interface\\Icons\\battleground_strongbox_skirmish_horde",

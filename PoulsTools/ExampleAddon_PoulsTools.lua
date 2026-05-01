@@ -1,15 +1,15 @@
--- MyAddon_PoulsTools.lua
--- Example: How to register MyAddon into PoulsTools
--- Drop this file into your own addon folder and add it to your .toc AFTER PoulsTools loads.
+-- MyAddon_CombatCoach.lua
+-- Example: How to register MyAddon into CombatCoach
+-- Drop this file into your own addon folder and add it to your .toc AFTER CombatCoach loads.
 --
 -- .toc load order tip:
---   ## Dependencies: PoulsTools
---   ## RequiredDeps: PoulsTools
+--   ## Dependencies: CombatCoach
+--   ## RequiredDeps: CombatCoach
 
 -- ============================================================
--- Guard: only register if PoulsTools is loaded
+-- Guard: only register if CombatCoach is loaded
 -- ============================================================
-if not PoulsTools then return end
+if not CombatCoach then return end
 
 -- ============================================================
 -- Saved variables for this addon (defined in your own .toc)
@@ -18,7 +18,7 @@ if not PoulsTools then return end
 
 local function OnBuildUI(parent)
     -- Alias the widget library for convenience
-    local W = PoulsTools.Widgets
+    local W = CombatCoach.Widgets
 
     -- Anchor starts at parent's top-left
     local anchor = parent
@@ -96,12 +96,12 @@ local function OnBuildUI(parent)
 end
 
 -- ============================================================
--- Register with PoulsTools
+-- Register with CombatCoach
 -- ============================================================
-PoulsTools.Menu:RegisterAddon({
+CombatCoach.Menu:RegisterAddon({
     name       = "MyAddon",
     id         = "MyAddon",
-    desc       = "Example sub-addon for PoulsTools",
+    desc       = "Example sub-addon for CombatCoach",
     version    = "1.0.0",
     icon       = "Interface\\Icons\\INV_Misc_Gear_01",
     -- accentColor = {1.0, 0.5, 0.0, 1.0},  -- optional: override header accent color (R,G,B,A)

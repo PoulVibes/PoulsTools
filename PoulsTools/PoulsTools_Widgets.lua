@@ -1,10 +1,10 @@
--- PoulsTools_Widgets.lua
+-- CombatCoach_Widgets.lua
 -- Reusable UI widget helpers for sub-addons to use in their OnBuildUI callbacks
 -- WoW API: 12.0.1 (The War Within)
 
-PoulsTools = PoulsTools or {}
-PoulsTools.Widgets = PoulsTools.Widgets or {}
-local W = PoulsTools.Widgets
+CombatCoach = CombatCoach or {}
+CombatCoach.Widgets = CombatCoach.Widgets or {}
+local W = CombatCoach.Widgets
 
 -- ============================================================
 -- Color constants

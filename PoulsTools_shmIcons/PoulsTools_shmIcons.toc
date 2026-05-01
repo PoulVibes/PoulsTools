@@ -1,14 +1,14 @@
 ## Interface: 120005
-## Title: PoulsTools_shmIcons
+## Title: CombatCoach_shmIcons
 ## Notes: Shared icon/cooldown/glow/snap framework library for shmIcons-based addons.
 ## Version: 1.1.0
 ## Author: Poul
 ## IconTexture: Interface\Icons\battleground_strongbox_skirmish_horde
-## Category-enUS: PoulsTools
-## Group: PoulsTools
+## Category-enUS: CombatCoach
+## Group: CombatCoach
 ## SavedVariables: shmIconsDB
 ## LoadOnDemand: 0
-## RequiredDeps: PoulsTools
+## RequiredDeps: CombatCoach
 
 shmIcons.lua
-shmIcons_PoulsTools.lua
+shmIcons_CombatCoach.lua

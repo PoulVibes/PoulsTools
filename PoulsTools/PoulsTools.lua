@@ -1,9 +1,9 @@
--- PoulsTools.lua
--- Main addon file for PoulsTools - Addon Management Menu System
+-- CombatCoach.lua
+-- Main addon file for CombatCoach - Addon Management Menu System
 -- WoW API: 12.0.1 (The War Within)
 
-PoulsTools = PoulsTools or {}
-local PT = PoulsTools
+CombatCoach = CombatCoach or {}
+local PT = CombatCoach
 
 -- ============================================================
 -- Saved Variables defaults
@@ -23,7 +23,7 @@ eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
         local addonName = ...
-        if addonName == "PoulsTools" then
+        if addonName == "CombatCoach" then
             PT:OnLoad()
         end
     elseif event == "PLAYER_LOGIN" then
@@ -36,10 +36,10 @@ end)
 -- ============================================================
 function PT:OnLoad()
     -- Initialize saved variables
-    if not PoulsToolsDB then
-        PoulsToolsDB = CopyTable(self.defaults)
+    if not CombatCoachDB then
+        CombatCoachDB = CopyTable(self.defaults)
     end
-    self.db = PoulsToolsDB
+    self.db = CombatCoachDB
 
     -- Merge any new defaults
     for k, v in pairs(self.defaults) do
@@ -48,7 +48,7 @@ function PT:OnLoad()
         end
     end
 
-    print("|cFF00CCFFPoulsTools|r loaded. Type |cFFFFFF00/pt|r or |cFFFFFF00/poulstools|r for options.")
+    print("|cFF00CCFFCombatCoach|r loaded. Type |cFFFFFF00/pt|r or |cFFFFFF00/CombatCoach|r for options.")
 end
 
 -- ============================================================
@@ -64,20 +64,20 @@ end
 -- ============================================================
 -- Slash commands
 -- ============================================================
-SLASH_POULSTOOLS1 = "/pt"
-SLASH_POULSTOOLS2 = "/poulstools"
+SLASH_CombatCoach1 = "/pt"
+SLASH_CombatCoach2 = "/CombatCoach"
 
-SlashCmdList["POULSTOOLS"] = function(msg)
+SlashCmdList["CombatCoach"] = function(msg)
     msg = msg and msg:lower():trim() or ""
     if msg == "" or msg == "options" or msg == "config" then
         if InCombatLockdown() then
-            print("|cFFFF4444PoulsTools:|r Cannot open settings during combat.")
+            print("|cFFFF4444CombatCoach:|r Cannot open settings during combat.")
             return
         end
         if PT.Menu.mainCategory then
             Settings.OpenToCategory(PT.Menu.mainCategory:GetID())
         else
-            print("|cFFFF4444PoulsTools:|r Settings panel not yet initialized.")
+            print("|cFFFF4444CombatCoach:|r Settings panel not yet initialized.")
         end
     elseif msg == "help" then
         PT:PrintHelp()
@@ -87,7 +87,7 @@ SlashCmdList["POULSTOOLS"] = function(msg)
 end
 
 function PT:PrintHelp()
-    print("|cFF00CCFFPoulsTools|r commands:")
-    print("  |cFFFFFF00/pt|r or |cFFFFFF00/pt options|r - Open PoulsTools settings")
+    print("|cFF00CCFFCombatCoach|r commands:")
+    print("  |cFFFFFF00/pt|r or |cFFFFFF00/pt options|r - Open CombatCoach settings")
     print("  |cFFFFFF00/pt help|r - Show this help")
 end

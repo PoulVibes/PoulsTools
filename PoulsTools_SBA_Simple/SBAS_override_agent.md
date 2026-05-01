@@ -6,7 +6,7 @@
 |---|---|
 | `SBA_Simple_OverrideGUI.lua` | Graphical priority-list builder (the GUI) |
 | `SBA_Simple.lua` | Runtime override execution + raw text override editor |
-| `PoulsTools_SBA_Simple.toc` | Addon manifest — `SBA_Simple.lua` must load before `SBA_Simple_OverrideGUI.lua` |
+| `CombatCoach_SBA_Simple.toc` | Addon manifest — `SBA_Simple.lua` must load before `SBA_Simple_OverrideGUI.lua` |
 
 ---
 

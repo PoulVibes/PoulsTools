@@ -1,11 +1,11 @@
 ## Interface: 120005
-## Title: PoulsTools_EnergyGuesstimator
+## Title: CombatCoach_EnergyGuesstimator
 ## Notes: Speculative energy tracking for Monks.
 ## LoadOnDemand: 1
 ## Version: 1.1.0
 ## IconTexture: Interface\Icons\ability_monk_ascension
-## Category-enUS: PoulsTools
-## Group: PoulsTools
+## Category-enUS: CombatCoach
+## Group: CombatCoach
 
 EnergyGuesstimator.lua
 

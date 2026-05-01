@@ -1,18 +1,18 @@
--- ItemTracker_PoulsTools.lua
--- PoulsTools integration for ItemTracker
+-- ItemTracker_CombatCoach.lua
+-- CombatCoach integration for ItemTracker
 
-if not PoulsTools then return end
+if not CombatCoach then return end
 
 ItemTrackerDB = ItemTrackerDB or {}
 
-local ADDON_NAME = "PoulsTools_ItemTracker"
+local ADDON_NAME = "CombatCoach_ItemTracker"
 
 local function OnBuildUI(parent)
-    local W = PoulsTools.Widgets
+    local W = CombatCoach.Widgets
     if not W then
         local note = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         note:SetPoint("TOPLEFT", parent, "TOPLEFT", 16, -16)
-        note:SetText("PoulsTools.Widgets missing. Install PoulsTools to configure ItemTracker here.")
+        note:SetText("CombatCoach.Widgets missing. Install CombatCoach to configure ItemTracker here.")
         note:SetTextColor(1,0.8,0.2,1)
         return
     end
@@ -20,7 +20,7 @@ local function OnBuildUI(parent)
     local anchor = parent
     local y = 0
 
-    local div, dy = W:SectionHeader(parent, anchor, y, "PoulsTools_ItemTracker")
+    local div, dy = W:SectionHeader(parent, anchor, y, "CombatCoach_ItemTracker")
     anchor = div
     y = dy
 
@@ -268,12 +268,12 @@ local function OnBuildUI(parent)
     end)
 end
 
-PoulsTools.Menu:RegisterAddon({
-    name      = "PoulsTools_ItemTracker",
-    id        = "PoulsTools_ItemTracker",
+CombatCoach.Menu:RegisterAddon({
+    name      = "CombatCoach_ItemTracker",
+    id        = "CombatCoach_ItemTracker",
     desc      = "Track inventory items per specialization.",
     version   = "1.0.0",
     icon      = "Interface\\Icons\\inv_misc_bag_01",
-    parentId  = "PoulsTools_shmIcons",
+    parentId  = "CombatCoach_shmIcons",
     OnBuildUI = OnBuildUI,
 })

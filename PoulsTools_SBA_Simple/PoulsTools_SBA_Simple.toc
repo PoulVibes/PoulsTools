@@ -1,18 +1,18 @@
 ## Interface: 120005
-## Title: PoulsTools_SBA_Simple
+## Title: CombatCoach_SBA_Simple
 ## Notes: Displays the next suggested cast from C_AssistedCombat using shmIcons.
 ## Author: Poul
 ## Version: 1.2.0
 
 ## IconTexture: Interface\Icons\ui_spellbook_onebutton
-## Category-enUS: PoulsTools
-## Group: PoulsTools
+## Category-enUS: CombatCoach
+## Group: CombatCoach
 
-## RequiredDeps: PoulsTools_shmIcons, PoulsTools
+## RequiredDeps: CombatCoach_shmIcons, CombatCoach
 
 ## SavedVariables: SBA_SimpleDB
 ## SavedVariablesPerCharacter: SBA_GUI_CharDB
 SBA_Simple.lua
 SBA_Simple_OverrideGUI.lua
 SBA_Simple_RecommendedImports.lua
-SBA_Simple_PoulsTools.lua
+SBA_Simple_CombatCoach.lua

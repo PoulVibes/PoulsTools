@@ -31,7 +31,7 @@ Be concise in your responses, providing only the necessary information and code 
 - **EnergyGuesstimator** — Experimental energy estimator (Monk-focused); uses native WoW API events and listens for `_G.VivifyProc_OnEvent`.
 - **GuesstimatorHaste** — Compares `GetHaste()` vs a GCD dummy to assess haste effects.
 - **ItemTracker** — Tracks item cooldowns, stack counts, and ready glow.
-- **PoulsTools** — Central settings hub and addon registration UI.
+- **CombatCoach** — Central settings hub and addon registration UI.
 - **SpellGlowTracker** — Centered HUD proc icons with activation glow.
 - **SBA_Simple** — Displays the next suggested cast from `C_AssistedCombat`.
 - **shmIcons** — Shared icon/cooldown/glow framework used by other addons.
@@ -49,15 +49,15 @@ Be concise in your responses, providing only the necessary information and code 
 - **[./wow_talents.md](./wow_talents.md)** — Talent index; links to per-class talent files. Read when you need talent IDs, talent names, or talent descriptions for any WoW class.
 
 ### Addon-Specific Guides
-- **[../PoulsTools_shmIcons/shmIconsIntegrationSkill.md](../PoulsTools_shmIcons/shmIconsIntegrationSkill.md)** — Read when integrating with `shmIcons`: registering icon frames, pushing cooldown/stack/glow updates, TOC dependencies, and the full public API.
-- **[../PoulsTools/README.md](../PoulsTools/README.md)** — Read when integrating a sub-addon into the PoulsTools settings hub; covers installation, slash commands, and the `PoulsTools.Menu:RegisterAddon()` API.
+- **[../CombatCoach_shmIcons/shmIconsIntegrationSkill.md](../CombatCoach_shmIcons/shmIconsIntegrationSkill.md)** — Read when integrating with `shmIcons`: registering icon frames, pushing cooldown/stack/glow updates, TOC dependencies, and the full public API.
+- **[../CombatCoach/README.md](../CombatCoach/README.md)** — Read when integrating a sub-addon into the CombatCoach settings hub; covers installation, slash commands, and the `CombatCoach.Menu:RegisterAddon()` API.
 
 ### SBAS Override GUI — Summary
 
-Brief summary and pointer to the full agent notes: [SBAS_override_agent.md](PoulsTools_SBA_Simple/SBAS_override_agent.md)
+Brief summary and pointer to the full agent notes: [SBAS_override_agent.md](CombatCoach_SBA_Simple/SBAS_override_agent.md)
 
 - Purpose: graphical priority-list builder for SBA overrides.
-- Primary files: `PoulsTools_SBA_Simple/SBA_Simple_OverrideGUI.lua`, `PoulsTools_SBA_Simple/SBA_Simple.lua`.
+- Primary files: `CombatCoach_SBA_Simple/SBA_Simple_OverrideGUI.lua`, `CombatCoach_SBA_Simple/SBA_Simple.lua`.
 - Data model: rules stored in `SBA_SimpleDB.gui[specID]`; generated code in `SBA_SimpleDB.specs[specID].overrideCode`.
 - UI: resizable frame with left rule list and right condition editor; condition registry in `COND_TYPES`; parenthesis grouping visualization; preview vs save flow.
 

@@ -4391,7 +4391,7 @@ local function CreateGUI()
 
         print("|cff00ff99SBAS Override GUI:|r Priority list saved for "
               .. GetSpecName(editSpecID))
-        -- Notify PoulsTools integration so it can determine the override mode
+        -- Notify CombatCoach integration so it can determine the override mode
         -- (optimized vs custom) based on whether the saved rules match the baseline.
         if type(_G.SBAS_OnGuiSaveAndApply) == "function" then
             local savedExport = SerializeRulesForExportV2(editSpecID, workingRules)

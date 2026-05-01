@@ -118,7 +118,7 @@ frame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 frame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
 
 frame:SetScript("OnEvent", function(self, event, ...)
-    if event == "ADDON_LOADED" and select(1, ...) == "PoulsTools_EnergyGuesstimator" then
+    if event == "ADDON_LOADED" and select(1, ...) == "CombatCoach_EnergyGuesstimator" then
         OnInitialize()
         UpdateEnabledState()
         return

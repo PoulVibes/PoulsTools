@@ -1,15 +1,15 @@
 ## Interface: 120005
-## Title: PoulsTools_VivifyProcTracker
+## Title: CombatCoach_VivifyProcTracker
 ## Notes: Tracks Vivacious Vivification procs.
 ## LoadOnDemand: 1
 ## Author: Poul
 ## Version: 1.2.0
-## RequiredDeps: PoulsTools_shmIcons
+## RequiredDeps: CombatCoach_shmIcons
 ## SavedVariables: VivifyProcTrackerDB
 
 ## IconTexture: Interface\Icons\ability_monk_vivify
-## Category-enUS: PoulsTools
-## Group: PoulsTools
+## Category-enUS: CombatCoach
+## Group: CombatCoach
 
 # Main Script
 VivifyProcTracker.lua

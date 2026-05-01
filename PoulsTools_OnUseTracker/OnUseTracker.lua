@@ -297,7 +297,7 @@ local function UpdateTimerDuration()
 end
 
 frame:SetScript("OnEvent", function(_, event, unit, _, spellID)
-    if event == "ADDON_LOADED" and unit == "PoulsTools_OnUseTracker" then
+    if event == "ADDON_LOADED" and unit == "CombatCoach_OnUseTracker" then
         UpdateEnabledState()
         UpdateIconTexture()
         return

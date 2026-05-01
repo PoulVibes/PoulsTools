@@ -1,7 +1,7 @@
--- SBA_Simple_PoulsTools.lua
--- PoulsTools integration for SBA_Simple
+-- SBA_Simple_CombatCoach.lua
+-- CombatCoach integration for SBA_Simple
 
-if not PoulsTools then return end
+if not CombatCoach then return end
 
 SBA_SimpleDB = SBA_SimpleDB or {}
 
@@ -287,7 +287,7 @@ function SBAS_OpenOrRefreshAnalyzer(specID, specName)
 end
 
 local function OnBuildUI(parent)
-    local W = PoulsTools.Widgets
+    local W = CombatCoach.Widgets
     local anchor = parent
     local y = 0
 
@@ -311,7 +311,7 @@ local function OnBuildUI(parent)
         ["Evoker"] = { {name = "Devastation", id = 1467}, {name = "Preservation", id = 1468}, {name = "Augmentation", id = 1473} },
     }
 
-    local header, dy = W:SectionHeader(parent, anchor, y, "PoulsTools_SBA_Simple")
+    local header, dy = W:SectionHeader(parent, anchor, y, "CombatCoach_SBA_Simple")
     anchor = header
     y = dy
 
@@ -723,7 +723,7 @@ local function OnBuildUI(parent)
         local lbl = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         lbl:SetPoint("TOPLEFT", listAnchor, "BOTTOMLEFT", 0, y)
         lbl:SetText("Class/spec enumeration not available on this client.")
-        lbl:SetTextColor(unpack(PoulsTools.Widgets.colors.text))
+        lbl:SetTextColor(unpack(CombatCoach.Widgets.colors.text))
     end
 
     -- Manage spec buttons: re-enable and refresh label colors when any editor closes
@@ -833,12 +833,12 @@ local function OnBuildUI(parent)
 
 end
 
-PoulsTools.Menu:RegisterAddon({
-    name      = "PoulsTools_SBA_Simple",
-    id        = "PoulsTools_SBA_Simple",
+CombatCoach.Menu:RegisterAddon({
+    name      = "CombatCoach_SBA_Simple",
+    id        = "CombatCoach_SBA_Simple",
     desc      = "Displays the Assisted Combat spell recommendation and allows for overriding this logic.",
     version   = "1.0.0",
     icon      = "Interface\\Icons\\ui_spellbook_onebutton",
-    parentId  = "PoulsTools_shmIcons",
+    parentId  = "CombatCoach_shmIcons",
     OnBuildUI = OnBuildUI,
 })

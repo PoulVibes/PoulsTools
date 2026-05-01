@@ -1,13 +1,13 @@
 ## Interface: 120005
-## Title: PoulsTools_CooldownTracker
+## Title: CombatCoach_CooldownTracker
 ## Notes: Tracks any ability cooldown by name with icon, cooldown sweep, and ready glow.
 ## Version: 2.1.0
 ## IconTexture: Interface\Icons\inv_misc_book_11
-## Category-enUS: PoulsTools
-## Group: PoulsTools
+## Category-enUS: CombatCoach
+## Group: CombatCoach
 ## Author: Poul
 ## SavedVariables: CooldownTrackerDB
-## RequiredDeps: PoulsTools_shmIcons, PoulsTools
+## RequiredDeps: CombatCoach_shmIcons, CombatCoach
 
 CooldownTracker.lua
-CooldownTracker_PoulsTools.lua
+CooldownTracker_CombatCoach.lua
