@@ -133,7 +133,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             y            = -100,
             point        = "CENTER",
             size         = 64,
-            enabled      = true,
+            enabled      = false,
             glow_enabled = false,
         }
         -- Migrate legacy locked field

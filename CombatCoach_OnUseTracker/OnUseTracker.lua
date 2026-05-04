@@ -32,7 +32,7 @@ local function DefaultSlotDB(x, y, spellID)
         y            = y,
         point        = "CENTER",
         size         = ICON_SIZE_DEFAULT,
-        enabled      = true,
+        enabled      = false,
         glow_enabled = false,
         spellID      = spellID,
     }

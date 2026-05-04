@@ -40,7 +40,7 @@ function VPT:OnInitialize()
         x            = 0,
         y            = -100,
         size         = 50,
-        enabled      = true,
+        enabled      = false,
         glow_enabled = false,
     }
 
