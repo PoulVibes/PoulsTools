@@ -4,6 +4,7 @@
 ## Author: Poul
 ## Version: 1.2.8
 
+## SavedVariables: OnUseTrackerDB
 ## Dependencies: CombatCoach_shmIcons
 ## IconTexture: Interface\Icons\inv_ability_monk_weaponsoforder
 ## Category-enUS: CombatCoach

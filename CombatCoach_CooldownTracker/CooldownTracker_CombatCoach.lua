@@ -328,7 +328,7 @@ CombatCoach.Menu:RegisterAddon({
     name      = "Cooldown Tracker",
     id        = "CombatCoach_CooldownTracker",
     desc      = "Track ability cooldowns and charges.",
-    version   = "2.0.0",
+    version   = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata("CombatCoach_CooldownTracker", "Version")) or "2.1.0",
     icon      = "Interface\\Icons\\inv_misc_book_11",
     OnBuildUI = OnBuildUI,
 })

@@ -196,7 +196,12 @@ function Menu:RefreshAddonList()
             topLevel[#topLevel + 1] = info
         end
     end
-    table.sort(topLevel, function(a, b) return a.name < b.name end)
+    table.sort(topLevel, function(a, b)
+        local oa = a.order or math.huge
+        local ob = b.order or math.huge
+        if oa ~= ob then return oa < ob end
+        return a.name < b.name
+    end)
 
     local ordered = {}
     for _, info in ipairs(topLevel) do

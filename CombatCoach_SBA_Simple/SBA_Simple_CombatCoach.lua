@@ -836,8 +836,9 @@ end
 CombatCoach.Menu:RegisterAddon({
     name      = "Rotation Assistant",
     id        = "CombatCoach_SBA_Simple",
-    desc      = "Displays the Assisted Combat spell recommendation and allows overriding priorities.",
-    version   = "1.0.0",
+    order     = 2,
+    desc      = "Prioritized Combat Suggestion Display.",
+    version   = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata("CombatCoach_SBA_Simple", "Version")) or "1.2.0",
     icon      = "Interface\\Icons\\ui_spellbook_onebutton",
     OnBuildUI = OnBuildUI,
 })

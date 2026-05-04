@@ -102,7 +102,7 @@ CombatCoach.Menu:RegisterAddon({
     name       = "MyAddon",
     id         = "MyAddon",
     desc       = "Example sub-addon for CombatCoach",
-    version    = "1.0.0",
+    version    = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata("MyAddon", "Version")) or "1.0.0",
     icon       = "Interface\\Icons\\INV_Misc_Gear_01",
     -- accentColor = {1.0, 0.5, 0.0, 1.0},  -- optional: override header accent color (R,G,B,A)
     OnBuildUI  = OnBuildUI,

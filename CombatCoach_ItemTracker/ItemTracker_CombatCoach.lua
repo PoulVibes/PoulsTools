@@ -272,7 +272,7 @@ CombatCoach.Menu:RegisterAddon({
     name      = "Item Tracker",
     id        = "CombatCoach_ItemTracker",
     desc      = "Track item cooldowns and counts.",
-    version   = "1.0.0",
+    version   = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata("CombatCoach_ItemTracker", "Version")) or "1.1.0",
     icon      = "Interface\\Icons\\inv_misc_bag_01",
     OnBuildUI = OnBuildUI,
 })

@@ -27,7 +27,7 @@ ProcViewerDB = SpellGlowTrackerDB
 ------------------------------------------------------------------------
 local FOLDER_NAME       = "CombatCoach_SpellGlowTracker"
 local ADDON             = "Spell Glow Tracker"
-local VERSION           = "0.1.8"
+local VERSION           = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata("CombatCoach_SpellGlowTracker", "Version")) or "0.1.8"
 local ICON_SIZE_DEFAULT = 64
 local GAP               = 8
 

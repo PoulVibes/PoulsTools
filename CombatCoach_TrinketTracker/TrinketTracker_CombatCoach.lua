@@ -284,7 +284,7 @@ CombatCoach.Menu:RegisterAddon({
     name      = "Trinket Tracker",
     id        = "CombatCoach_TrinketTracker",
     desc      = "Track equipment slot cooldowns.",
-    version   = "2.0.0",
+    version   = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata("CombatCoach_TrinketTracker", "Version")) or "2.1.0",
     icon      = "Interface\\Icons\\inv_jewelry_trinketpvp_01",
     OnBuildUI = OnBuildUI,
 })
