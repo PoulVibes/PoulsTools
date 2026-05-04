@@ -1,7 +1,8 @@
 -- SBA_Simple.lua
 -- Displays the next suggested cast from C_AssistedCombat using shmIcons.
 
-local ADDON_NAME = "CombatCoach_SBA_Simple"
+local FOLDER_NAME = "CombatCoach_SBA_Simple"
+local ADDON_NAME  = "Rotation Assistant"
 local ICON_KEY   = "Suggested_Spell"
 
 -- spellID -> isOnGCD; populated for every spell that has been shown in the icon.
@@ -298,6 +299,12 @@ events:SetScript("OnEvent", function(_, event)
         local code = specDB.overrideCode or GetDB().overrideCode
         if code and not code:match("^%s*$") then
             CompileOverride(code)
+        elseif not specDB.overrideSource then
+            -- No user-saved override yet for this spec; try to use the
+            -- recommended optimized code as the default.
+            local defaultCode = _G.SBAS_GetDefaultOverrideCodeForSpec
+                                and _G.SBAS_GetDefaultOverrideCodeForSpec(GetCurrentSpecID())
+            CompileOverride(defaultCode or nil)
         else
             CompileOverride(nil)
         end

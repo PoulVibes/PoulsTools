@@ -11,7 +11,8 @@
 -- /cdt list                 → list all tracked abilities
 -- ============================================================
 
-local ADDON_NAME   = "CombatCoach_CooldownTracker"
+local FOLDER_NAME  = "CombatCoach_CooldownTracker"
+local ADDON_NAME   = "Cooldown Tracker"
 local DEFAULT_SIZE = 64
 local POLL_INTERVAL_SECONDS = 0.20
 
@@ -374,7 +375,7 @@ end
 
 local eventFrame = CreateFrame("Frame")
 eventFrame:SetScript("OnEvent", function(self, event, arg1)
-    if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
+    if event == "ADDON_LOADED" and arg1 == FOLDER_NAME then
         CooldownTrackerDB = CooldownTrackerDB or { specs = {} }
         CooldownTrackerDB.specs = CooldownTrackerDB.specs or {}
         -- Spec data not available until PLAYER_ENTERING_WORLD; wait.

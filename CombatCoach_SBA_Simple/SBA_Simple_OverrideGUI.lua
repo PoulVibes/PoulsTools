@@ -4610,6 +4610,26 @@ _G.SBAS_LoadRulesIntoOverrideGUI = function(specID, displayName, rules)
     return true
 end
 
+-- Public: generate Lua override code from the recommended import for a spec,
+-- without touching any saved data or GUI state.  Returns nil if no recommended
+-- import exists for that spec.  Used by SBA_Simple.lua to run an optimized
+-- default before the player has saved any custom override.
+_G.SBAS_GetDefaultOverrideCodeForSpec = function(specID)
+    local rec = _G.SBAS_GetRecommendedImportForSpec
+                and _G.SBAS_GetRecommendedImportForSpec(specID)
+    if not (rec and rec.importText) then return nil end
+    local rules, err = DeserializeRulesFromExport(rec.importText, specID)
+    if not rules or #rules == 0 then return nil end
+    -- GenerateCode reads the module-level editSpecID for resource locals.
+    -- Temporarily set it to the target spec so the correct secondary resource
+    -- variable (chi, comboPoints, etc.) is emitted, then restore it.
+    local prevSpec = editSpecID
+    editSpecID = specID
+    local code = GenerateCode(rules)
+    editSpecID = prevSpec
+    return code
+end
+
 -- Expose condition-summary renderer for the Priority Analyzer.
 -- Returns a human-readable short string for one condition.
 _G.SBAS_CondSummaryText    = CondSummaryText

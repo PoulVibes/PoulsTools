@@ -376,26 +376,40 @@ end
 
 -- ============================================================
 -- AddButtonsToMainPanel
--- Injects Import / Export buttons into the CombatCoach main panel.
--- Must be called after CC.Menu:BuildSettingsPanel() has run.
+-- Registers Import / Export buttons as the last inline block on the
+-- CombatCoach main panel so they always appear below all other content.
 -- ============================================================
 function Profiles:AddButtonsToMainPanel()
-    local menuFrame = CC.Menu and CC.Menu.addonListFrame
-    if not menuFrame then return end
+    if not (CC.Menu and CC.Menu.RegisterMainPanelContent) then return end
 
-    local exportBtn = CreateFrame("Button", nil, menuFrame, "UIPanelButtonTemplate")
-    exportBtn:SetPoint("BOTTOMRIGHT", menuFrame, "BOTTOMRIGHT", -16, 14)
-    exportBtn:SetSize(130, 24)
-    exportBtn:SetText("Export Profile")
-    exportBtn:SetScript("OnClick", function()
-        Profiles:ShowExportFrame()
-    end)
+    CC.Menu:RegisterMainPanelContent(function(parent)
+        -- Divider line above buttons
+        local divider = parent:CreateTexture(nil, "OVERLAY")
+        divider:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0, -12)
+        divider:SetSize(540, 1)
+        divider:SetColorTexture(0.15, 0.25, 0.35, 0.8)
 
-    local importBtn = CreateFrame("Button", nil, menuFrame, "UIPanelButtonTemplate")
-    importBtn:SetPoint("RIGHT", exportBtn, "LEFT", -6, 0)
-    importBtn:SetSize(130, 24)
-    importBtn:SetText("Import Profile")
-    importBtn:SetScript("OnClick", function()
-        Profiles:ShowImportFrame()
+        -- Section label
+        local label = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        label:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -8)
+        label:SetText("PROFILES")
+        label:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
+        label:SetTextColor(0.4, 0.6, 0.8, 1.0)
+
+        local exportBtn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+        exportBtn:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -8)
+        exportBtn:SetSize(130, 24)
+        exportBtn:SetText("Export Profile")
+        exportBtn:SetScript("OnClick", function()
+            Profiles:ShowExportFrame()
+        end)
+
+        local importBtn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+        importBtn:SetPoint("LEFT", exportBtn, "RIGHT", 6, 0)
+        importBtn:SetSize(130, 24)
+        importBtn:SetText("Import Profile")
+        importBtn:SetScript("OnClick", function()
+            Profiles:ShowImportFrame()
+        end)
     end)
 end

@@ -9,6 +9,9 @@ local Menu = CombatCoach.Menu
 
 -- Registry of all registered sub-addons
 Menu.registry = {}
+Menu.mainPanelContentFns    = {}    -- fns injected inline onto the main panel
+Menu.mainPanelExtraFrames   = {}    -- frames built by those fns (rebuilt on refresh)
+Menu.mainPanelContentPending = false
 
 -- ============================================================
 -- Public API: Register a sub-addon into CombatCoach
@@ -40,6 +43,18 @@ function Menu:RegisterAddon(info)
     -- If the main panel is already built, add submenu dynamically
     if self.mainCategory then
         self:AddSubcategory(info)
+    end
+end
+
+-- ============================================================
+-- Public API: Register content to appear inline on the main panel
+-- fn(parent) will be called with a frame inside the main scroll area
+-- ============================================================
+function Menu:RegisterMainPanelContent(fn)
+    assert(type(fn) == "function", "CombatCoach.Menu:RegisterMainPanelContent - fn must be a function")
+    table.insert(self.mainPanelContentFns, fn)
+    if self.mainCategory then
+        self:RefreshMainPanelContent()
     end
 end
 
@@ -129,21 +144,32 @@ function Menu:CreateMainPanel()
     divider:SetSize(580, 1)
     divider:SetColorTexture(0.15, 0.25, 0.35, 0.8)
 
-    -- Registered addons section header
-    local sectionHeader = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    sectionHeader:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -10)
+    -- Scroll frame containing the addon list and any inline panel content
+    local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -8)
+    scroll:SetSize(580, 420)
+    scroll:SetClipsChildren(true)
+
+    local contentFrame = CreateFrame("Frame", nil, scroll)
+    contentFrame:SetSize(560, 1000)
+    contentFrame:SetPoint("TOPLEFT", scroll, "TOPLEFT", 0, 0)
+    scroll:SetScrollChild(contentFrame)
+
+    -- Registered addons section header (inside scroll content)
+    local sectionHeader = contentFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    sectionHeader:SetPoint("TOPLEFT", contentFrame, "TOPLEFT", 0, -8)
     sectionHeader:SetText("REGISTERED SUB-ADDONS")
     sectionHeader:SetTextColor(0.4, 0.6, 0.8, 1.0)
     sectionHeader:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
 
     -- Dynamic addon list (populated at runtime)
-    self.addonListFrame = frame
+    self.addonListFrame = contentFrame
     self.addonEntries = {}
     self.addonListAnchor = sectionHeader
 
-    -- Footer
+    -- Footer (pinned below the scroll frame)
     local footer = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    footer:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 16, 16)
+    footer:SetPoint("TOPLEFT", scroll, "BOTTOMLEFT", 0, -8)
     footer:SetText("Use |cFFFFFF00/coach|r to open this panel quickly.")
     footer:SetTextColor(0.4, 0.5, 0.6, 1.0)
 
@@ -192,19 +218,65 @@ function Menu:RefreshAddonList()
         empty:SetPoint("TOPLEFT", self.addonListAnchor, "BOTTOMLEFT", 0, -12)
         empty:SetText("|cFF888888No sub-addons registered yet.|r")
         table.insert(self.addonEntries, empty)
-        return
+    else
+        local prevRow = nil
+        for i, entry in ipairs(ordered) do
+            local row = self:CreateAddonListRow(self.addonListFrame, entry.info, i, entry.isChild)
+            if prevRow then
+                row:SetPoint("TOPLEFT", prevRow, "BOTTOMLEFT", 0, -4)
+            else
+                row:SetPoint("TOPLEFT", self.addonListAnchor, "BOTTOMLEFT", 0, -8)
+            end
+            table.insert(self.addonEntries, row)
+            prevRow = row
+        end
     end
 
-    local prevRow = nil
-    for i, entry in ipairs(ordered) do
-        local row = self:CreateAddonListRow(self.addonListFrame, entry.info, i, entry.isChild)
-        if prevRow then
-            row:SetPoint("TOPLEFT", prevRow, "BOTTOMLEFT", 0, -4)
-        else
-            row:SetPoint("TOPLEFT", self.addonListAnchor, "BOTTOMLEFT", 0, -8)
+    -- Schedule a deferred refresh of inline main-panel content.
+    -- Using C_Timer.After(0) coalesces multiple rapid calls into one rebuild,
+    -- which prevents duplicate change-listener registrations.
+    if not self.mainPanelContentPending then
+        self.mainPanelContentPending = true
+        C_Timer.After(0, function()
+            self.mainPanelContentPending = false
+            self:RefreshMainPanelContent()
+        end)
+    end
+end
+
+-- ============================================================
+-- Rebuild inline content (registered via RegisterMainPanelContent)
+-- below the addon list on the main panel.
+-- ============================================================
+function Menu:RefreshMainPanelContent()
+    if not self.addonListFrame then return end
+
+    -- Destroy previously built extra-content frames
+    for _, ef in ipairs(self.mainPanelExtraFrames) do
+        ef:Hide()
+        ef:SetParent(nil)
+    end
+    self.mainPanelExtraFrames = {}
+
+    if #self.mainPanelContentFns == 0 then return end
+
+    -- Anchor below the last addon entry, or below the section header if list is empty
+    local lastEntry = self.addonEntries[#self.addonEntries]
+    local extraAnchor = lastEntry or self.addonListAnchor
+
+    for _, fn in ipairs(self.mainPanelContentFns) do
+        local extraFrame = CreateFrame("Frame", nil, self.addonListFrame)
+        extraFrame:SetPoint("TOPLEFT", extraAnchor, "BOTTOMLEFT", 0, -16)
+        extraFrame:SetSize(560, 800)
+        local ok, err = pcall(fn, extraFrame)
+        if not ok then
+            local errText = extraFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            errText:SetPoint("TOPLEFT", extraFrame, "TOPLEFT", 16, -16)
+            errText:SetWidth(528)
+            errText:SetText("|cFFFF4444Error in main panel content:|r\n" .. tostring(err))
         end
-        table.insert(self.addonEntries, row)
-        prevRow = row
+        table.insert(self.mainPanelExtraFrames, extraFrame)
+        extraAnchor = extraFrame
     end
 end
 

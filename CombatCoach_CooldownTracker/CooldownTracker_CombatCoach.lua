@@ -325,11 +325,10 @@ local function OnBuildUI(parent)
 end
 
 CombatCoach.Menu:RegisterAddon({
-    name      = "CombatCoach_CooldownTracker",
+    name      = "Cooldown Tracker",
     id        = "CombatCoach_CooldownTracker",
-    desc      = "Track ability cooldowns per specialization.",
+    desc      = "Track ability cooldowns and charges.",
     version   = "2.0.0",
     icon      = "Interface\\Icons\\inv_misc_book_11",
-    parentId  = "CombatCoach_shmIcons",
     OnBuildUI = OnBuildUI,
 })

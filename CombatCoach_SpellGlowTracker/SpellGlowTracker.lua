@@ -25,7 +25,8 @@ ProcViewerDB = SpellGlowTrackerDB
 ------------------------------------------------------------------------
 -- Constants
 ------------------------------------------------------------------------
-local ADDON             = "CombatCoach_SpellGlowTracker"
+local FOLDER_NAME       = "CombatCoach_SpellGlowTracker"
+local ADDON             = "Spell Glow Tracker"
 local VERSION           = "0.1.8"
 local ICON_SIZE_DEFAULT = 64
 local GAP               = 8
@@ -365,7 +366,7 @@ local function InitializeSpellGlowTracker()
 end
 
 eventFrame:SetScript("OnEvent", function(self, event, arg1)
-    if event == "ADDON_LOADED" and arg1 == ADDON then
+    if event == "ADDON_LOADED" and arg1 == FOLDER_NAME then
         InitializeSpellGlowTracker()
 
     elseif event == "PLAYER_LOGIN" then

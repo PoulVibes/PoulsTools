@@ -281,11 +281,10 @@ local function OnBuildUI(parent)
 end
 
 CombatCoach.Menu:RegisterAddon({
-    name      = "CombatCoach_TrinketTracker",
+    name      = "Trinket Tracker",
     id        = "CombatCoach_TrinketTracker",
-    desc      = "Track equipment slot cooldowns per specialization.",
+    desc      = "Track equipment slot cooldowns.",
     version   = "2.0.0",
     icon      = "Interface\\Icons\\inv_jewelry_trinketpvp_01",
-    parentId  = "CombatCoach_shmIcons",
     OnBuildUI = OnBuildUI,
 })

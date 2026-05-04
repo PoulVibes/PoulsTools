@@ -1,11 +1,12 @@
-local ADDON_NAME = "CombatCoach_VivifyProcTracker"
+local FOLDER_NAME = "CombatCoach_VivifyProcTracker"
+local ADDON_NAME  = "Vivify Proc Tracker"
 
 -- Addon table
 local VPT = {}
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("ADDON_LOADED")
 frame:SetScript("OnEvent", function(self, event, addonName)
-    if event == "ADDON_LOADED" and addonName == ADDON_NAME then
+    if event == "ADDON_LOADED" and addonName == FOLDER_NAME then
         self:UnregisterEvent("ADDON_LOADED")
         VPT:OnInitialize()
     end

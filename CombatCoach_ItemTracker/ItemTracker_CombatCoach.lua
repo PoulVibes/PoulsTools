@@ -5,7 +5,7 @@ if not CombatCoach then return end
 
 ItemTrackerDB = ItemTrackerDB or {}
 
-local ADDON_NAME = "CombatCoach_ItemTracker"
+local ADDON_NAME = "Item Tracker"
 
 local function OnBuildUI(parent)
     local W = CombatCoach.Widgets
@@ -269,11 +269,10 @@ local function OnBuildUI(parent)
 end
 
 CombatCoach.Menu:RegisterAddon({
-    name      = "CombatCoach_ItemTracker",
+    name      = "Item Tracker",
     id        = "CombatCoach_ItemTracker",
-    desc      = "Track inventory items per specialization.",
+    desc      = "Track item cooldowns and counts.",
     version   = "1.0.0",
     icon      = "Interface\\Icons\\inv_misc_bag_01",
-    parentId  = "CombatCoach_shmIcons",
     OnBuildUI = OnBuildUI,
 })

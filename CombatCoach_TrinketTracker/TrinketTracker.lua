@@ -11,7 +11,8 @@
 -- /tt list             → list tracked slots
 -- ============================================================
 
-local ADDON_NAME   = "CombatCoach_TrinketTracker"
+local FOLDER_NAME  = "CombatCoach_TrinketTracker"
+local ADDON_NAME   = "Trinket Tracker"
 local DEFAULT_SIZE = 64
 
 local SLOT_NAMES = {
@@ -261,7 +262,7 @@ end
 
 local eventFrame = CreateFrame("Frame")
 eventFrame:SetScript("OnEvent", function(self, event, arg1)
-    if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
+    if event == "ADDON_LOADED" and arg1 == FOLDER_NAME then
         TrinketTrackerDB = TrinketTrackerDB or { specs = {} }
         TrinketTrackerDB.specs = TrinketTrackerDB.specs or {}
         -- Spec data not available until PLAYER_ENTERING_WORLD; wait.

@@ -1,4 +1,5 @@
-local ADDON_NAME = "CombatCoach_ComboTracker"
+local FOLDER_NAME = "CombatCoach_ComboTracker"
+local ADDON_NAME   = "Combo Tracker"
 local TRACKER_ICON = "Interface\\Icons\\ability_monk_palmstrike"
 
 -- Globals for cross-addon access
@@ -126,7 +127,7 @@ local function UpdateEnabledState()
 end
 
 eventFrame:SetScript("OnEvent", function(self, event, ...)
-    if event == "ADDON_LOADED" and ... == ADDON_NAME then
+    if event == "ADDON_LOADED" and ... == FOLDER_NAME then
         ComboTrackerDB = ComboTrackerDB or {
             x            = 0,
             y            = -100,

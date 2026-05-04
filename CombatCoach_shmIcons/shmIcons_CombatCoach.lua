@@ -270,11 +270,4 @@ local function OnBuildUI(parent)
     end)
 end
 
-CombatCoach.Menu:RegisterAddon({
-    name      = "CombatCoach_shmIcons",
-    id        = "CombatCoach_shmIcons",
-    desc      = "View and manage all icons registered with shmIcons.",
-    version   = "1.0.0",
-    icon      = "Interface\\Icons\\battleground_strongbox_skirmish_horde",
-    OnBuildUI = OnBuildUI,
-})
+CombatCoach.Menu:RegisterMainPanelContent(OnBuildUI)

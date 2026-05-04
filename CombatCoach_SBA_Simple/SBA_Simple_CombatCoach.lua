@@ -834,11 +834,10 @@ local function OnBuildUI(parent)
 end
 
 CombatCoach.Menu:RegisterAddon({
-    name      = "CombatCoach_SBA_Simple",
+    name      = "Rotation Assistant",
     id        = "CombatCoach_SBA_Simple",
-    desc      = "Displays the Assisted Combat spell recommendation and allows for overriding this logic.",
+    desc      = "Displays the Assisted Combat spell recommendation and allows overriding priorities.",
     version   = "1.0.0",
     icon      = "Interface\\Icons\\ui_spellbook_onebutton",
-    parentId  = "CombatCoach_shmIcons",
     OnBuildUI = OnBuildUI,
 })

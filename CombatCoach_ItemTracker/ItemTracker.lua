@@ -15,7 +15,8 @@
 -- /it list                        → list tracked items with counts
 -- ============================================================
 
-local ADDON_NAME   = "CombatCoach_ItemTracker"
+local FOLDER_NAME  = "CombatCoach_ItemTracker"
+local ADDON_NAME   = "Item Tracker"
 local DEFAULT_SIZE = 64
 
 -- itemKey → { itemName, itemID }
@@ -354,7 +355,7 @@ end
 
 local eventFrame = CreateFrame("Frame")
 eventFrame:SetScript("OnEvent", function(self, event, arg1)
-    if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
+    if event == "ADDON_LOADED" and arg1 == FOLDER_NAME then
         ItemTrackerDB = ItemTrackerDB or { specs = {} }
         ItemTrackerDB.specs = ItemTrackerDB.specs or {}
 
