@@ -18,11 +18,11 @@ local TRACKED_SPECS = {
 -- ---- shmIcons icon slot definitions ----
 local ICON_SIZE_DEFAULT = 64
 
-local KEY_ZENITH       = "Zenith"
-local KEY_BW           = "Bestial Wrath"
-local KEY_BW_CD        = "Bestial Wrath CD"
+local KEY_ZENITH       = "Zenith Buff"
+local KEY_BW           = "Bestial Wrath Buff"
+local KEY_BW_CD        = "Bestial Wrath Cooldown Timer"
 local KEY_WFIRE        = "Withering Fire"
-local KEY_BARBED       = "Barbed Shot"
+local KEY_BARBED       = "Barbed Shot Debuff"
 local KEY_NATURES_ALLY = "Nature's Ally"
 local KEY_BEAST_CLEAVE = "Beast Cleave"
 
