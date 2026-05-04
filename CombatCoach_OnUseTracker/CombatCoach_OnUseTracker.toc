@@ -11,3 +11,5 @@
 ## Group: CombatCoach
 
 OnUseTracker.lua
+OnUseTracker_Monk.lua
+OnUseTracker_Hunter.lua
