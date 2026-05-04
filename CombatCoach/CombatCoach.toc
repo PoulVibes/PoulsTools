@@ -1,5 +1,5 @@
 ## Interface: 120005
-## Title: |cFF00CCFFPouls|r|cFFFFFFFFTools|r
+## Title: |cFF00CCFFCombat|r|cFFFFFFFFCoach|r
 ## Notes: Central addon management hub. Provides a Settings menu with submenus for your other addons.
 ## Author: Poul
 ## Version: 1.1.0

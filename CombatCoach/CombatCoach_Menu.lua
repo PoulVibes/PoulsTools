@@ -107,7 +107,7 @@ function Menu:CreateMainPanel()
     -- Title text
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", banner, "TOPLEFT", 16, -16)
-    title:SetText("|cFF00CCFFPouls|r|cFFFFFFFFTools|r")
+    title:SetText("|cFF00CCFFCombat|r|cFFFFFFFFCoach|r")
     title:SetFont("Fonts\\FRIZQT__.TTF", 22, "OUTLINE")
 
     -- Subtitle
@@ -133,7 +133,7 @@ function Menu:CreateMainPanel()
     desc:SetWidth(548)
     desc:SetJustifyH("LEFT")
     desc:SetText(
-        "Welcome to |cFF00CCFFCombatCoach|r — your central hub for managing addon settings.\n" ..
+        "Welcome to |cFF00CCFFCombatCoach|r — your personal rotation prioritizer and info tracker.\n" ..
         "Select a sub-addon from the list on the left to configure it."
     )
     desc:SetTextColor(0.85, 0.90, 0.95, 1.0)
