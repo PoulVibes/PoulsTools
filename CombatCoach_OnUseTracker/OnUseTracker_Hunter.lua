@@ -19,8 +19,8 @@ local SLOT_DEFS = {
     { key = KEY_BW_CD,        iconSpellID = 19574   },
     { key = KEY_WFIRE,        iconSpellID = 466990  },
     { key = KEY_BARBED,       iconSpellID = 217200  },
-    { key = KEY_NATURES_ALLY, iconSpellID = 1273126 },
-    { key = KEY_BEAST_CLEAVE, iconSpellID = 131251  },
+    { key = KEY_NATURES_ALLY, iconSpellID = 1273043,  },
+    { key = KEY_BEAST_CLEAVE, iconSpellID = 115939 },
 }
 
 local BESTIAL_WRATH_SPELL_ID                   = 19574
@@ -35,10 +35,10 @@ local SAVAGERY_TALENT_ID               = 131244  -- Barbed Shot lasts 2 sec long
 
 local NATURES_ALLY_RANK3_TALENT_ID = 1273126  -- Nature's Ally (Rank 3)
 local COBRA_SHOT_SPELL_ID          = 193455
-local BLACK_ARROW_SPELL_ID         = 141219
+local BLACK_ARROW_SPELL_ID         = 466930
 local KILL_COMMAND_SPELL_ID        = 34026
 
-local WILD_THRASH_SPELL_ID     = 131251
+local WILD_THRASH_SPELL_ID     = 1264359
 local UMBRAL_REACH_TALENT_ID   = 1235397  -- Beast Cleave on Dark Arrow when enemies > 1
 local BEAST_CLEAVE_DURATION    = 8
 
@@ -120,7 +120,7 @@ local function RegisterIcons()
             onResize = function(sq) db.size = sq end,
             onMove   = function() end,
         })
-        shmIcons:SetIcon(ADDON_NAME, k, C_Spell.GetSpellTexture(def.iconSpellID))
+        shmIcons:SetIcon(ADDON_NAME, k, def.iconTexture or C_Spell.GetSpellTexture(def.iconSpellID))
         shmIcons:SetVisible(ADDON_NAME, k, false)
     end
     if not lockCallbackRegistered and shmIcons and shmIcons.RegisterLockCallback then
