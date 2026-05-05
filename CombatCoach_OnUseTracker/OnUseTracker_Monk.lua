@@ -10,10 +10,13 @@ local ICON_SIZE_DEFAULT = 64
 local KEY_ZENITH = "Zenith Buff"
 local KEY_VIVIFY = "Vivacious Vivification"
 
+local KEY_HOJS = "Heart of the Jade Serpent"
+
 -- WW gets both icons; BM/MW get only the Vivify icon.
 local WW_SLOT_DEFS = {
     { key = KEY_ZENITH, iconSpellID = 1249625 },
     { key = KEY_VIVIFY, iconSpellID = 116670  },
+    { key = KEY_HOJS,   iconSpellID = 443421  },
 }
 
 local MONK_VIVIFY_SLOT_DEFS = {
@@ -36,6 +39,16 @@ local RWK_SPELL_ID                   = 467307
 local VIVACIOUS_VIVIFICATION_WW      = 388812  -- Windwalker / Brewmaster
 local VIVACIOUS_VIVIFICATION_MW      = 137024  -- Mistweaver
 local VIVIFY_PROC_DURATION           = 20
+
+-- Heart of the Jade Serpent (talent) tracking
+local HOJS_TALENT_ID                  = 443294  -- Heart of the Jade Serpent (talent/spell id)
+local WDP_SPELL_ID                    = 152175  -- Whirling Dragon Punch
+local SOTW_SPELL_ID                   = 392983  -- Strike of the Windlord
+local HOJS_DURATION_ON_STRIKE         = 6
+local HOJS_DURATION_ON_ZENITH         = 4
+
+-- Track multiple concurrent HOJS windows. Each entry is { timer = <C_Timer>, expiresAt = <GetTime()+dur> }
+local hojsTimers = {}
 
 local iconsRegistered        = false
 local lockCallbackRegistered = false
@@ -94,6 +107,7 @@ local function RegisterIcons(slotDefs)
     local defaultPositions = {
         [KEY_ZENITH] = { x =  0,   y =  0    },
         [KEY_VIVIFY] = { x =  0,   y = -100  },
+        [KEY_HOJS]   = { x =  0,   y = -200  },
     }
     for _, def in ipairs(slotDefs) do
         local k = def.key
@@ -176,6 +190,60 @@ local function HandleVivifyProcSpell(spellID)
     end
 end
 
+-- ---- Heart of the Jade Serpent helpers ----
+-- Update the HOJS icon cooldown and stack count based on active timers
+local function UpdateHojsDisplay()
+    if not iconsRegistered then return end
+    local count = #hojsTimers
+    if count == 0 then
+        shmIcons:SetStacks(ADDON_NAME, KEY_HOJS, 0)
+        HideIcon(KEY_HOJS)
+        return
+    end
+    local now = GetTime()
+    local maxRemaining = 0
+    for _, e in ipairs(hojsTimers) do
+        local rem = (e.expiresAt or 0) - now
+        if rem > maxRemaining then maxRemaining = rem end
+    end
+    if maxRemaining > 0 then
+        ShowIcon(KEY_HOJS, maxRemaining)
+    else
+        HideIcon(KEY_HOJS)
+    end
+    if count == 1 then
+        shmIcons:SetStacks(ADDON_NAME, KEY_HOJS, 0)
+    else
+        shmIcons:SetStacks(ADDON_NAME, KEY_HOJS, count)
+    end
+end
+
+local function ClearHojs()
+    for _, e in ipairs(hojsTimers) do
+        if e.timer and e.timer.Cancel then e.timer:Cancel() end
+    end
+    hojsTimers = {}
+    shmIcons:SetStacks(ADDON_NAME, KEY_HOJS, 0)
+    HideIcon(KEY_HOJS)
+end
+
+local function StartHojs(duration)
+    if not IsPlayerSpell(HOJS_TALENT_ID) then return end
+    if not duration or duration <= 0 then return end
+    local entry = { expiresAt = GetTime() + duration }
+    entry.timer = C_Timer.NewTimer(duration, function()
+        for i, v in ipairs(hojsTimers) do
+            if v == entry then
+                table.remove(hojsTimers, i)
+                break
+            end
+        end
+        UpdateHojsDisplay()
+    end)
+    table.insert(hojsTimers, entry)
+    UpdateHojsDisplay()
+end
+
 -- ---- Module interface ----
 
 local module = {}
@@ -199,6 +267,7 @@ function module.Disable()
     _G["ZenithActiveTracker"] = false
     HideIcon(KEY_ZENITH)
     ClearVivifyProc()
+    ClearHojs()
     UnregisterIcons(WW_SLOT_DEFS)
     if iconFrameRef then iconFrameRef:Hide() end
 end
@@ -206,6 +275,11 @@ end
 function module.OnSpellCast(spellID, outIconEnabled)
     -- Vivify proc tracking (always active for WW regardless of Zenith window)
     HandleVivifyProcSpell(spellID)
+
+    -- Heart of the Jade Serpent: triggered by Whirling Dragon Punch or Strike of the Windlord
+    if (spellID == WDP_SPELL_ID or spellID == SOTW_SPELL_ID) and IsPlayerSpell(HOJS_TALENT_ID) then
+        StartHojs(HOJS_DURATION_ON_STRIKE)
+    end
 
     -- Zenith window tracking
     if not ZENITH_SPELL_IDS[spellID] then return end
@@ -218,6 +292,10 @@ function module.OnSpellCast(spellID, outIconEnabled)
 
     local duration = GetTimerDuration()
     ShowIcon(KEY_ZENITH, duration)
+    -- Zenith cast also grants a shorter Heart of the Jade Serpent window when talented
+    if IsPlayerSpell(HOJS_TALENT_ID) then
+        StartHojs(HOJS_DURATION_ON_ZENITH)
+    end
     onUseWindowTimer = CancelTimer(onUseWindowTimer)
     onUseWindowTimer = C_Timer.NewTimer(duration, function()
         onUseWindowTimer = nil
