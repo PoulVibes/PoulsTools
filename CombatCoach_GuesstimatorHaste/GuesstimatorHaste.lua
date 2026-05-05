@@ -6,7 +6,11 @@ logFrame:Hide()
 GuesstimatedHaste = 0
 
 -- Configuration
-local baseGCD = 1.5
+local SPEC_BASE_GCD = {
+    [269] = 1.0,  -- Windwalker Monk
+    [253] = 1.5,  -- Beast Mastery Hunter
+}
+local baseGCD = 1.0
 local GCD_DUMMY_ID = 61304
 local GCD_FLOOR = 0.75
 
@@ -15,6 +19,9 @@ local lastLoggedDummyValue = -99
 local lastChangeTime = 0
 local combatStartTime = 0
 local logLines = {}
+local lastDisplayHaste   = nil
+local lastDisplayOfficial = nil
+local lastDisplayCapped  = false
 
 -- Single-spec gating (Monk - Windwalker)
 local ALLOWED_SPECS = {
@@ -64,6 +71,11 @@ local function UpdateEnabledState()
         return
     end
     if IsAllowedSpec() then
+        local specIndex = GetSpecialization()
+        if specIndex then
+            local specID = select(1, GetSpecializationInfo(specIndex))
+            baseGCD = SPEC_BASE_GCD[specID] or 1.5
+        end
         EnableAddon()
     else
         DisableAddon()
@@ -177,21 +189,14 @@ tickFrame:SetScript("OnUpdate", function(self, elapsed)
         if currentDummyHaste > 0 then
             local official = GetHaste()
             local now = GetTime()
-
-            -- Detect the 0.75s cap
             local isCapped = (cdInfo.duration <= GCD_FLOOR)
 
-            -- Update the visible debug text once per second
-            displayThrottle = displayThrottle + elapsed
-            if displayThrottle >= 1.0 then
-                displayThrottle = 0
-                if frame:IsShown() then
-                    local capText = isCapped and "|cffff0000(CAP)|r" or ""
-                    hasteText:SetText(string.format("Off: %.1f%% vs Dummy: %.1f%% %s", official, currentDummyHaste, capText))
-                end
-            end
+            -- Store last known values so the display always has something to show
+            lastDisplayHaste    = currentDummyHaste
+            lastDisplayOfficial = official
+            lastDisplayCapped   = isCapped
 
-            -- Logging Logic (1.0% threshold) — unchanged, fires whenever value changes
+            -- Logging Logic (1.0% threshold) — fires whenever value changes
             if math.abs(currentDummyHaste - lastLoggedDummyValue) >= 1.0 then
                 -- UPDATE GLOBAL VARIABLE (decimal fraction: divide by 100 so consumers can use 1 + GuesstimatedHaste)
                 GuesstimatedHaste = currentDummyHaste / 100
@@ -203,6 +208,16 @@ tickFrame:SetScript("OnUpdate", function(self, elapsed)
                 lastLoggedDummyValue = currentDummyHaste
                 UpdateLogUI()
             end
+        end
+    end
+
+    -- Update the visible debug text once per second using last known values
+    displayThrottle = displayThrottle + elapsed
+    if displayThrottle >= 1.0 then
+        displayThrottle = 0
+        if frame:IsShown() and lastDisplayHaste then
+            local capText = lastDisplayCapped and "|cffff0000(CAP)|r" or ""
+            hasteText:SetText(string.format("Off: %.1f%% vs Dummy: %.1f%% %s", lastDisplayOfficial, lastDisplayHaste, capText))
         end
     end
 end)
