@@ -294,20 +294,23 @@ events:SetScript("OnEvent", function(_, event)
     if event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_SPECIALIZATION_CHANGED" then
         shmIcons:Unregister(ADDON_NAME, ICON_KEY)
         RegisterIcon()
-        -- Re-compile any saved override code on load/spec change (per-spec)
-        local specDB = GetSpecDB()
-        local code = specDB.overrideCode or GetDB().overrideCode
-        if code and not code:match("^%s*$") then
-            CompileOverride(code)
-        elseif not specDB.overrideSource then
-            -- No user-saved override yet for this spec; try to use the
-            -- recommended optimized code as the default.
-            local defaultCode = _G.SBAS_GetDefaultOverrideCodeForSpec
-                                and _G.SBAS_GetDefaultOverrideCodeForSpec(GetCurrentSpecID())
-            CompileOverride(defaultCode or nil)
-        else
-            CompileOverride(nil)
-        end
+        -- Defer override compilation by one frame so spec data is fully available.
+        -- GetSpecialization() may return nil during PLAYER_ENTERING_WORLD otherwise.
+        C_Timer.After(0, function()
+            local specDB = GetSpecDB()
+            local code = specDB.overrideCode or GetDB().overrideCode
+            if code and not code:match("^%s*$") then
+                CompileOverride(code)
+            elseif not specDB.overrideSource then
+                -- No user-saved override yet for this spec; try to use the
+                -- recommended optimized code as the default.
+                local defaultCode = _G.SBAS_GetDefaultOverrideCodeForSpec
+                                    and _G.SBAS_GetDefaultOverrideCodeForSpec(GetCurrentSpecID())
+                CompileOverride(defaultCode or nil)
+            else
+                CompileOverride(nil)
+            end
+        end)
     end
 end)
 
