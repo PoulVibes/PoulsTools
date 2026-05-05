@@ -92,7 +92,14 @@ end
 local function UpdateEnabledState()
     local specID = GetCurrentTrackedSpec()
     if specID then
-        currentSpecID = specID
+        -- If the spec changed while the addon was active, tear down the old module first.
+        if specID ~= currentSpecID then
+            if addonEnabled and currentSpecID and ClassModules[currentSpecID] then
+                ClassModules[currentSpecID].Disable()
+            end
+            addonEnabled = false
+            currentSpecID = specID
+        end
         EnableAddon()
     else
         currentSpecID = nil
