@@ -31,8 +31,9 @@ local VERSION           = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.G
 local ICON_SIZE_DEFAULT = 64
 local GAP               = 8
 
-local WINDWALKER_SPEC_ID = 269
-local BM_HUNTER_SPEC_ID  = 253
+local WINDWALKER_SPEC_ID    = 269
+local BM_HUNTER_SPEC_ID     = 253
+local SURVIVAL_HUNTER_SPEC_ID = 255
 local iconsRegistered = false
 local addonEnabled = false
 local lockCallbackRegistered = false
@@ -48,6 +49,7 @@ _G["rwk_proc_active"]  = false
 _G["howl_proc_active"] = false
 _G["black_arrow_proc_active"] = false
 _G["wailing_arrow_proc_active"] = false
+_G["moonlight_chakram_proc_active"] = false
 
 ------------------------------------------------------------------------
 -- Global countdown timers (seconds remaining; 0 when inactive)
@@ -59,6 +61,7 @@ _G["rwk_proc_timer"]  = 0
 _G["howl_proc_timer"] = 0
 _G["wailing_arrow_proc_timer"] = 0
 _G["hogstrider_proc_timer"] = 0
+_G["moonlight_chakram_proc_timer"] = 0
 
 ------------------------------------------------------------------------
 -- Default DB initialiser for a slot
@@ -91,7 +94,11 @@ local SLOT_DEFS = {
     { key = "Howl of the Pack Leader",   x =  3 * halfStep,  y =  halfStep,      iconSpellID = 34026,  iconTexture = 5927643, timerKey = "howl_proc_timer",         buffDuration = 29, classSpec = "HUNTER_BM"  },
     { key = "Black Arrow",               x =  3 * halfStep,  y = -halfStep,      iconSpellID = 466930, timerKey = nil,                                         classSpec = "HUNTER_BM"  },
     { key = "Wailing Arrow",             x =  0,             y = -3 * halfStep,  iconSpellID = 392060, timerKey = "wailing_arrow_proc_timer", buffDuration = 15, classSpec = "HUNTER_BM"  },
-    { key = "Hogstrider",                x = -3 * halfStep,  y =  halfStep,      iconSpellID = 193455, iconTexture = 463878,  timerKey = "hogstrider_proc_timer",   buffDuration = 19, classSpec = "HUNTER_BM"  },
+    { key = "Hogstrider",                x = -3 * halfStep,  y =  halfStep,      iconSpellID = 193455,  iconTexture = 463878,  timerKey = "hogstrider_proc_timer",         buffDuration = 19, classSpec = "HUNTER_BM"  },
+    -- Survival Hunter entries
+    { key = "Howl of the Pack Leader",   x =  3 * halfStep,  y =  halfStep,      iconSpellID = 259489,  iconTexture = 5927643, timerKey = "howl_proc_timer",               buffDuration = 29, classSpec = "HUNTER_SV"  },
+    { key = "Hogstrider",                x = -3 * halfStep,  y =  halfStep,      iconSpellID = 1261193, iconTexture = 463878,  timerKey = "hogstrider_proc_timer",         buffDuration = 19, classSpec = "HUNTER_SV"  },
+    { key = "Moonlight Chakram",         x = -3 * halfStep,  y = -halfStep,      iconSpellID = 1264949,                         timerKey = "moonlight_chakram_proc_timer",  buffDuration = 14, classSpec = "HUNTER_SV"  },
 }
 
 local SLOT_DEF_BY_KEY = {}
@@ -145,11 +152,19 @@ local function IsPlayerBMHunterSpec()
     return specID == BM_HUNTER_SPEC_ID
 end
 
+local function IsPlayerSVHunterSpec()
+    local specIndex = GetSpecialization()
+    if not specIndex then return false end
+    local specID = select(1, GetSpecializationInfo(specIndex))
+    return specID == SURVIVAL_HUNTER_SPEC_ID
+end
+
 local function IsSlotEligible(def)
     local cs = def.classSpec
     if cs == "MONK_ALL"  then return IsPlayerMonk() end
     if cs == "MONK_WW"   then return IsPlayerMonk() and IsPlayerWindwalkerSpec() end
     if cs == "HUNTER_BM" then return IsPlayerHunter() and IsPlayerBMHunterSpec() end
+    if cs == "HUNTER_SV" then return IsPlayerHunter() and IsPlayerSVHunterSpec() end
     return false
 end
 
@@ -269,7 +284,11 @@ local PROC_REGISTRY = {
     [34026]  = { globalKey = "howl_proc_active",          key = "Howl of the Pack Leader", timerKey = "howl_proc_timer",         buffDuration = 29, endTime = 0 },
     [466930] = { globalKey = "black_arrow_proc_active",   key = "Black Arrow" },
     [392060] = { globalKey = "wailing_arrow_proc_active", key = "Wailing Arrow",            timerKey = "wailing_arrow_proc_timer", buffDuration = 15, endTime = 0 },
-    [193455] = { globalKey = "hogstrider_proc_active",    key = "Hogstrider",               timerKey = "hogstrider_proc_timer",   buffDuration = 19, endTime = 0 },
+    [193455] = { globalKey = "hogstrider_proc_active",        key = "Hogstrider",               timerKey = "hogstrider_proc_timer",         buffDuration = 19, endTime = 0 },
+    -- Survival Hunter procs (different trigger spell IDs than BM)
+    [259489]  = { globalKey = "howl_proc_active",              key = "Howl of the Pack Leader",  timerKey = "howl_proc_timer",               buffDuration = 29, endTime = 0 },
+    [1261193] = { globalKey = "hogstrider_proc_active",        key = "Hogstrider",               timerKey = "hogstrider_proc_timer",         buffDuration = 19, endTime = 0 },
+    [1264949] = { globalKey = "moonlight_chakram_proc_active", key = "Moonlight Chakram",        timerKey = "moonlight_chakram_proc_timer",  buffDuration = 14, endTime = 0 },
 }
 
 TIMED_ENTRIES = {}
@@ -355,9 +374,11 @@ local function InitializeSpellGlowTracker()
     _G["howl_proc_timer"] = 0
     _G["wailing_arrow_proc_timer"] = 0
     _G["hogstrider_proc_timer"] = 0
+    _G["moonlight_chakram_proc_timer"] = 0
     _G["howl_proc_active"] = false
     _G["black_arrow_proc_active"]   = false
     _G["wailing_arrow_proc_active"] = false
+    _G["moonlight_chakram_proc_active"] = false
     for _, entry in pairs(TIMED_ENTRIES) do
         entry.endTime = 0
     end

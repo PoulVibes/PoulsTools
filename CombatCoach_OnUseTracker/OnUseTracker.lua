@@ -102,6 +102,11 @@ local function UpdateEnabledState()
         end
         EnableAddon()
     else
+        -- Switching to an untracked spec: tear down the old module before clearing state.
+        if addonEnabled and currentSpecID and ClassModules[currentSpecID] then
+            ClassModules[currentSpecID].Disable()
+            addonEnabled = false
+        end
         currentSpecID = nil
         DisableAddon()
     end
@@ -128,8 +133,13 @@ frame:SetScript("OnEvent", function(_, event, unit, _, spellID)
 
     if event == "PLAYER_SPECIALIZATION_CHANGED" then
         if unit == "player" then
-            UpdateEnabledState()
-            UpdateIconTexture()
+            -- Defer one frame: GetSpecialization() may not yet reflect the new
+            -- spec at the moment PLAYER_SPECIALIZATION_CHANGED fires, which would
+            -- cause UpdateEnabledState to see the old spec and skip teardown.
+            C_Timer.After(0, function()
+                UpdateEnabledState()
+                UpdateIconTexture()
+            end)
         end
         return
     end
