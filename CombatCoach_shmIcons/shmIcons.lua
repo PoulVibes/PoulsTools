@@ -355,7 +355,8 @@ local function BuildIconFrame(globalID, db)
     usableOverlay:SetVertexColor(0, 0, 0, 0)  -- fully transparent by default
 
     local resizeHandle = CreateFrame("Button", nil, frame)
-    resizeHandle:SetSize(16, 16)
+    local initHandleSz = math.max(10, math.floor(db.size * 0.25))
+    resizeHandle:SetSize(initHandleSz, initHandleSz)
     resizeHandle:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
     resizeHandle:SetFrameLevel(frame:GetFrameLevel() + 10)
     local gripTex = resizeHandle:CreateTexture(nil, "OVERLAY")
@@ -388,6 +389,7 @@ local function BuildIconFrame(globalID, db)
         end
         ScaleText(cd, stackLabel, sq)
         ResizeGlow(icon.glow, frame, sq)
+        resizeHandle:SetSize(math.max(10, math.floor(sq * 0.25)), math.max(10, math.floor(sq * 0.25)))
         db.size = sq
         if icon.onResize then icon.onResize(sq) end
     end)

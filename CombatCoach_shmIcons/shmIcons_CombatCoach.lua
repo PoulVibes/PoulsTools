@@ -147,10 +147,14 @@ local function OnBuildUI(parent)
             local capturedDB    = db
 
             local leftControl = nil
-            local registry = (CombatCoach and CombatCoach.Menu and CombatCoach.Menu.registry) or {}
-            -- Registered addons normally get an X remove button; however SBA_Simple
-            -- should expose an enable/disable checkbox instead (special case).
-            if registry[capturedAddon] and capturedAddon ~= "CombatCoach_SBA_Simple" then
+            -- These are the shmIcons ADDON_NAMEs (not the CombatCoach registry IDs) for
+            -- trackers whose icons can be individually removed via an X button.
+            local TRACKER_ADDON_NAMES = {
+                ["Cooldown Tracker"] = true,
+                ["Item Tracker"]     = true,
+                ["Trinket Tracker"]  = true,
+            }
+            if TRACKER_ADDON_NAMES[capturedAddon] then
                 -- Registered addon: show a small X remove button on the left
                 local rem = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
                 rem:SetPoint("LEFT", row, "LEFT", 10, 0)
