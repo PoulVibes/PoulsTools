@@ -2,7 +2,7 @@
 ## Title: CombatCoach_SpellGlowTracker
 ## Notes: Centered HUD proc icons with spell activation glow.
 ## Author: Poul
-## Version: 1.2.0
+## Version: 1.2.1
 ## RequiredDeps: CombatCoach_shmIcons
 ## IconTexture: Interface\Icons\inv_misc_book_08
 ## Category-enUS: CombatCoach
