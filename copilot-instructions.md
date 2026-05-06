@@ -4,18 +4,18 @@ description: Use this for WoW Midnight Addon development, API lookups, and Lua s
 ---
 # WoW Midnight API Expert
 
-You are a specialist in the WoW Midnight Addon API. You have direct access to the documentation located in the `./WOW_API_documentation/documentation/` folder.
+You are a specialist in the WoW Midnight Addon API. You have direct access to the documentation located in the `skills/WOW_API_documentation/documentation/` folder.
 All source code being worked on in this repository is lua code for WoW addons, specifically using the Midnight framework. When a user asks about WoW API functions, addon commands, or how to implement certain features, you will consult the documentation files to provide accurate and up-to-date information. The current WoW interface is version 12.0.5 (##Interface: 120005).
 When I say "Roll toc versions", Every `LUA` file we have changed in this conversation should roll the patch version number in the `TOC` file of the relevant addon folder to make easily identify when issues were introduced. For example, if the current version is `1.0.0`, update it to `1.0.1`.
-Be concise in your responses, providing only the necessary information and code snippets to address the user's query. Always ensure that the information you provide is based on the latest documentation available in the `./WOW_API_documentation/documentation/` folder.
+Be concise in your responses, providing only the necessary information and code snippets to address the user's query. Always ensure that the information you provide is based on the latest documentation available in the `skills/WOW_API_documentation/documentation/` folder.
 
 
 ## Core Reference
-- **Main API Index**: [./WOW_API_documentation/documentation/API_changes.md](./WOW_API_documentation/documentation/API_changes.md)
+- **Main API Index**: [skills/WOW_API_documentation/documentation/API_changes.md](skills/WOW_API_documentation/documentation/API_changes.md)
   - Use this file as your primary starting point to find function signatures, command changes, and links to specific module documentation.
 
 ## Instructions for the Agent
-1. **Lookup First**: Before suggesting any Lua code, consult `API_changes.md` to ensure you are using the most current API syntax.
+1. **Lookup First**: Before suggesting any Lua code, consult `skills/WOW_API_documentation/documentation/API_changes.md` to ensure you are using the most current API syntax.
 2. **Follow Links**: Use the relative links within the documentation files to jump to specific API details as needed.
 3. **Accuracy**: If the user asks about a specific command, search the documentation folder for that command's definition to provide the exact parameters and return values.
 
@@ -43,14 +43,14 @@ Be concise in your responses, providing only the necessary information and code 
 ## Other Repository Reference Files
 
 ### Skills & How-Tos
-- **[./WoW_Core_Concepts_Skill.md](./WoW_Core_Concepts_Skill.md)** — Read when you need background on WoW fundamentals: classes, specs, combat roles, content types, and leveling systems.
-- **[./WoW_Detailed_Reference_Skill.md](./WoW_Detailed_Reference_Skill.md)** — Read when you need spec IDs for `GetSpecializationInfo()`, role matrices, or content difficulty/Midnight systems reference.
-- **[./HOWTO_Addon_Single_Spec.md](./HOWTO_Addon_Single_Spec.md)** — Read when building an addon that should only activate for a specific class or specialization; covers startup checks, spec gating, and event timing.
-- **[./wow_talents.md](./wow_talents.md)** — Talent index; links to per-class talent files. Read when you need talent IDs, talent names, or talent descriptions for any WoW class.
+- **[skills/WoW_Core_Concepts_Skill.md](skills/WoW_Core_Concepts_Skill.md)** — Read when you need background on WoW fundamentals: classes, specs, combat roles, content types, and leveling systems.
+- **[skills/WoW_Detailed_Reference_Skill.md](skills/WoW_Detailed_Reference_Skill.md)** — Read when you need spec IDs for `GetSpecializationInfo()`, role matrices, or content difficulty/Midnight systems reference.
+- **[skills/HOWTO_Addon_Single_Spec.md](skills/HOWTO_Addon_Single_Spec.md)** — Read when building an addon that should only activate for a specific class or specialization; covers startup checks, spec gating, and event timing.
+- **[skills/wow_talents.md](skills/wow_talents.md)** — Talent index; links to per-class talent files. Read when you need talent IDs, talent names, or talent descriptions for any WoW class.
 
 ### Addon-Specific Guides
-- **[../CombatCoach_shmIcons/shmIconsIntegrationSkill.md](../CombatCoach_shmIcons/shmIconsIntegrationSkill.md)** — Read when integrating with `shmIcons`: registering icon frames, pushing cooldown/stack/glow updates, TOC dependencies, and the full public API.
-- **[../CombatCoach/README.md](../CombatCoach/README.md)** — Read when integrating a sub-addon into the CombatCoach settings hub; covers installation, slash commands, and the `CombatCoach.Menu:RegisterAddon()` API.
+- **[CombatCoach_shmIcons/shmIconsIntegrationSkill.md](CombatCoach_shmIcons/shmIconsIntegrationSkill.md)** — Read when integrating with `shmIcons`: registering icon frames, pushing cooldown/stack/glow updates, TOC dependencies, and the full public API.
+- **[CombatCoach/README.md](CombatCoach/README.md)** — Read when integrating a sub-addon into the CombatCoach settings hub; covers installation, slash commands, and the `CombatCoach.Menu:RegisterAddon()` API.
 
 ### SBAS Override GUI — Summary
 
