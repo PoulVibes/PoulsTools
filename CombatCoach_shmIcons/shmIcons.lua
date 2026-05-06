@@ -556,7 +556,8 @@ local function BuildIconFrame(globalID, db)
         local bestDist = math.huge
         local best = nil
         for otherID, other in pairs(icons) do
-            if otherID ~= globalID and other.frame:IsShown() and other.frame:GetHeight() == mySize then
+            if otherID ~= globalID and other.frame:IsShown()
+               and math.abs(other.frame:GetHeight() - mySize) < 0.5 then
                 local oCX, oCY = other.frame:GetCenter()
                 for dx = -1, 1 do
                     for dy = -1, 1 do
@@ -676,13 +677,16 @@ local function BuildIconFrame(globalID, db)
                 local curr = table.remove(queue, 1)
                 for otherID, other in pairs(icons) do
                     if not visited[otherID] and other.frame:IsShown()
-                       and other.frame:GetHeight() == mySize then
+                       and math.abs(other.frame:GetHeight() - mySize) < 0.5 then
                         local ocx, ocy = other.frame:GetCenter()
                         local adx = math.abs(ocx - curr.cx)
                         local ady = math.abs(ocy - curr.cy)
                         -- Adjacent = within one icon-width in both axes,
-                        -- but not occupying the same center (not the same icon)
-                        if adx <= mySize + 2 and ady <= mySize + 2
+                        -- but not occupying the same center (not the same icon).
+                        -- Use mySize + 4 tolerance: snap commit rounds the dragged
+                        -- icon's size to an integer while the target retains a float
+                        -- size at non-1.0 UI scale, producing a sub-pixel gap.
+                        if adx <= mySize + 4 and ady <= mySize + 4
                            and (adx > 2 or ady > 2) then
                             visited[otherID] = true
                             table.insert(queue, { id = otherID, cx = ocx, cy = ocy })
@@ -728,6 +732,18 @@ local function BuildIconFrame(globalID, db)
         self:StopMovingOrSizing()
 
         if dragState and dragState.isGroupDrag then
+            -- StopMovingOrSizing() anchors the dragged frame independently of
+            -- the last OnUpdate tick, so the members may be off by a sub-pixel.
+            -- Re-anchor every member from the dragged icon's actual final center
+            -- to prevent error from accumulating across repeated group drags.
+            local finalCX, finalCY     = frame:GetCenter()
+            local finalUiCX, finalUiCY = UIParent:GetCenter()
+            for _, member in ipairs(dragState.groupMembers) do
+                member.icon.frame:ClearAllPoints()
+                member.icon.frame:SetPoint("CENTER", UIParent, "CENTER",
+                    finalCX + member.offsetX - finalUiCX,
+                    finalCY + member.offsetY - finalUiCY)
+            end
             -- Commit final positions for the dragged icon and all group members
             SaveIconPos(icon)
             if icon.onMove then icon.onMove(icon.db) end

@@ -32,55 +32,43 @@ local function OnBuildUI(parent)
     anchor = div
     y = dy
 
-    local input = ""
-    local edit = W:EditBox(parent, anchor, y, "Add / Remove Slot", "e.g. 13 (Trinket 1), 14 (Trinket 2), 16 (Main Hand)",
-        function() return input end,
-        function(val) input = val end)
-    anchor = edit
+    -- Dropdown selector for equipment slots (1-19)
+    local selectedSlot = nil
+    local slotItems = {}
+    for i = 1, 19 do
+        local itemID = GetInventoryItemID("player", i)
+        local texture = itemID and select(10, GetItemInfo(itemID))
+        local tex = texture or 134400
+        slotItems[#slotItems + 1] = { text = "|T" .. tex .. ":16:16|t " .. (SLOT_NAMES[i] or ("Slot " .. i)), value = i }
+    end
+    local dd = W:Dropdown(parent, anchor, y, "Select Slot", slotItems,
+        function() return selectedSlot end,
+        function(val) selectedSlot = val end)
+    anchor = dd
     y = -8
 
     local btn = W:Button(parent, anchor, y, "Add Tracker", function()
-        local val = input
-        if edit and edit.box then
-            val = edit.box:GetText()
-            if edit.placeholder and val == edit.placeholder then val = "" end
-        end
-        if not val or val:trim() == "" then
-            print("|cFFFF0000TrinketTracker: enter a slot number (1-19).|r")
-            return
-        end
-        local slotID = tonumber(val:trim())
-        if not slotID or slotID < 1 or slotID > 19 then
-            print("|cFFFF0000TrinketTracker: slot must be a number between 1 and 19.|r")
+        local slotID = selectedSlot
+        if not slotID then
+            print("|cFFFF0000TrinketTracker: select a slot (1-19).|r")
             return
         end
         if type(TrinketTracker_Add) == "function" then
             TrinketTracker_Add(slotID)
         end
-        if edit and edit.box then edit.box:ClearFocus(); edit.box:SetText("") end
     end)
     anchor = btn
     y = -8
 
     btn = W:Button(parent, anchor, y, "Remove Tracker", function()
-        local val = input
-        if edit and edit.box then
-            val = edit.box:GetText()
-            if edit.placeholder and val == edit.placeholder then val = "" end
-        end
-        if not val or val:trim() == "" then
-            print("|cFFFF0000TrinketTracker: enter a slot number (1-19).|r")
-            return
-        end
-        local slotID = tonumber(val:trim())
+        local slotID = selectedSlot
         if not slotID then
-            print("|cFFFF0000TrinketTracker: slot must be a number.|r")
+            print("|cFFFF0000TrinketTracker: select a slot (1-19).|r")
             return
         end
         if type(TrinketTracker_Remove) == "function" then
             TrinketTracker_Remove(slotID)
         end
-        if edit and edit.box then edit.box:ClearFocus(); edit.box:SetText("") end
     end)
     anchor = btn
     y = -8
@@ -221,21 +209,15 @@ local function OnBuildUI(parent)
     anchor = div3
     y = dy3
 
-    btn = W:Button(parent, anchor, y, "Reset Selected (use input box)", function()
-        local val = input
-        if edit and edit.box then
-            val = edit.box:GetText()
-            if edit.placeholder and val == edit.placeholder then val = "" end
-        end
-        if not val or val:trim() == "" then
-            print("|cFFFF0000TrinketTracker: enter slot number.|r")
+    btn = W:Button(parent, anchor, y, "Reset Selected (use dropdown)", function()
+        local slotID = selectedSlot
+        if not slotID then
+            print("|cFFFF0000TrinketTracker: select a slot.|r")
             return
         end
-        local slotID = tonumber(val:trim())
-        if slotID and type(TrinketTracker_Reset) == "function" then
+        if type(TrinketTracker_Reset) == "function" then
             TrinketTracker_Reset(slotID)
         end
-        if edit and edit.box then edit.box:ClearFocus(); edit.box:SetText("") end
     end)
     anchor = btn
     y = -8
@@ -276,6 +258,31 @@ local function OnBuildUI(parent)
         BuildTrackedList()
         if lockBtn and shmIcons and shmIcons.IsLocked then
             lockBtn:SetText(shmIcons:IsLocked() and "Unlock Icons" or "Lock Icons")
+        end
+        -- Refresh dropdown icons (in case equipped items changed)
+        for i = 1, 19 do
+            local it = slotItems[i]
+            if it then
+                local itemID = GetInventoryItemID("player", it.value)
+                local texture = itemID and select(10, GetItemInfo(itemID))
+                local tex = texture or 134400
+                it.text = "|T" .. tex .. ":16:16|t " .. (SLOT_NAMES[it.value] or ("Slot " .. it.value))
+            end
+        end
+        -- Update displayed text for the dropdown if present
+        if dd and dd.dropdown then
+            if selectedSlot then
+                for _, it in ipairs(slotItems) do
+                    if it.value == selectedSlot then
+                        UIDropDownMenu_SetText(dd.dropdown, it.text)
+                        UIDropDownMenu_SetSelectedValue(dd.dropdown, it.value)
+                        break
+                    end
+                end
+            else
+                UIDropDownMenu_SetText(dd.dropdown, "Select Slot")
+                UIDropDownMenu_SetSelectedValue(dd.dropdown, nil)
+            end
         end
     end)
 end

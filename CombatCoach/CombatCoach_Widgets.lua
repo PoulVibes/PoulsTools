@@ -208,6 +208,9 @@ function W:Dropdown(parent, anchor, yOffset, label, items, getValue, setValue)
         end
     end
 
+    -- expose inner dropdown for callers who need to update it later
+    row.dropdown = dropdown
+    row.items = items
     return row
 end
 
