@@ -46,6 +46,14 @@ local CORNER_COORDS = {
     { point = "BOTTOMRIGHT", x =  1, y = -1 },
 }
 
+-- Addons whose icons are driven by game state (combat, spell readiness, etc.)
+-- and should be shown during Edit Mode for positioning but hidden again on exit.
+local EDIT_MODE_REACTIVE_ADDONS = {
+    ["Combo Tracker"]      = true,
+    ["On Use Tracker"]     = true,
+    ["Spell Glow Tracker"] = true,
+}
+
 -- ============================================================
 -- Internal state
 -- ============================================================
@@ -53,7 +61,9 @@ local CORNER_COORDS = {
 local icons          = {}  -- icons[globalID] = icon object
 local snapNeighbours = {}  -- (unused) kept for API compatibility
 local isLocked       = true
-local lockCallbacks  = {}  -- functions called when lock state changes: fn(isLocked)
+local lockCallbacks       = {}  -- functions called when lock state changes: fn(isLocked)
+local isInEditMode        = false  -- true while WoW Edit Mode is active
+local editModeGroupFrames = {}  -- group overlay frames built on Edit Mode enter
 
 function shmIcons:RegisterLockCallback(fn)
     if type(fn) ~= "function" then return end
@@ -287,6 +297,336 @@ local function ApplyLockState(icon)
             icon.resizeHandle:Hide()
         end
     end
+end
+
+-- ============================================================
+-- Edit Mode support
+-- ============================================================
+
+-- Reposition all icons that are ctrl corner-attached to the given parent.
+-- Called after the parent moves so children maintain their fixed offset.
+-- Recurses to handle chains (child of child), saves positions and fires onMove.
+local function RepositionCtrlChildren(parentGlobalID)
+    local parentIcon = icons[parentGlobalID]
+    if not parentIcon then return end
+    local pCX, pCY   = parentIcon.frame:GetCenter()
+    local uiCX, uiCY = UIParent:GetCenter()
+    for childID, childIcon in pairs(icons) do
+        if childIcon.db.ctrlAttachedTo == parentGlobalID then
+            local newX = (pCX - uiCX) + childIcon.db.ctrlOffsetX
+            local newY = (pCY - uiCY) + childIcon.db.ctrlOffsetY
+            childIcon.frame:ClearAllPoints()
+            childIcon.frame:SetPoint("CENTER", UIParent, "CENTER", newX, newY)
+            SaveIconPos(childIcon)
+            if childIcon.onMove then childIcon.onMove(childIcon.db) end
+            RepositionCtrlChildren(childID)
+        end
+    end
+end
+
+-- BFS: return all connected groups of adjacent same-size shown icons.
+-- Reuses the same adjacency parameters as the right-click group drag so
+-- groups are consistent between the two movement methods.
+local function ComputeIconGroups()
+    local visited = {}
+    local groups  = {}
+    for startID, startIcon in pairs(icons) do
+        if not visited[startID] and startIcon.frame:IsShown() then
+            local mySize        = math.floor(startIcon.frame:GetWidth() + 0.5)
+            local startCX, startCY = startIcon.frame:GetCenter()
+            visited[startID]    = true
+            local group = { startIcon }
+            local queue = { { cx = startCX, cy = startCY } }
+
+            while #queue > 0 do
+                local curr = table.remove(queue, 1)
+                for otherID, other in pairs(icons) do
+                    if not visited[otherID] and other.frame:IsShown()
+                       and math.abs(other.frame:GetHeight() - mySize) < 0.5 then
+                        local ocx, ocy = other.frame:GetCenter()
+                        local adx = math.abs(ocx - curr.cx)
+                        local ady = math.abs(ocy - curr.cy)
+                        if adx <= mySize + 4 and ady <= mySize + 4
+                           and (adx > 2 or ady > 2) then
+                            visited[otherID] = true
+                            table.insert(group, other)
+                            table.insert(queue, { cx = ocx, cy = ocy })
+                        end
+                    end
+                end
+            end
+
+            table.insert(groups, group)
+        end
+    end
+    return groups
+end
+
+-- Build a draggable Edit Mode overlay frame whose bounding box covers all icons
+-- in a group.  Dragging it live-repositions the member icons and commits their
+-- positions on drop (same sub-pixel fix as right-click group drag).
+-- Shift held during drag: snaps the whole group edge-to-edge to the nearest
+-- same-size outside icon, with live preview.  On drop the overlays are rebuilt
+-- so newly-adjacent groups merge into a single blue frame.
+local function BuildEditModeGroupFrame(group)
+    local minX, minY =  math.huge,  math.huge
+    local maxX, maxY = -math.huge, -math.huge
+
+    for _, icon in ipairs(group) do
+        local cx, cy = icon.frame:GetCenter()
+        local half   = icon.frame:GetWidth() * 0.5
+        minX = math.min(minX, cx - half)
+        minY = math.min(minY, cy - half)
+        maxX = math.max(maxX, cx + half)
+        maxY = math.max(maxY, cy + half)
+    end
+
+    local PAD    = 6
+    local uiCX, uiCY = UIParent:GetCenter()
+    local grpCX  = (minX + maxX) * 0.5
+    local grpCY  = (minY + maxY) * 0.5
+
+    -- Record per-icon offsets from the group center (screen coords)
+    local offsets = {}
+    for _, icon in ipairs(group) do
+        local cx, cy = icon.frame:GetCenter()
+        offsets[#offsets + 1] = {
+            icon    = icon,
+            offsetX = cx - grpCX,
+            offsetY = cy - grpCY,
+        }
+    end
+
+    -- Set of globalIDs in this group — excluded from snap candidate search
+    local groupIDSet = {}
+    for _, icon in ipairs(group) do
+        groupIDSet[icon.globalID] = true
+    end
+    -- All BFS members share the same size
+    local mySize = math.floor(group[1].frame:GetWidth() + 0.5)
+
+    local f = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+    f:SetSize((maxX - minX) + PAD * 2, (maxY - minY) + PAD * 2)
+    f:SetPoint("CENTER", UIParent, "CENTER", grpCX - uiCX, grpCY - uiCY)
+    f:SetFrameStrata("DIALOG")
+    f:SetMovable(true)
+    f:SetClampedToScreen(true)
+    f:RegisterForDrag("LeftButton")
+    f:EnableMouse(true)
+
+    -- Blue translucent fill + bright border to match WoW Edit Mode aesthetic
+    f:SetBackdrop({
+        bgFile   = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        edgeSize = 8,
+        insets   = { left = 4, right = 4, top = 4, bottom = 4 },
+    })
+    f:SetBackdropColor(0.1, 0.5, 1.0, 0.12)
+    f:SetBackdropBorderColor(0.3, 0.8, 1.0, 1.0)
+
+    -- Small label above the frame: icon count
+    local label = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    label:SetPoint("BOTTOM", f, "TOP", 0, 2)
+    label:SetFont(FONT_PATH, 11, FONT_FLAGS)
+    label:SetText(#group == 1 and "Icon" or (#group .. " Icons"))
+    label:SetTextColor(0.3, 0.8, 1.0, 1.0)
+
+    local isDragging    = false
+    local isSnapFrozen  = false   -- true while shift-snap has frozen the overlay
+    local cursorOffX    = 0       -- cursor→group-center X offset recorded at drag start
+    local cursorOffY    = 0       -- cursor→group-center Y offset recorded at drag start
+    local soloEntry     = nil     -- set when shift held at drag start: icon being pulled out
+    local soloIconOffX  = 0       -- cursor→solo icon center X offset at drag start
+    local soloIconOffY  = 0       -- cursor→solo icon center Y offset at drag start
+
+    f:SetScript("OnDragStart", function(self)
+        isDragging   = true
+        isSnapFrozen = false
+        local rawX, rawY = GetCursorPosition()
+        local uiScale    = UIParent:GetEffectiveScale()
+        local curX       = rawX / uiScale
+        local curY       = rawY / uiScale
+        local cx, cy     = self:GetCenter()
+        cursorOffX = cx - curX
+        cursorOffY = cy - curY
+
+        -- Shift held at drag start: pull only the closest member icon out of the
+        -- group.  Only meaningful when there are at least two icons in the group.
+        if IsShiftKeyDown() and #offsets > 1 then
+            local bestDist = math.huge
+            soloEntry = nil
+            for _, entry in ipairs(offsets) do
+                local icx, icy = entry.icon.frame:GetCenter()
+                local d = math.sqrt((curX - icx)^2 + (curY - icy)^2)
+                if d < bestDist then
+                    bestDist     = d
+                    soloEntry    = entry
+                    soloIconOffX = icx - curX
+                    soloIconOffY = icy - curY
+                end
+            end
+            -- Gold border: visual cue that solo-pull mode is active.
+            -- Also break the pulled icon's ctrl corner-attachment (user is
+            -- manually repositioning it; the remaining group members keep theirs).
+            if soloEntry then
+                soloEntry.icon.db.ctrlAttachedTo = nil
+                soloEntry.icon.db.ctrlOffsetX    = nil
+                soloEntry.icon.db.ctrlOffsetY    = nil
+                f:SetBackdropBorderColor(1.0, 0.8, 0.2, 1.0)
+            end
+        else
+            -- Normal group drag: break ctrl attachment for every icon being moved.
+            for _, entry in ipairs(offsets) do
+                entry.icon.db.ctrlAttachedTo = nil
+                entry.icon.db.ctrlOffsetX    = nil
+                entry.icon.db.ctrlOffsetY    = nil
+            end
+            soloEntry = nil
+        end
+
+        self:StartMoving()
+    end)
+
+    f:SetScript("OnUpdate", function(self)
+        if not isDragging then return end
+
+        local rawX, rawY = GetCursorPosition()
+        local uiScale    = UIParent:GetEffectiveScale()
+        local curX       = rawX / uiScale
+        local curY       = rawY / uiScale
+        local puiCX, puiCY = UIParent:GetCenter()
+
+        if soloEntry then
+            -- Solo-pull mode: only the grabbed icon follows the cursor;
+            -- all other group members stay at their original positions.
+            soloEntry.icon.frame:ClearAllPoints()
+            soloEntry.icon.frame:SetPoint("CENTER", UIParent, "CENTER",
+                curX + soloIconOffX - puiCX,
+                curY + soloIconOffY - puiCY)
+            return
+        end
+
+        -- "Virtual" group center: where the center would be if purely following
+        -- the cursor.  Using cursor position avoids the frozen-frame / always-
+        -- snapped problem: once the overlay is frozen, frame:GetCenter() would
+        -- always return the snap point and the group could never escape.
+        local virtualCX = curX + cursorOffX
+        local virtualCY = curY + cursorOffY
+
+        if IsShiftKeyDown() then
+            -- Find best edge-to-edge snap for any member vs any outside icon
+            local bestDist  = math.huge
+            local bestSnapCX, bestSnapCY = nil, nil
+
+            for _, entry in ipairs(offsets) do
+                local memberCX = virtualCX + entry.offsetX
+                local memberCY = virtualCY + entry.offsetY
+                for otherID, other in pairs(icons) do
+                    if not groupIDSet[otherID] and other.frame:IsShown()
+                       and not other.db.ctrlAttachedTo
+                       and math.abs(other.frame:GetHeight() - mySize) < 0.5 then
+                        local oCX, oCY = other.frame:GetCenter()
+                        for dx = -1, 1 do
+                            for dy = -1, 1 do
+                                if not (dx == 0 and dy == 0) then
+                                    local posX = oCX + dx * mySize
+                                    local posY = oCY + dy * mySize
+                                    local dist = math.sqrt((memberCX - posX)^2 + (memberCY - posY)^2)
+                                    if dist < SNAP_THRESHOLD and dist < bestDist then
+                                        bestDist  = dist
+                                        -- Shift the whole group so this member lands at posX/posY
+                                        bestSnapCX = virtualCX + (posX - memberCX)
+                                        bestSnapCY = virtualCY + (posY - memberCY)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+
+            if bestSnapCX then
+                if not isSnapFrozen then
+                    self:StopMovingOrSizing()
+                    isSnapFrozen = true
+                end
+                self:ClearAllPoints()
+                self:SetPoint("CENTER", UIParent, "CENTER",
+                    bestSnapCX - puiCX, bestSnapCY - puiCY)
+                for _, entry in ipairs(offsets) do
+                    entry.icon.frame:ClearAllPoints()
+                    entry.icon.frame:SetPoint("CENTER", UIParent, "CENTER",
+                        bestSnapCX + entry.offsetX - puiCX,
+                        bestSnapCY + entry.offsetY - puiCY)
+                end
+                return
+            end
+        end
+
+        -- No snap (shift not held or no candidate found)
+        if isSnapFrozen then
+            isSnapFrozen = false
+            self:StartMoving()
+            return
+        end
+
+        -- Normal movement: keep member icons in sync with dragged overlay frame
+        local cx, cy = self:GetCenter()
+        for _, entry in ipairs(offsets) do
+            entry.icon.frame:ClearAllPoints()
+            entry.icon.frame:SetPoint("CENTER", UIParent, "CENTER",
+                cx + entry.offsetX - puiCX,
+                cy + entry.offsetY - puiCY)
+        end
+    end)
+
+    f:SetScript("OnDragStop", function(self)
+        isDragging   = false
+        isSnapFrozen = false
+        self:StopMovingOrSizing()
+        -- Restore blue border regardless of which mode we were in
+        f:SetBackdropBorderColor(0.3, 0.8, 1.0, 1.0)
+        local puiCX, puiCY = UIParent:GetCenter()
+
+        if soloEntry then
+            -- Final re-anchor from cursor position (eliminates last-tick drift)
+            local rawX, rawY = GetCursorPosition()
+            local uiScale    = UIParent:GetEffectiveScale()
+            local curX = rawX / uiScale
+            local curY = rawY / uiScale
+            soloEntry.icon.frame:ClearAllPoints()
+            soloEntry.icon.frame:SetPoint("CENTER", UIParent, "CENTER",
+                curX + soloIconOffX - puiCX,
+                curY + soloIconOffY - puiCY)
+            SaveIconPos(soloEntry.icon)
+            if soloEntry.icon.onMove then soloEntry.icon.onMove(soloEntry.icon.db) end
+            RepositionCtrlChildren(soloEntry.icon.globalID)
+            soloEntry = nil
+            shmIcons:EnterEditMode()
+            return
+        end
+
+        -- Re-anchor from the frame's actual committed center to eliminate
+        -- the sub-pixel drift that accumulates from OnUpdate / StopMovingOrSizing
+        local cx, cy = self:GetCenter()
+        for _, entry in ipairs(offsets) do
+            entry.icon.frame:ClearAllPoints()
+            entry.icon.frame:SetPoint("CENTER", UIParent, "CENTER",
+                cx + entry.offsetX - puiCX,
+                cy + entry.offsetY - puiCY)
+            SaveIconPos(entry.icon)
+            if entry.icon.onMove then entry.icon.onMove(entry.icon.db) end
+        end
+        -- Reposition any ctrl corner-attached children of each moved icon.
+        for _, entry in ipairs(offsets) do
+            RepositionCtrlChildren(entry.icon.globalID)
+        end
+        -- Snap may have made two groups adjacent (or broken one apart).
+        -- Rebuild all overlay frames so groupings reflect the new layout.
+        shmIcons:EnterEditMode()
+    end)
+
+    return f
 end
 
 -- ============================================================
@@ -553,10 +893,13 @@ local function BuildIconFrame(globalID, db)
 
         -- Default: edge-aligned snap to nearest same-size icon.
         -- dx=0,dy=0 skipped — that position would perfectly overlap the target.
+        -- Ctrl corner-attached icons are excluded: they are not independent snap
+        -- targets; they follow their parent and should not be snapped to.
         local bestDist = math.huge
         local best = nil
         for otherID, other in pairs(icons) do
             if otherID ~= globalID and other.frame:IsShown()
+               and not other.db.ctrlAttachedTo
                and math.abs(other.frame:GetHeight() - mySize) < 0.5 then
                 local oCX, oCY = other.frame:GetCenter()
                 for dx = -1, 1 do
@@ -584,7 +927,11 @@ local function BuildIconFrame(globalID, db)
 
     frame:SetScript("OnDragStart", function(self, button)
         if button == "LeftButton" then
-            -- Solo drag with snap preview
+            -- Solo drag with snap preview.
+            -- Grabbing the icon breaks any existing ctrl corner-attachment.
+            db.ctrlAttachedTo = nil
+            db.ctrlOffsetX    = nil
+            db.ctrlOffsetY    = nil
             dragState = {
                 originalSize  = frame:GetWidth(),
                 currentSnapID = nil,
@@ -664,6 +1011,12 @@ local function BuildIconFrame(globalID, db)
         elseif button == "RightButton" then
             -- Group drag: BFS from this icon to find all recursively adjacent
             -- same-size icons. All members move together, maintaining offsets.
+            -- Ctrl corner-attached icons are excluded from the BFS: they follow
+            -- their parent automatically via RepositionCtrlChildren after drop.
+            -- Grabbing the primary icon also breaks its own ctrl attachment.
+            db.ctrlAttachedTo = nil
+            db.ctrlOffsetX    = nil
+            db.ctrlOffsetY    = nil
             local mySize         = frame:GetWidth()
             local initCX, initCY = frame:GetCenter()
             local uiCX, uiCY     = UIParent:GetCenter()
@@ -677,6 +1030,7 @@ local function BuildIconFrame(globalID, db)
                 local curr = table.remove(queue, 1)
                 for otherID, other in pairs(icons) do
                     if not visited[otherID] and other.frame:IsShown()
+                       and not other.db.ctrlAttachedTo
                        and math.abs(other.frame:GetHeight() - mySize) < 0.5 then
                         local ocx, ocy = other.frame:GetCenter()
                         local adx = math.abs(ocx - curr.cx)
@@ -744,12 +1098,15 @@ local function BuildIconFrame(globalID, db)
                     finalCX + member.offsetX - finalUiCX,
                     finalCY + member.offsetY - finalUiCY)
             end
-            -- Commit final positions for the dragged icon and all group members
+            -- Commit final positions for the dragged icon and all group members.
+            -- Then reposition any ctrl corner-attached children so they follow.
             SaveIconPos(icon)
             if icon.onMove then icon.onMove(icon.db) end
+            RepositionCtrlChildren(globalID)
             for _, member in ipairs(dragState.groupMembers) do
                 SaveIconPos(member.icon)
                 if member.icon.onMove then member.icon.onMove(member.icon.db) end
+                RepositionCtrlChildren(member.icon.globalID)
             end
         elseif dragState and dragState.pendingSnap then
             local snap   = dragState.pendingSnap
@@ -776,9 +1133,33 @@ local function BuildIconFrame(globalID, db)
             db.x     = snap.cx
             db.y     = snap.cy
             db.strata = frame:GetFrameStrata()
+            if isCtrl then
+                -- Record ctrl corner-attachment: child follows parent on all future moves.
+                -- Store the fixed offset from the parent's center so RepositionCtrlChildren
+                -- can recompute the child's absolute position whenever the parent moves.
+                db.ctrlAttachedTo = snap.targetID
+                local parentIcon = icons[snap.targetID]
+                if parentIcon then
+                    local pCX, pCY   = parentIcon.frame:GetCenter()
+                    local puiCX, puiCY = UIParent:GetCenter()
+                    db.ctrlOffsetX = snap.cx - (pCX - puiCX)
+                    db.ctrlOffsetY = snap.cy - (pCY - puiCY)
+                end
+            else
+                -- Non-ctrl snap: clear any previous ctrl attachment.
+                db.ctrlAttachedTo = nil
+                db.ctrlOffsetX    = nil
+                db.ctrlOffsetY    = nil
+            end
             if icon.onMove then icon.onMove(db) end
+            -- Reposition any ctrl children of this icon (it may have been moved).
+            RepositionCtrlChildren(globalID)
         else
-            -- No snap — commit any shift-resize, resolve overlaps, then save
+            -- No snap — commit any shift-resize, resolve overlaps, then save.
+            -- Moving without a ctrl-snap clears any existing ctrl attachment.
+            db.ctrlAttachedTo = nil
+            db.ctrlOffsetX    = nil
+            db.ctrlOffsetY    = nil
             local finalSize = frame:GetWidth()
             if finalSize ~= dragState.originalSize then
                 db.size = finalSize
@@ -789,13 +1170,20 @@ local function BuildIconFrame(globalID, db)
             end
             SaveIconPos(icon)
             if icon.onMove then icon.onMove(icon.db) end
+            RepositionCtrlChildren(globalID)
         end
 
         dragState = nil
     end)
 
     resizeHandle:SetScript("OnMouseDown", function(self, button)
-        if button == "LeftButton" then frame:StartSizing("BOTTOMRIGHT") end
+        if button == "LeftButton" then
+            -- Resizing breaks any existing ctrl corner-attachment.
+            db.ctrlAttachedTo = nil
+            db.ctrlOffsetX    = nil
+            db.ctrlOffsetY    = nil
+            frame:StartSizing("BOTTOMRIGHT")
+        end
     end)
     resizeHandle:SetScript("OnMouseUp", function()
         frame:StopMovingOrSizing()
@@ -1087,4 +1475,88 @@ function shmIcons:GetAll()
         })
     end
     return result
+end
+
+-- ============================================================
+-- Edit Mode public API
+-- ============================================================
+
+-- Build (or rebuild) edit-mode group overlay frames for all registered icons.
+-- Called automatically when WoW's Edit Mode panel opens; also callable manually.
+function shmIcons:EnterEditMode()
+    -- Tear down any stale frames from a previous session
+    for _, f in ipairs(editModeGroupFrames) do
+        f:SetScript("OnDragStart", nil)
+        f:SetScript("OnUpdate",    nil)
+        f:SetScript("OnDragStop",  nil)
+        f:Hide()
+    end
+    editModeGroupFrames = {}
+    isInEditMode = true
+
+    -- Show all enabled icons so the user can see and position every icon
+    -- regardless of current game-state visibility (combat, spell readiness, etc.).
+    for _, icon in pairs(icons) do
+        if icon.enabled then
+            icon.frame:Show()
+        end
+    end
+
+    local groups = ComputeIconGroups()
+    for _, group in ipairs(groups) do
+        table.insert(editModeGroupFrames, BuildEditModeGroupFrame(group))
+    end
+end
+
+-- Hide and destroy all edit-mode group overlay frames.
+-- Called automatically when WoW's Edit Mode panel closes; also callable manually.
+function shmIcons:ExitEditMode()
+    isInEditMode = false
+    for _, f in ipairs(editModeGroupFrames) do
+        f:SetScript("OnDragStart", nil)
+        f:SetScript("OnUpdate",    nil)
+        f:SetScript("OnDragStop",  nil)
+        f:Hide()
+    end
+    editModeGroupFrames = {}
+
+    -- Re-hide icons whose visibility is driven by game state (combat, spell
+    -- readiness, etc.). These were force-shown for positioning; returning them
+    -- to hidden lets their consumer addon restore them when conditions are met.
+    for globalID, icon in pairs(icons) do
+        local addonName = globalID:match("^(.+):.+$")
+        if addonName and EDIT_MODE_REACTIVE_ADDONS[addonName] then
+            icon.frame:Hide()
+        end
+    end
+end
+
+function shmIcons:IsInEditMode()
+    return isInEditMode
+end
+
+-- ============================================================
+-- WoW Edit Mode hook
+-- Hook EditModeManagerFrame once it's available after PLAYER_LOGIN so that
+-- opening/closing the Edit Mode panel automatically syncs shmIcons overlays.
+-- HookScript is additive — it does not replace existing scripts.
+-- ============================================================
+do
+    local hookFrame = CreateFrame("Frame")
+    hookFrame:RegisterEvent("PLAYER_LOGIN")
+    hookFrame:SetScript("OnEvent", function(self)
+        if EditModeManagerFrame then
+            EditModeManagerFrame:HookScript("OnShow", function()
+                shmIcons:EnterEditMode()
+            end)
+            EditModeManagerFrame:HookScript("OnHide", function()
+                shmIcons:ExitEditMode()
+            end)
+            -- Handle the unlikely case where Edit Mode is already open on login
+            if EditModeManagerFrame:IsShown() then
+                shmIcons:EnterEditMode()
+            end
+        end
+        self:UnregisterEvent("PLAYER_LOGIN")
+    end)
 end
