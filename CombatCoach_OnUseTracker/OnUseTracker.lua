@@ -42,6 +42,10 @@ _G["BarbedShotDebuffRemaining"]      = 0
 _G["NaturesAllyActiveTracker"]       = false
 _G["BeastCleaveActiveTracker"]       = false
 _G["BeastCleaveRemaining"]           = 0
+_G["VivifyProcActiveTracker"]        = false
+_G["VivifyProcRemaining"]            = 0
+_G["HojsActiveTracker"]              = false
+_G["HojsRemaining"]                  = 0
 
 local OUT_IconEnabled = false
 

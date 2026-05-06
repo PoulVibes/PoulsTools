@@ -56,8 +56,10 @@ local currentSlotDefs        = nil  -- slot set currently registered, for lock c
 local onUseWindowTimer       = nil
 local iconFrameRef           = nil
 
-local vivifyProcActive = false
-local vivifyProcTimer  = nil
+local vivifyProcActive    = false
+local vivifyProcTimer     = nil
+local vivifyProcExpiresAt = 0
+local vivifyProcTicker    = nil
 
 local function CancelTimer(timerObj)
     if timerObj and timerObj.Cancel then timerObj:Cancel() end
@@ -163,9 +165,13 @@ local function FireVivifyEvent(event)
 end
 
 local function ClearVivifyProc()
-    vivifyProcActive = false
+    vivifyProcActive    = false
+    vivifyProcExpiresAt = 0
+    vivifyProcTicker    = CancelTimer(vivifyProcTicker)
     if vivifyProcTimer then vivifyProcTimer:Cancel() end
     vivifyProcTimer = nil
+    _G["VivifyProcActiveTracker"] = false
+    _G["VivifyProcRemaining"]     = 0
     HideIcon(KEY_VIVIFY)
 end
 
@@ -173,7 +179,19 @@ local function HandleVivifyProcSpell(spellID)
     -- RSK or RWK with talent → start proc window
     if (spellID == RSK_SPELL_ID or spellID == RWK_SPELL_ID)
         and (IsPlayerSpell(VIVACIOUS_VIVIFICATION_WW) or IsPlayerSpell(VIVACIOUS_VIVIFICATION_MW)) then
-        vivifyProcActive = true
+        vivifyProcActive    = true
+        vivifyProcExpiresAt = GetTime() + VIVIFY_PROC_DURATION
+        _G["VivifyProcActiveTracker"] = true
+        _G["VivifyProcRemaining"]     = VIVIFY_PROC_DURATION
+        vivifyProcTicker = CancelTimer(vivifyProcTicker)
+        vivifyProcTicker = C_Timer.NewTicker(0.1, function()
+            local remains = vivifyProcExpiresAt - GetTime()
+            if remains > 0 then
+                _G["VivifyProcRemaining"] = remains
+            else
+                ClearVivifyProc()
+            end
+        end)
         ShowVivifyProcIcon(VIVIFY_PROC_DURATION)
         if vivifyProcTimer then vivifyProcTimer:Cancel() end
         vivifyProcTimer = C_Timer.NewTimer(VIVIFY_PROC_DURATION, function()
@@ -196,6 +214,8 @@ local function UpdateHojsDisplay()
     if not iconsRegistered then return end
     local count = #hojsTimers
     if count == 0 then
+        _G["HojsActiveTracker"] = false
+        _G["HojsRemaining"]     = 0
         shmIcons:SetStacks(ADDON_NAME, KEY_HOJS, 0)
         HideIcon(KEY_HOJS)
         return
@@ -206,6 +226,8 @@ local function UpdateHojsDisplay()
         local rem = (e.expiresAt or 0) - now
         if rem > maxRemaining then maxRemaining = rem end
     end
+    _G["HojsActiveTracker"] = (maxRemaining > 0)
+    _G["HojsRemaining"]     = maxRemaining
     if maxRemaining > 0 then
         ShowIcon(KEY_HOJS, maxRemaining)
     else
@@ -223,6 +245,8 @@ local function ClearHojs()
         if e.timer and e.timer.Cancel then e.timer:Cancel() end
     end
     hojsTimers = {}
+    _G["HojsActiveTracker"] = false
+    _G["HojsRemaining"]     = 0
     shmIcons:SetStacks(ADDON_NAME, KEY_HOJS, 0)
     HideIcon(KEY_HOJS)
 end

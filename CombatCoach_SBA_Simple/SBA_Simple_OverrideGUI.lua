@@ -133,12 +133,14 @@ for _, ct in ipairs(COND_TYPES) do COND_BY_ID[ct.id] = ct end
 
 -- Plugin options shown inside the Plugin / Proc condition picker
 local PLUGIN_OPTS_WW = {
-    { id = "zenith",    label = "Zenith"            },
-    { id = "last_combo_eq", label = "Combo"         },
-    { id = "bok_proc",  label = "Blackout Kick!",    supportsProcMode = true, default = 4 },
-    { id = "rwk_proc",  label = "Rushing Wind Kick", supportsProcMode = true, default = 4 },
-    { id = "docj_proc", label = "Dance of Chi-Ji",   supportsProcMode = true, default = 4 },
-    { id = "tod_proc",  label = "Touch of Death" },
+    { id = "zenith",      label = "Zenith"                      },
+    { id = "last_combo_eq", label = "Combo"                    },
+    { id = "bok_proc",    label = "Blackout Kick!",              supportsProcMode = true, default = 4  },
+    { id = "rwk_proc",    label = "Rushing Wind Kick",           supportsProcMode = true, default = 4  },
+    { id = "docj_proc",   label = "Dance of Chi-Ji",             supportsProcMode = true, default = 4  },
+    { id = "tod_proc",    label = "Touch of Death"               },
+    { id = "vivify_proc", label = "Vivify Proc",                  supportsProcMode = true, default = 20 },
+    { id = "hojs",        label = "Heart of the Jade Serpent",   supportsProcMode = true, default = 4  },
 }
 
 local PLUGIN_OPTS_BM = {
@@ -157,8 +159,23 @@ local PLUGIN_OPTS_BM = {
     { id = "beast_cleave",            label = "Beast Cleave",            supportsProcMode = true, default = 8 },
 }
 
-local WINDWALKER_SPEC_ID = 269
-local BM_HUNTER_SPEC_ID = 253
+local PLUGIN_OPTS_SV = {
+    { id = "howl_proc",              label = "Howl of the Pack Leader", supportsProcMode = true, default = 29 },
+    { id = "hogstrider_proc",        label = "Hogstrider",              supportsProcMode = true, default = 19 },
+    { id = "moonlight_chakram_proc", label = "Moonlight Chakram",       supportsProcMode = true, default = 14 },
+}
+
+-- Brewmaster (268) and Mistweaver (270) share the same plugin options.
+local PLUGIN_OPTS_VIVIFY_MONK = {
+    { id = "tod_proc",    label = "Touch of Death"                              },
+    { id = "vivify_proc", label = "Vivify Proc", supportsProcMode = true, default = 20 },
+}
+
+local WINDWALKER_SPEC_ID      = 269
+local BM_HUNTER_SPEC_ID       = 253
+local SURVIVAL_HUNTER_SPEC_ID = 255
+local BM_MONK_SPEC_ID         = 268
+local MW_MONK_SPEC_ID         = 270
 
 local function IsWindwalkerGUI()
     return editSpecID == WINDWALKER_SPEC_ID
@@ -168,8 +185,17 @@ local function IsBeastMasteryHunterGUI()
     return editSpecID == BM_HUNTER_SPEC_ID
 end
 
+local function IsSurvivalHunterGUI()
+    return editSpecID == SURVIVAL_HUNTER_SPEC_ID
+end
+
+local function IsVivifyMonkGUI()
+    return editSpecID == BM_MONK_SPEC_ID or editSpecID == MW_MONK_SPEC_ID
+end
+
 local function SupportsPluginGUI()
     return IsWindwalkerGUI() or IsBeastMasteryHunterGUI()
+        or IsSurvivalHunterGUI() or IsVivifyMonkGUI()
 end
 
 local function GetVisibleCondTypes()
@@ -188,8 +214,10 @@ local function GetVisibleCondTypes()
 end
 
 local function GetVisiblePluginOptions()
-    if IsWindwalkerGUI() then return PLUGIN_OPTS_WW end
-    if IsBeastMasteryHunterGUI() then return PLUGIN_OPTS_BM end
+    if IsWindwalkerGUI()         then return PLUGIN_OPTS_WW          end
+    if IsBeastMasteryHunterGUI() then return PLUGIN_OPTS_BM          end
+    if IsSurvivalHunterGUI()     then return PLUGIN_OPTS_SV          end
+    if IsVivifyMonkGUI()         then return PLUGIN_OPTS_VIVIFY_MONK end
     return {}
 end
 
@@ -263,6 +291,21 @@ local PROC_PLUGIN_BY_ID = {
         label = "Beast Cleave",
         activeFlag = "BeastCleaveActiveTracker",
         timerVar = "BeastCleaveRemaining",
+    },
+    vivify_proc = {
+        label = "Vivify Proc",
+        activeFlag = "VivifyProcActiveTracker",
+        timerVar = "VivifyProcRemaining",
+    },
+    hojs = {
+        label = "Heart of the Jade Serpent",
+        activeFlag = "HojsActiveTracker",
+        timerVar = "HojsRemaining",
+    },
+    moonlight_chakram_proc = {
+        label = "Moonlight Chakram",
+        activeFlag = "moonlight_chakram_proc_active",
+        timerVar = "moonlight_chakram_proc_timer",
     },
 }
 
@@ -738,13 +781,29 @@ local RESOURCE_SET = {
 }
 
 local PLUGIN_SET = {
-    ["zenith"] = true,
-    ["last_combo_eq"] = true,
-    ["bok_proc"] = true,
-    ["rwk_proc"] = true,
-    ["docj_proc"] = true,
-    ["docj_timer"] = true,
-    ["barbed_shot_debuff"] = true,
+    ["zenith"]                   = true,
+    ["last_combo_eq"]            = true,
+    ["bok_proc"]                 = true,
+    ["rwk_proc"]                 = true,
+    ["docj_proc"]                = true,
+    ["docj_timer"]               = true,
+    ["tod_proc"]                 = true,
+    ["vivify_proc"]              = true,
+    ["hojs"]                     = true,
+    ["bestial_wrath_active"]     = true,
+    ["bestial_wrath_cooldown"]   = true,
+    ["barbed_shot_debuff"]       = true,
+    ["barbed_shot_stacks"]       = true,
+    ["kill_command_stacks"]      = true,
+    ["withering_fire_active"]    = true,
+    ["withering_fire"]           = true,
+    ["howl_proc"]                = true,
+    ["black_arrow_proc"]         = true,
+    ["wailing_arrow_proc"]       = true,
+    ["hogstrider_proc"]          = true,
+    ["moonlight_chakram_proc"]   = true,
+    ["natures_ally"]             = true,
+    ["beast_cleave"]             = true,
 }
 
 local function InferMissingPrefix(raw, validSet)
