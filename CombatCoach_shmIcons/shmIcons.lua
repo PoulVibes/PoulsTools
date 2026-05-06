@@ -324,6 +324,17 @@ local function RepositionCtrlChildren(parentGlobalID)
     end
 end
 
+-- Module-level reference to the single edit-mode settings window.
+-- Only one settings window is allowed open at a time.
+local editModeSettingsWindow = nil
+
+local function CloseEditModeSettingsWindow()
+    if editModeSettingsWindow then
+        editModeSettingsWindow:Hide()
+        editModeSettingsWindow = nil
+    end
+end
+
 -- BFS: return all connected groups of adjacent same-size shown icons.
 -- Reuses the same adjacency parameters as the right-click group drag so
 -- groups are consistent between the two movement methods.
@@ -438,8 +449,185 @@ local function BuildEditModeGroupFrame(group)
     local soloEntry     = nil     -- set when shift held at drag start: icon being pulled out
     local soloIconOffX  = 0       -- cursor→solo icon center X offset at drag start
     local soloIconOffY  = 0       -- cursor→solo icon center Y offset at drag start
+    local clickPending  = false   -- true between OnMouseDown and OnDragStart; click vs drag detection
+
+    -- Opens a settings panel for this group's icons (resize slider).
+    -- Closes any previously open panel first so only one is ever shown.
+    local function OpenSettingsWindow()
+        CloseEditModeSettingsWindow()
+
+        local currentSize = mySize
+
+        -- Capture the group's bounding-box center ONCE, locked for the life of the
+        -- window.  Also normalise each icon's offset as a fraction of the current
+        -- icon size (e.g. an adjacent icon has nx=±1.0, ny=0.0).  Positions are
+        -- then always computed as fixedCenter + norm*newSize, so floating-point
+        -- errors can never accumulate no matter how many times the slider moves.
+        local half0 = currentSize * 0.5
+        local minCX0, minCY0 =  math.huge,  math.huge
+        local maxCX0, maxCY0 = -math.huge, -math.huge
+        for _, entry in ipairs(offsets) do
+            local cx, cy = entry.icon.frame:GetCenter()
+            minCX0 = math.min(minCX0, cx - half0)
+            minCY0 = math.min(minCY0, cy - half0)
+            maxCX0 = math.max(maxCX0, cx + half0)
+            maxCY0 = math.max(maxCY0, cy + half0)
+        end
+        local fixedGCX = (minCX0 + maxCX0) * 0.5
+        local fixedGCY = (minCY0 + maxCY0) * 0.5
+        for _, entry in ipairs(offsets) do
+            entry.nx = (currentSize > 0) and (entry.offsetX / currentSize) or 0
+            entry.ny = (currentSize > 0) and (entry.offsetY / currentSize) or 0
+        end
+
+        local win = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+        win:SetSize(300, 100)
+        win:SetPoint("CENTER", UIParent, "CENTER", 0, 180)
+        win:SetFrameStrata("TOOLTIP")
+        win:SetFrameLevel(100)
+        win:SetMovable(true)
+        win:SetClampedToScreen(true)
+        win:EnableMouse(true)
+        win:RegisterForDrag("LeftButton")
+        win:SetScript("OnDragStart", function(self) self:StartMoving() end)
+        win:SetScript("OnDragStop",  function(self) self:StopMovingOrSizing() end)
+        win:SetBackdrop({
+            bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            edgeSize = 12,
+            insets   = { left = 4, right = 4, top = 4, bottom = 4 },
+        })
+        win:SetBackdropColor(0.05, 0.05, 0.12, 0.95)
+        win:SetBackdropBorderColor(0.3, 0.8, 1.0, 1.0)
+
+        -- Safety net: clear the module reference whenever this window hides,
+        -- regardless of which code path caused the hide.
+        win:SetScript("OnHide", function()
+            if editModeSettingsWindow == win then
+                editModeSettingsWindow = nil
+            end
+        end)
+
+        local title = win:CreateFontString(nil, "OVERLAY")
+        title:SetFont(FONT_PATH, 12, FONT_FLAGS)
+        title:SetPoint("TOP", win, "TOP", 0, -12)
+        title:SetText(#group == 1 and "Icon Settings" or (#group .. " Icon Group Settings"))
+        title:SetTextColor(0.3, 0.8, 1.0, 1.0)
+
+        -- Plain X close button (UIPanelCloseButton template has an XML OnClick
+        -- that conflicts with SetScript; use a simple button instead).
+        local closeBtn = CreateFrame("Button", nil, win)
+        closeBtn:SetSize(22, 22)
+        closeBtn:SetPoint("TOPRIGHT", win, "TOPRIGHT", -6, -6)
+        closeBtn:EnableMouse(true)
+        local closeLabel = closeBtn:CreateFontString(nil, "OVERLAY")
+        closeLabel:SetFont(FONT_PATH, 16, FONT_FLAGS)
+        closeLabel:SetText("x")
+        closeLabel:SetTextColor(0.7, 0.2, 0.2, 1.0)
+        closeLabel:SetAllPoints(closeBtn)
+        closeBtn:SetScript("OnEnter", function() closeLabel:SetTextColor(1.0, 0.5, 0.5, 1.0) end)
+        closeBtn:SetScript("OnLeave", function() closeLabel:SetTextColor(0.7, 0.2, 0.2, 1.0) end)
+        closeBtn:SetScript("OnClick", function()
+            CloseEditModeSettingsWindow()
+            shmIcons:EnterEditMode()
+        end)
+
+        local sizeLabel = win:CreateFontString(nil, "OVERLAY")
+        sizeLabel:SetFont(FONT_PATH, 11, FONT_FLAGS)
+        sizeLabel:SetPoint("TOPLEFT", win, "TOPLEFT", 14, -52)
+        sizeLabel:SetText("Size:")
+        sizeLabel:SetTextColor(1, 1, 1, 1)
+
+        local slider = CreateFrame("Slider", nil, win, "BackdropTemplate")
+        slider:SetOrientation("HORIZONTAL")
+        slider:SetPoint("LEFT", sizeLabel, "RIGHT", 8, 0)
+        slider:SetSize(190, 16)
+        slider:SetMinMaxValues(MIN_SIZE, MAX_SIZE)
+        slider:SetValueStep(1)
+
+        local thumb = slider:CreateTexture(nil, "OVERLAY")
+        thumb:SetTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
+        thumb:SetSize(32, 18)
+        slider:SetThumbTexture(thumb)
+        slider:SetBackdrop({
+            bgFile   = "Interface\\Buttons\\UI-SliderBar-Background",
+            edgeFile = "Interface\\Buttons\\UI-SliderBar-Border",
+            edgeSize = 8,
+            insets   = { left = 3, right = 3, top = 6, bottom = 6 },
+        })
+
+        local sizeValue = win:CreateFontString(nil, "OVERLAY")
+        sizeValue:SetFont(FONT_PATH, 11, FONT_FLAGS)
+        sizeValue:SetPoint("LEFT", slider, "RIGHT", 6, 0)
+        sizeValue:SetText(tostring(currentSize))
+        sizeValue:SetTextColor(1, 1, 1, 1)
+
+        -- Resize callback.  Positions are always computed as:
+        --   fixedGCX + entry.nx * newSize
+        -- where entry.nx is the normalized offset captured once at window-open.
+        -- This eliminates all floating-point accumulation regardless of how many
+        -- times the slider moves back and forth.
+        slider:SetScript("OnValueChanged", function(self, value)
+            local newSize = math.max(MIN_SIZE, math.min(math.floor(value + 0.5), MAX_SIZE))
+            if newSize == currentSize then return end
+
+            local uiCX, uiCY = UIParent:GetCenter()
+            currentSize = newSize
+            sizeValue:SetText(tostring(newSize))
+
+            -- Recompute absolute offsets from normalized values and reposition.
+            -- SetSize triggers OnSizeChanged → ScaleText / ResizeGlow / db.size / onResize.
+            for _, entry in ipairs(offsets) do
+                entry.offsetX = entry.nx * newSize
+                entry.offsetY = entry.ny * newSize
+                entry.icon.frame:SetSize(newSize, newSize)
+                entry.icon.frame:ClearAllPoints()
+                entry.icon.frame:SetPoint("CENTER", UIParent, "CENTER",
+                    fixedGCX + entry.offsetX - uiCX,
+                    fixedGCY + entry.offsetY - uiCY)
+                SaveIconPos(entry.icon)
+                if entry.icon.onMove then entry.icon.onMove(entry.icon.db) end
+            end
+
+            -- Pull ctrl-attached children along with their parents.
+            for _, entry in ipairs(offsets) do
+                RepositionCtrlChildren(entry.icon.globalID)
+            end
+
+            -- Update mySize so OnUpdate snap searches use the new size.
+            mySize = newSize
+
+            -- Refit the overlay frame.  Use the fixed center + scaled half-extent
+            -- instead of reading frame positions (avoids any SetSize settle lag).
+            local half2 = newSize * 0.5
+            local minX2, minY2 =  math.huge,  math.huge
+            local maxX2, maxY2 = -math.huge, -math.huge
+            for _, entry in ipairs(offsets) do
+                local icx = fixedGCX + entry.offsetX
+                local icy = fixedGCY + entry.offsetY
+                minX2 = math.min(minX2, icx - half2)
+                minY2 = math.min(minY2, icy - half2)
+                maxX2 = math.max(maxX2, icx + half2)
+                maxY2 = math.max(maxY2, icy + half2)
+            end
+            local PAD2 = 6
+            f:SetSize((maxX2 - minX2) + PAD2 * 2, (maxY2 - minY2) + PAD2 * 2)
+            f:ClearAllPoints()
+            f:SetPoint("CENTER", UIParent, "CENTER",
+                (minX2 + maxX2) * 0.5 - uiCX,
+                (minY2 + maxY2) * 0.5 - uiCY)
+        end)
+
+        -- Set value AFTER the script so the initial call fires and confirms
+        -- currentSize; the newSize == currentSize guard makes it a no-op.
+        slider:SetValue(currentSize)
+
+        editModeSettingsWindow = win
+        win:Show()
+    end
 
     f:SetScript("OnDragStart", function(self)
+        clickPending = false  -- drag started; prevent OnMouseUp from treating this as a click
         isDragging   = true
         isSnapFrozen = false
         local rawX, rawY = GetCursorPosition()
@@ -624,6 +812,19 @@ local function BuildEditModeGroupFrame(group)
         -- Snap may have made two groups adjacent (or broken one apart).
         -- Rebuild all overlay frames so groupings reflect the new layout.
         shmIcons:EnterEditMode()
+    end)
+
+    -- Click detection: OnMouseDown arms the flag; OnDragStart disarms it so
+    -- that only a genuine click (no drag) opens the settings window.
+    f:SetScript("OnMouseDown", function(self, button)
+        if button == "LeftButton" then clickPending = true end
+    end)
+
+    f:SetScript("OnMouseUp", function(self, button)
+        if button == "LeftButton" and clickPending then
+            clickPending = false
+            OpenSettingsWindow()
+        end
     end)
 
     return f
@@ -1519,6 +1720,10 @@ function shmIcons:ExitEditMode()
         f:Hide()
     end
     editModeGroupFrames = {}
+
+    -- Close any open settings window; it holds closure references to the
+    -- now-destroyed overlay frames and must not be left open.
+    CloseEditModeSettingsWindow()
 
     -- Re-hide icons whose visibility is driven by game state (combat, spell
     -- readiness, etc.). These were force-shown for positioning; returning them
