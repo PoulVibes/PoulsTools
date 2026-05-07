@@ -1,7 +1,7 @@
 ## Interface: 120005
 ## Title: CombatCoach_shmIcons
 ## Notes: Shared icon/cooldown/glow/snap framework library for shmIcons-based addons.
-## Version: 1.1.0
+## Version: 1.1.1
 ## Author: Poul
 ## IconTexture: Interface\Icons\battleground_strongbox_skirmish_horde
 ## Category-enUS: CombatCoach

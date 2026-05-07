@@ -104,6 +104,7 @@ end
 local function UpdateTracker(key, updateStacks)
     local entry = tracked[key]
     if not entry then return end
+    if entry.dormant or not entry.spellID then return end  -- talent-gated; waiting for remap
     local spellInfo = C_Spell.GetSpellInfo(entry.spellID)
     shmIcons:SetIcon(ADDON_NAME, key, spellInfo and spellInfo.iconID or 134400)
     local cdInfo            = C_Spell.GetSpellCooldown(entry.spellID)
@@ -204,17 +205,16 @@ end
 local function AddTracker(spellName, specID)
     specID = specID or currentSpecID
     local spellID = C_Spell.GetSpellIDForSpellIdentifier(spellName)
-    if not spellID then
-        print("|cFFFF0000CooldownTracker: spell not found: " .. spellName .. "|r")
-        return
-    end
 
     local key = KeyFor(spellName)
     local db  = GetSpellDB(specID, key)
 
     db.enabled   = true
     db.spellName = spellName
-    db.spellID   = spellID
+    if spellID then
+        db.spellID = spellID
+    end
+    -- db.spellID may remain nil when the spell is a talent not currently trained.
 
     shmIcons:Register(ADDON_NAME, key, db, {
         onResize = function(sq)
@@ -222,11 +222,60 @@ local function AddTracker(spellName, specID)
         end,
     })
 
-    tracked[key] = { spellName = spellName, spellID = spellID }
-    UpdateTracker(key, true)
+    if spellID then
+        tracked[key] = { spellName = spellName, spellID = spellID }
+        UpdateTracker(key, true)
+    else
+        -- Spell not found — talent likely unlearned. Create a dormant tracker;
+        -- the frame exists but is disabled until the talent is learned.
+        tracked[key] = { spellName = spellName, spellID = nil, dormant = true }
+        shmIcons:SetIcon(ADDON_NAME, key, 134400)  -- question-mark placeholder
+        shmIcons:SetEnabled(ADDON_NAME, key, false)
+        shmIcons:SetVisible(ADDON_NAME, key, false)
+        -- shmIcons:SetEnabled writes db.enabled=false; restore it so LoadSpec
+        -- still picks this entry up on the next login/spec-change and can
+        -- attempt to remap it once the talent is (re-)learned.
+        db.enabled = true
+        print("|cFFFFFF00CooldownTracker: '" .. spellName .. "' is not currently talented. Tracker inactive until talent is learned.|r")
+    end
     EnsureTickerState()
     -- notify any UI listeners so they can refresh lists
     NotifyChangeListeners()
+end
+
+-- Reconcile all tracked entries against the current talent build.
+-- • Dormant entries whose spell is now known  → activate.
+-- • Active entries whose spell is no longer known → go dormant (hide/disable).
+-- Called on TRAIT_CONFIG_UPDATED and PLAYER_SPECIALIZATION_CHANGED.
+local function TryRemapDormant()
+    for key, entry in pairs(tracked) do
+        local spellID = C_Spell.GetSpellIDForSpellIdentifier(entry.spellName)
+
+        if entry.dormant then
+            -- Was dormant — check if the talent has been (re-)learned.
+            if spellID then
+                entry.spellID = spellID
+                entry.dormant = false
+                local db = GetSpecSpells(currentSpecID)[key]
+                if db then db.spellID = spellID end
+                shmIcons:SetEnabled(ADDON_NAME, key, true)
+                shmIcons:SetVisible(ADDON_NAME, key, true)
+                print("|cFF00FF00CooldownTracker: '" .. entry.spellName .. "' talent found — tracker activated.|r")
+                UpdateTracker(key, true)
+            end
+        else
+            -- Was active — check if the talent has been removed.
+            if not spellID then
+                entry.spellID = nil
+                entry.dormant = true
+                local db = GetSpecSpells(currentSpecID)[key]
+                if db then db.enabled = true end  -- keep enabled so LoadSpec reloads it
+                shmIcons:SetEnabled(ADDON_NAME, key, false)
+                shmIcons:SetVisible(ADDON_NAME, key, false)
+                print("|cFFFFFF00CooldownTracker: '" .. entry.spellName .. "' talent removed — tracker suspended.|r")
+            end
+        end
+    end
 end
 
 ticker.elapsed = 0
@@ -267,7 +316,7 @@ local function LoadSpec(specID)
     currentSpecID = specID
     local spells = GetSpecSpells(specID)
     for key, db in pairs(spells) do
-        if db.enabled and db.spellName and db.spellID then
+        if db.enabled and db.spellName then
             AddTracker(db.spellName, specID)
         end
     end
@@ -391,10 +440,17 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
     elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
         LoadSpec(GetCurrentSpecID())
 
+    elseif event == "TRAIT_CONFIG_UPDATED" then
+        -- Fires when the player commits talent changes. Try to activate any
+        -- dormant trackers whose spell is now in the talent loadout.
+        TryRemapDormant()
+
     elseif event == "SPELL_UPDATE_COOLDOWN" then
         for key, entry in pairs(tracked) do
-            local cd = C_Spell.GetSpellCooldown(entry.spellID)
-            tracked[key].isOnGCD = cd and cd.isOnGCD or false
+            if not entry.dormant and entry.spellID then
+                local cd = C_Spell.GetSpellCooldown(entry.spellID)
+                tracked[key].isOnGCD = cd and cd.isOnGCD or false
+            end
         end
         UpdateAllTrackers()
     elseif event == "PLAYER_TARGET_CHANGED" then
@@ -407,6 +463,7 @@ end)
 eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+eventFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
 eventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
 eventFrame:RegisterEvent("SPELL_UPDATE_CHARGES")
