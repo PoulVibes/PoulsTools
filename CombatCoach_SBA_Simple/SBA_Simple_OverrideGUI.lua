@@ -410,6 +410,52 @@ local function GetGuiRules(specID)
     return db[specID]
 end
 
+-- ── Multi-tab DB helpers ───────────────────────────────────────────────────
+local MAX_TABS_LIMIT = 5   -- mirrors MAX_TABS; declared here so DB helpers can use it before section-8 constants
+
+local function GetTabName(specID, tabIdx)
+    if tabIdx == 1 then return "Rotation" end
+    SBA_SimpleDB.tabNames = SBA_SimpleDB.tabNames or {}
+    SBA_SimpleDB.tabNames[specID] = SBA_SimpleDB.tabNames[specID] or {}
+    return SBA_SimpleDB.tabNames[specID][tabIdx] or ("Tab " .. tabIdx)
+end
+
+local function SetTabName(specID, tabIdx, name)
+    if tabIdx == 1 then return end  -- Tab 1 name is fixed
+    SBA_SimpleDB.tabNames = SBA_SimpleDB.tabNames or {}
+    SBA_SimpleDB.tabNames[specID] = SBA_SimpleDB.tabNames[specID] or {}
+    SBA_SimpleDB.tabNames[specID][tabIdx] = name or ("Tab " .. tabIdx)
+end
+
+local function GetTabCount(specID)
+    SBA_SimpleDB.tabCount = SBA_SimpleDB.tabCount or {}
+    return math.max(1, tonumber(SBA_SimpleDB.tabCount[specID]) or 1)
+end
+
+local function SetTabCount(specID, count)
+    SBA_SimpleDB.tabCount = SBA_SimpleDB.tabCount or {}
+    SBA_SimpleDB.tabCount[specID] = math.max(1, math.min(MAX_TABS_LIMIT, tonumber(count) or 1))
+end
+
+-- Returns the rule-list table for a given spec + tab (creates it if absent).
+local function GetGuiTabRules(specID, tabIdx)
+    if tabIdx == 1 then return GetGuiRules(specID) end
+    SBA_SimpleDB.guiTabs = SBA_SimpleDB.guiTabs or {}
+    SBA_SimpleDB.guiTabs[specID] = SBA_SimpleDB.guiTabs[specID] or {}
+    SBA_SimpleDB.guiTabs[specID][tabIdx] = SBA_SimpleDB.guiTabs[specID][tabIdx] or {}
+    return SBA_SimpleDB.guiTabs[specID][tabIdx]
+end
+
+local function SetGuiTabRules(specID, tabIdx, rules)
+    if tabIdx == 1 then
+        GuiDB()[specID] = rules
+        return
+    end
+    SBA_SimpleDB.guiTabs = SBA_SimpleDB.guiTabs or {}
+    SBA_SimpleDB.guiTabs[specID] = SBA_SimpleDB.guiTabs[specID] or {}
+    SBA_SimpleDB.guiTabs[specID][tabIdx] = rules
+end
+
 local function DeepCopyRules(src)
     local out = {}
     for i, r in ipairs(src) do
@@ -815,6 +861,63 @@ local function InferMissingPrefix(raw, validSet)
         end
     end
     return raw
+end
+
+-- Serialize all tabs for the current spec into a single exportable string.
+-- Format: header line SBASGUI_MULTI;1;<count>;<name1>;...;<nameN>
+--         followed by one V2 rule-string per tab (newline-separated).
+-- Uses ';' as header separator to avoid WoW pipe-escape sequences (|R, |c, etc.)
+-- tabsRules: array [tabIdx] -> rules table. count: number of tabs.
+local function SerializeAllTabsForExport(specID, tabsRules, count)
+    local headerParts = { "SBASGUI_MULTI", "1", tostring(count) }
+    for t = 1, count do
+        headerParts[#headerParts + 1] = EncodeField(GetTabName(specID, t))
+    end
+    local lines = { table.concat(headerParts, ";") }
+    for t = 1, count do
+        lines[#lines + 1] = SerializeRulesForExportV2(specID, tabsRules[t] or {})
+    end
+    return table.concat(lines, "\n")
+end
+
+-- Deserialize a multi-tab export string.
+-- Returns array of { rules=<table>, name=<string> } on success, or nil on failure.
+local function DeserializeAllTabsFromExport(text, expectedSpecID)
+    local trimmed = (text or ""):match("^%s*(.-)%s*$") or ""
+    if not trimmed:match("^SBASGUI_MULTI") then return nil end
+
+    local lines = {}
+    for ln in (trimmed .. "\n"):gmatch("([^\n]*)\n") do
+        lines[#lines + 1] = ln
+    end
+
+    -- Support both new ';' separator and legacy '|' separator
+    local headerLine = lines[1] or ""
+    local headerParts
+    if headerLine:sub(14, 14) == ";" then
+        headerParts = SplitByChar(headerLine, ";")
+    else
+        headerParts = SplitPipe(headerLine)
+    end
+    -- headerParts: [1]=SBASGUI_MULTI [2]=version [3]=tabCount [4..]=names
+    local exportTabCount = tonumber(headerParts[3]) or 1
+
+    local names = {}
+    for t = 1, exportTabCount do
+        local raw = DecodeField(headerParts[3 + t] or "")
+        names[t] = (raw ~= "") and raw or ((t == 1) and "Rotation" or ("Tab " .. t))
+    end
+
+    local tabs = {}
+    for t = 1, exportTabCount do
+        local line = lines[1 + t] or ""
+        local rules, err = DeserializeRulesFromExportV2(line, expectedSpecID)
+        if not rules then
+            return nil, ("Tab " .. t .. ": " .. tostring(err))
+        end
+        tabs[t] = { rules = rules, name = names[t] }
+    end
+    return tabs
 end
 
 local function InferCondType(raw)
@@ -1509,12 +1612,15 @@ local function CreateTransferPopup(titleText, confirmText)
     return f
 end
 
-local function ShowExportPopup(anchor, specID, rules)
+local function ShowExportPopup(anchor, specID, tabsRules, count)
     if not exportPopup then
         exportPopup = CreateTransferPopup("Export SBA Rules", "Select All")
     end
-    exportPopup.note:SetText("Copy this text and keep it as your backup for the currently open spec.")
-    exportPopup.editBox:SetText(SerializeRulesForExportV2(specID, rules))
+    local noteText = (count and count > 1)
+        and ("Copy this text — includes all %d tabs for this spec."):format(count)
+        or  "Copy this text and keep it as your backup for the currently open spec."
+    exportPopup.note:SetText(noteText)
+    exportPopup.editBox:SetText(SerializeAllTabsForExport(specID, tabsRules, count or 1))
     exportPopup.confirmBtn:SetScript("OnClick", function()
         exportPopup.editBox:SetFocus()
         exportPopup.editBox:HighlightText()
@@ -1547,15 +1653,24 @@ end
 -- 8.  Main GUI state
 -------------------------------------------------------------------------------
 local GUI_W    = 680
-local GUI_H    = 560
+local GUI_H    = 590
 local LEFT_W   = 388
 local RIGHT_W  = 268
 local PAD      = 6
 local ROW_H    = 72
 local GUI_MIN_W = 680
-local GUI_MIN_H = 560
+local GUI_MIN_H = 590
 local MIN_LEFT_W = 320
 local MIN_RIGHT_W = 240
+
+local MAX_TABS     = 5       -- maximum icon tabs per spec
+local activeTabIdx = 1       -- currently-edited tab (1 = main icon)
+local allTabRules  = {}      -- [tabIdx] -> workingRules table (for the current spec)
+local sessionAllTabs = {}    -- [specID][tabIdx] -> rules (survives GUI close/reopen)
+local tabCount     = 1       -- number of active tabs for editSpecID
+local tabNames     = {}      -- [tabIdx] -> display name string
+local tabBar       = nil     -- tab-bar container frame (created inside CreateGUI)
+local tabBarBtns   = {}      -- tab button frames
 
 local guiFrame     = nil   -- main frame (created once)
 local leftChild    = nil   -- scroll child for rule rows
@@ -1564,7 +1679,7 @@ local condInputArea= nil   -- "add condition" sub-frame inside rightPanel
 
 local workingRules = {}    -- deep-copy being edited
 -- editSpecID declared at top of file (forward declaration) so COND_TYPES closures can see it
-local sessionRules = {}    -- in-session cache: specID -> workingRules table (survives close/reopen)
+local sessionRules = {}    -- kept for backward-compat reference only; replaced by sessionAllTabs
 local selectedIdx  = 0     -- 1-based; 0 = none
 local isAddingCond = false
 local selectedCondIdx = nil  -- nil = adding new; number = editing existing cond at that index
@@ -1577,6 +1692,8 @@ local condRowYList     = {}    -- panel-relative Y of each cond row top (for dra
 
 -- Forward declarations
 local RefreshRuleList, RefreshRightPanel
+-- Tab-bar forward declarations (defined in section 11c)
+local RefreshTabBar, AddNewTab, DeleteTab
 -- Drag-infrastructure forward declarations (defined in section 11)
 local ruleDrag      -- assigned in section 11 initialiser block
 local dragIconFrame, dragCatcher
@@ -4236,6 +4353,304 @@ local function CreateSpellbookPanel(f, leftSF)
 end
 
 -------------------------------------------------------------------------------
+-- 11c. Tab management helpers
+--      SwitchTab, RefreshTabBar, AddNewTab, DeleteTab
+-------------------------------------------------------------------------------
+
+-- Save the current tab's rules into allTabRules, switch to newTabIdx,
+-- and refresh all panels.
+local function SwitchTab(newTabIdx)
+    if newTabIdx == activeTabIdx then return end
+    -- Persist current working rules back into the per-tab store
+    allTabRules[activeTabIdx] = workingRules
+    -- Switch
+    activeTabIdx = newTabIdx
+    workingRules = allTabRules[activeTabIdx] or {}
+    allTabRules[activeTabIdx] = workingRules
+    -- Keep session cache in sync
+    if editSpecID and editSpecID ~= 0 then
+        sessionAllTabs[editSpecID] = sessionAllTabs[editSpecID] or {}
+        sessionAllTabs[editSpecID][activeTabIdx] = workingRules
+    end
+    selectedIdx    = (#workingRules > 0) and 1 or 0
+    isAddingCond   = false
+    selectedCondIdx = nil
+    RefreshTabBar()
+    RefreshRuleList()
+    RefreshRightPanel()
+end
+
+-- Rebuild the tab-bar button row.  Called whenever tabCount or activeTabIdx changes.
+RefreshTabBar = function()
+    if not tabBar then return end
+    local BTN_SIZE = 16   -- R and X are the same size
+    local BTN_H    = 22   -- tab button height
+    local BTN_GAP  = 1    -- gap between R and X
+    local TAB_LPAD = 5    -- left text padding inside tab
+    local TAB_RPAD = 2    -- X button right offset past the tab edge
+    local GAP      = 4    -- gap between adjacent tab buttons
+    local xOff     = 0    -- flush with tab bar left edge
+
+    for t = 1, tabCount do
+        -- Create the button row on first encounter
+        if not tabBarBtns[t] then
+            local btn = CreateFrame("Button", nil, tabBar, "BackdropTemplate")
+            SetBD(btn, 0.05, 0.08, 0.14, 0.92, 0.20, 0.38, 0.58)
+            local lbl = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            btn._lbl = lbl
+            -- X (delete) button
+            local xb = CreateFrame("Button", nil, btn, "UIPanelCloseButton")
+            xb:SetSize(BTN_SIZE, BTN_SIZE)
+            btn._delBtn = xb
+            -- R (rename) button — same size, sits to the left of X
+            local rb = CreateFrame("Button", nil, btn, "UIPanelButtonTemplate")
+            rb:SetSize(BTN_SIZE, BTN_SIZE)
+            rb:SetText("R")
+            rb:GetFontString():SetFont(GameFontNormalSmall:GetFont(), 9, "OUTLINE")
+            rb:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_TOP")
+                GameTooltip:SetText("Rename tab", 1, 1, 1)
+                GameTooltip:Show()
+            end)
+            rb:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            btn._renameBtn = rb
+            tabBarBtns[t] = btn
+        end
+
+        local btn   = tabBarBtns[t]
+        local captT = t
+
+        -- Set text first so GetStringWidth() returns the correct value
+        local name = GetTabName(editSpecID, t)
+        btn._lbl:SetText(name)
+        local textW = btn._lbl:GetStringWidth()
+
+        -- Dynamic tab width: text + padding + optional button area
+        local tabW
+        if t == 1 then
+            tabW = math.max(60, math.ceil(textW) + TAB_LPAD * 2)
+        else
+            -- TAB_LPAD  + text + inner gap (4) + R + BTN_GAP + X + TAB_RPAD
+            tabW = math.max(80, math.ceil(textW) + TAB_LPAD + 4 + BTN_SIZE + BTN_GAP + BTN_SIZE + TAB_RPAD)
+        end
+
+        btn:ClearAllPoints()
+        btn:SetPoint("TOPLEFT", tabBar, "TOPLEFT", xOff, 2)
+        btn:SetSize(tabW, BTN_H)
+
+        -- Active / inactive colours
+        if t == activeTabIdx then
+            btn:SetBackdropColor(0.12, 0.24, 0.42, 0.97)
+            btn:SetBackdropBorderColor(0.38, 0.68, 1, 1)
+            btn._lbl:SetTextColor(1, 1, 1, 1)
+        else
+            btn:SetBackdropColor(0.05, 0.08, 0.14, 0.92)
+            btn:SetBackdropBorderColor(0.20, 0.38, 0.58, 1)
+            btn._lbl:SetTextColor(0.70, 0.80, 0.90, 1)
+        end
+
+        btn:SetScript("OnClick", function() SwitchTab(captT) end)
+        btn:SetScript("OnEnter", function(self)
+            if captT ~= activeTabIdx then
+                self:SetBackdropColor(0.09, 0.16, 0.30, 0.95)
+            end
+        end)
+        btn:SetScript("OnLeave", function(self)
+            if captT ~= activeTabIdx then
+                self:SetBackdropColor(0.05, 0.08, 0.14, 0.92)
+            end
+        end)
+
+        if t == 1 then
+            -- Tab 1: centred label, no R/X buttons
+            btn._delBtn:Hide()
+            btn._renameBtn:Hide()
+            btn._lbl:ClearAllPoints()
+            btn._lbl:SetJustifyH("CENTER")
+            btn._lbl:SetPoint("CENTER", btn, "CENTER")
+        else
+            -- Tabs 2+: label left-aligned, X at right edge, R immediately left of X
+            btn._delBtn:ClearAllPoints()
+            btn._delBtn:SetPoint("RIGHT", btn, "RIGHT", TAB_RPAD, 0)
+            btn._renameBtn:ClearAllPoints()
+            btn._renameBtn:SetPoint("RIGHT", btn._delBtn, "LEFT", -BTN_GAP, 0)
+            btn._delBtn:Show()
+            btn._renameBtn:Show()
+
+            btn._lbl:ClearAllPoints()
+            btn._lbl:SetJustifyH("LEFT")
+            btn._lbl:SetPoint("LEFT", btn, "LEFT", TAB_LPAD, 0)
+
+            local captRename = t
+            btn._renameBtn:SetScript("OnClick", function(self)
+                if tabBar._renameBox and tabBar._renameBox:IsShown() then
+                    tabBar._renameBox:Hide()
+                end
+                if not tabBar._renameBox then
+                    local eb = CreateFrame("EditBox", nil, tabBar, "BackdropTemplate")
+                    eb:SetSize(100, 22)
+                    eb:SetFontObject("GameFontHighlightSmall")
+                    eb:SetAutoFocus(true)
+                    eb:SetMaxLetters(24)
+                    eb:SetTextInsets(4, 4, 2, 2)
+                    SetBD(eb, 0.05, 0.08, 0.14, 0.97, 0.45, 0.70, 1)
+                    eb:SetScript("OnEscapePressed", function(self) self:Hide() end)
+                    eb:SetScript("OnEnterPressed", function(self)
+                        local newName = self:GetText():match("^%s*(.-)%s*$")
+                        if newName ~= "" then
+                            SetTabName(editSpecID, self._tabIdx, newName)
+                            tabNames[self._tabIdx] = newName
+                            if type(_G.SBA_Simple_SetTabName) == "function" then
+                                _G.SBA_Simple_SetTabName(self._tabIdx, newName)
+                            end
+                        end
+                        self:Hide()
+                        RefreshTabBar()
+                    end)
+                    tabBar._renameBox = eb
+                end
+                local eb = tabBar._renameBox
+                eb._tabIdx = captRename
+                eb:ClearAllPoints()
+                eb:SetPoint("TOPLEFT", btn, "BOTTOMLEFT", 0, -2)
+                eb:SetText(GetTabName(editSpecID, captRename))
+                eb:SetCursorPosition(#eb:GetText())
+                eb:HighlightText()
+                eb:Show()
+                eb:SetFocus()
+            end)
+
+            local captDel = t
+            btn._delBtn:SetScript("OnClick", function()
+                DeleteTab(captDel)
+            end)
+        end
+
+        btn:Show()
+        xOff = xOff + tabW + GAP
+    end
+
+    -- Hide surplus buttons from a previous (higher) tabCount
+    for t = tabCount + 1, #tabBarBtns do
+        if tabBarBtns[t] then tabBarBtns[t]:Hide() end
+    end
+
+    -- "+" Add Tab button
+    if tabBar._addBtn then
+        if tabCount >= MAX_TABS then
+            tabBar._addBtn:Hide()
+        else
+            tabBar._addBtn:ClearAllPoints()
+            tabBar._addBtn:SetPoint("TOPLEFT", tabBar, "TOPLEFT", xOff, 2)
+            tabBar._addBtn:Show()
+        end
+    end
+end
+
+-- Save workingRules, create a new empty tab, and switch to it.
+AddNewTab = function()
+    if tabCount >= MAX_TABS then return end
+    -- Persist current tab first
+    allTabRules[activeTabIdx] = workingRules
+    -- Create the new tab
+    tabCount = tabCount + 1
+    SetTabCount(editSpecID, tabCount)
+    tabNames[tabCount] = "Tab " .. tabCount
+    SetTabName(editSpecID, tabCount, tabNames[tabCount])
+    -- Pre-seed db.spellName so the CombatCoach menu label is correct on first register
+    if type(_G.SBA_Simple_SetTabName) == "function" then
+        _G.SBA_Simple_SetTabName(tabCount, tabNames[tabCount])
+    end
+    allTabRules[tabCount] = {}
+    sessionAllTabs[editSpecID] = sessionAllTabs[editSpecID] or {}
+    sessionAllTabs[editSpecID][tabCount] = allTabRules[tabCount]
+    -- Notify SBA_Simple so it registers the new shmIcon
+    if type(_G.SBA_Simple_UpdateTabCount) == "function" then
+        _G.SBA_Simple_UpdateTabCount(editSpecID, tabCount)
+    end
+    -- Switch to the new tab
+    activeTabIdx    = tabCount
+    workingRules    = allTabRules[activeTabIdx]
+    selectedIdx     = 0
+    isAddingCond    = false
+    selectedCondIdx = nil
+    RefreshTabBar()
+    RefreshRuleList()
+    RefreshRightPanel()
+end
+
+-- Delete tab tabIdx (must be > 1).  Shifts all higher tabs down.
+DeleteTab = function(tabIdx)
+    if tabIdx <= 1 or tabIdx > tabCount then return end
+
+    -- Persist current working rules before removing
+    allTabRules[activeTabIdx] = workingRules
+
+    -- Shift allTabRules down
+    table.remove(allTabRules, tabIdx)
+
+    -- Shift session cache
+    if sessionAllTabs[editSpecID] then
+        table.remove(sessionAllTabs[editSpecID], tabIdx)
+    end
+
+    -- Shift guiTabs DB entries
+    if SBA_SimpleDB.guiTabs and SBA_SimpleDB.guiTabs[editSpecID] then
+        local gt = SBA_SimpleDB.guiTabs[editSpecID]
+        for t = tabIdx, tabCount - 1 do gt[t] = gt[t + 1] end
+        gt[tabCount] = nil
+    end
+
+    -- Shift shmIcon DB entries (position/size data for extra icons)
+    if SBA_SimpleDB.extraIcons then
+        for t = tabIdx, tabCount - 1 do
+            SBA_SimpleDB.extraIcons["tab" .. t] = SBA_SimpleDB.extraIcons["tab" .. (t + 1)]
+        end
+        SBA_SimpleDB.extraIcons["tab" .. tabCount] = nil
+    end
+
+    -- Shift tab name entries
+    if SBA_SimpleDB.tabNames and SBA_SimpleDB.tabNames[editSpecID] then
+        local tn = SBA_SimpleDB.tabNames[editSpecID]
+        for t = tabIdx, tabCount - 1 do tn[t] = tn[t + 1] end
+        tn[tabCount] = nil
+    end
+    for t = tabIdx, tabCount - 1 do tabNames[t] = tabNames[t + 1] end
+    tabNames[tabCount] = nil
+
+    -- Shift override codes in specs DB
+    if SBA_SimpleDB.specs and SBA_SimpleDB.specs[editSpecID] then
+        local sp = SBA_SimpleDB.specs[editSpecID]
+        for t = tabIdx, tabCount - 1 do
+            sp["overrideCode_" .. t] = sp["overrideCode_" .. (t + 1)]
+        end
+        sp["overrideCode_" .. tabCount] = nil
+    end
+
+    -- Reduce count and clamp active tab
+    tabCount = tabCount - 1
+    SetTabCount(editSpecID, tabCount)
+    if activeTabIdx > tabCount then
+        activeTabIdx = tabCount
+    end
+
+    workingRules    = allTabRules[activeTabIdx] or {}
+    allTabRules[activeTabIdx] = workingRules
+    selectedIdx     = (#workingRules > 0) and 1 or 0
+    isAddingCond    = false
+    selectedCondIdx = nil
+
+    -- Notify SBA_Simple to unregister the removed shmIcon slot
+    if type(_G.SBA_Simple_UpdateTabCount) == "function" then
+        _G.SBA_Simple_UpdateTabCount(editSpecID, tabCount)
+    end
+
+    RefreshTabBar()
+    RefreshRuleList()
+    RefreshRightPanel()
+end
+
+-------------------------------------------------------------------------------
 -- 12. Main GUI frame
 -------------------------------------------------------------------------------
 local function CreateGUI()
@@ -4294,12 +4709,16 @@ local function CreateGUI()
 
     f:HookScript("OnHide", function()
         CloseAllPopups()
-        -- Auto-save rule structure to the same store as the explicit Save button so
-        -- rules survive close/reopen within a session and across /reload.  The compiled
-        -- override code is NOT regenerated here — that still requires "Save & Apply".
+        -- Auto-save all tabs so rules survive close/reopen within a session and across /reload.
+        -- Compiled override code is NOT regenerated here — that still requires "Save & Apply".
         if editSpecID and editSpecID ~= 0 then
-            sessionRules[editSpecID]    = workingRules          -- in-session reference
-            GuiDB()[editSpecID]         = DeepCopyRules(workingRules) -- persisted storage
+            allTabRules[activeTabIdx] = workingRules
+            sessionAllTabs[editSpecID] = sessionAllTabs[editSpecID] or {}
+            for t = 1, tabCount do
+                local rules = allTabRules[t] or {}
+                sessionAllTabs[editSpecID][t] = rules
+                SetGuiTabRules(editSpecID, t, DeepCopyRules(rules))
+            end
         end
     end)
 
@@ -4310,7 +4729,10 @@ local function CreateGUI()
     logoutFrame:RegisterEvent("PLAYER_QUITING")
     logoutFrame:SetScript("OnEvent", function()
         if editSpecID and editSpecID ~= 0 then
-            GuiDB()[editSpecID] = DeepCopyRules(workingRules)
+            allTabRules[activeTabIdx] = workingRules
+            for t = 1, tabCount do
+                SetGuiTabRules(editSpecID, t, DeepCopyRules(allTabRules[t] or {}))
+            end
         end
     end)
 
@@ -4332,15 +4754,29 @@ local function CreateGUI()
     end)
 
     -- ── Left panel: priority list ──────────────────────────────────────────
+    -- ── Tab bar (spans both panels) ─────────────────────────────────────────
+    local tabBarFrame = CreateFrame("Frame", nil, f, "BackdropTemplate")
+    tabBarFrame:SetPoint("TOPLEFT",  f, "TOPLEFT",  PAD, -54)
+    tabBarFrame:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD, -54)
+    tabBarFrame:SetHeight(26)
+    SetBD(tabBarFrame, 0.03, 0.05, 0.10, 0.92, 0.18, 0.33, 0.52)
+    tabBar = tabBarFrame
+
+    local addTabBtn = CreateFrame("Button", nil, tabBarFrame, "UIPanelButtonTemplate")
+    addTabBtn:SetSize(26, 22)
+    addTabBtn:SetText("+")
+    addTabBtn:SetScript("OnClick", function() AddNewTab() end)
+    tabBarFrame._addBtn = addTabBtn
+
     local leftHdr = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    leftHdr:SetPoint("TOPLEFT", f, "TOPLEFT", PAD + 2, -48)
+    leftHdr:SetPoint("TOPLEFT", f, "TOPLEFT", PAD + 2, -80)
     leftHdr:SetText("Priority List")
     leftHdr:SetTextColor(0.50, 0.72, 0.90, 1)
 
     local leftSF = CreateFrame("ScrollFrame", nil, f)
-    leftSF:SetPoint("TOPLEFT",     f, "TOPLEFT", PAD, -64)
-    -- Reserve 64px top (header) + 38px footer buttons + 34px Add Spell btn + gap = 136px
-    leftSF:SetSize(LEFT_W, GUI_H - 136)
+    leftSF:SetPoint("TOPLEFT",     f, "TOPLEFT", PAD, -96)
+    -- Reserve 96px top (header+tabbar) + 38px footer + 34px Add Spell btn + gap = 168px
+    leftSF:SetSize(LEFT_W, GUI_H - 168)
     leftSF:EnableMouseWheel(true)
     leftSF:SetScript("OnMouseWheel", function(self, d)
         local v = self:GetVerticalScroll()
@@ -4384,8 +4820,8 @@ local function CreateGUI()
 
     -- ── Right panel: condition editor ──────────────────────────────────────
     local rp = CreateFrame("Frame", nil, f, "BackdropTemplate")
-    rp:SetPoint("TOPRIGHT",    f, "TOPRIGHT",    -PAD, -64)
-    rp:SetSize(RIGHT_W, GUI_H - 110)
+    rp:SetPoint("TOPRIGHT",    f, "TOPRIGHT",    -PAD, -96)
+    rp:SetSize(RIGHT_W, GUI_H - 142)
     SetBD(rp, 0.04, 0.07, 0.13, 0.90, 0.18, 0.33, 0.53)
 
     local rpHdr = rp:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -4417,48 +4853,58 @@ local function CreateGUI()
     saveBtn:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", PAD, PAD + 4)
     saveBtn:SetText("Save & Apply")
     saveBtn:SetScript("OnClick", function()
-        -- Validate parentheses before saving
+        -- Flush current tab's working rules into allTabRules
+        allTabRules[activeTabIdx] = workingRules
+        -- Validate parentheses across ALL tabs
         local mismatchedPriorities = {}
-        for i, rule in ipairs(workingRules) do
-            if HasParenMismatch(rule.conditions) then
-                mismatchedPriorities[#mismatchedPriorities + 1] = i
+        for tIdx = 1, tabCount do
+            local rules = allTabRules[tIdx] or {}
+            for i, rule in ipairs(rules) do
+                if HasParenMismatch(rule.conditions) then
+                    mismatchedPriorities[#mismatchedPriorities + 1] = "Tab " .. tIdx .. " #" .. i
+                end
             end
         end
         if #mismatchedPriorities > 0 then
-            local nums = table.concat(mismatchedPriorities, ", ")
-            print("|cffFF4444SBAS Override GUI:|r Save blocked — mismatched parentheses in "
-                  .. "priorit" .. (#mismatchedPriorities == 1 and "y " or "ies ")
-                  .. nums .. ". Fix the red rows first.")
+            print("|cffFF4444SBAS Override GUI:|r Save blocked — mismatched parentheses: "
+                  .. table.concat(mismatchedPriorities, ", ") .. ". Fix the red rows first.")
             return
         end
-        -- Persist GUI rules
-        GuiDB()[editSpecID] = DeepCopyRules(workingRules)
-        -- Keep the session cache in sync
-        sessionRules[editSpecID] = workingRules
 
-        -- Generate and save override code
-        local code = GenerateCode(workingRules) or ""
-        SBA_SimpleDB.specs                         = SBA_SimpleDB.specs or {}
-        SBA_SimpleDB.specs[editSpecID]             = SBA_SimpleDB.specs[editSpecID] or {}
-        SBA_SimpleDB.specs[editSpecID].overrideCode   = code
-        SBA_SimpleDB.specs[editSpecID].overrideSource = "gui"
-        SBA_SimpleDB.overrideCode                  = code
-
-        -- Compile if editing current spec
-        if editSpecID == CurrentSpecID() and type(SBA_Simple_SetOverrideCode) == "function" then
-            SBA_Simple_SetOverrideCode(code)
+        -- Persist all tab rule-lists and generate their override codes
+        local allCodes = {}
+        for tIdx = 1, tabCount do
+            local rules = allTabRules[tIdx] or {}
+            SetGuiTabRules(editSpecID, tIdx, DeepCopyRules(rules))
+            sessionAllTabs[editSpecID] = sessionAllTabs[editSpecID] or {}
+            sessionAllTabs[editSpecID][tIdx] = allTabRules[tIdx]
+            allCodes[tIdx] = GenerateCode(rules) or ""
         end
 
-        print("|cff00ff99SBAS Override GUI:|r Priority list saved for "
+        -- Store override codes and push them live via the public API
+        if type(_G.SBA_Simple_SetAllTabOverrideCodes) == "function" then
+            _G.SBA_Simple_SetAllTabOverrideCodes(editSpecID, allCodes)
+        else
+            -- Fallback: write tab-1 code directly (older SBA_Simple version)
+            local specEntry = SBA_SimpleDB.specs[editSpecID] or {}
+            specEntry.overrideCode   = allCodes[1] or ""
+            specEntry.overrideSource = "gui"
+            SBA_SimpleDB.overrideCode = specEntry.overrideCode
+            if editSpecID == CurrentSpecID() and type(SBA_Simple_SetOverrideCode) == "function" then
+                SBA_Simple_SetOverrideCode(allCodes[1] or "")
+            end
+        end
+
+        print("|cff00ff99SBAS Override GUI:|r " .. tabCount .. " tab"
+              .. (tabCount == 1 and "" or "s") .. " saved for "
               .. GetSpecName(editSpecID))
-        -- Notify CombatCoach integration so it can determine the override mode
-        -- (optimized vs custom) based on whether the saved rules match the baseline.
+        -- Notify CombatCoach integration (pass tab-1 export for baseline comparison)
         if type(_G.SBAS_OnGuiSaveAndApply) == "function" then
-            local savedExport = SerializeRulesForExportV2(editSpecID, workingRules)
+            local savedExport = SerializeRulesForExportV2(editSpecID, allTabRules[1] or {})
             _G.SBAS_OnGuiSaveAndApply(editSpecID, savedExport)
         end
         f:Hide()
-        -- Refresh the analyzer if it is currently visible (GUI save keeps it relevant)
+        -- Refresh the analyzer if visible
         local af = _G["SBAS_OverrideAnalyzerFrame"]
         if af and af:IsShown() and type(_G.SBAS_OpenOrRefreshAnalyzer) == "function" then
             _G.SBAS_OpenOrRefreshAnalyzer(editSpecID, GetSpecName(editSpecID))
@@ -4496,7 +4942,8 @@ local function CreateGUI()
     exportBtn:SetPoint("LEFT", previewBtn, "RIGHT", 6, 0)
     exportBtn:SetText("Export")
     exportBtn:SetScript("OnClick", function()
-        ShowExportPopup(exportBtn, editSpecID, workingRules)
+        allTabRules[activeTabIdx] = workingRules   -- flush before export
+        ShowExportPopup(exportBtn, editSpecID, allTabRules, tabCount)
     end)
 
     local importBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
@@ -4505,20 +4952,74 @@ local function CreateGUI()
     importBtn:SetText("Import")
     importBtn:SetScript("OnClick", function()
         ShowImportPopup(importBtn, function(payload)
+            -- Try multi-tab import first
+            local tabs, merr = DeserializeAllTabsFromExport(payload, editSpecID)
+            if tabs then
+                local newCount = #tabs
+                -- Clear DB entries for tabs that will be removed
+                for t = newCount + 1, tabCount do
+                    SetGuiTabRules(editSpecID, t, {})
+                    SetTabName(editSpecID, t, nil)
+                    if SBA_SimpleDB.guiTabs and SBA_SimpleDB.guiTabs[editSpecID] then
+                        SBA_SimpleDB.guiTabs[editSpecID][t] = nil
+                    end
+                end
+                -- Load all imported tabs
+                for t = 1, newCount do
+                    local rules = DeepCopyRules(tabs[t].rules)
+                    allTabRules[t] = rules
+                    sessionAllTabs[editSpecID] = sessionAllTabs[editSpecID] or {}
+                    sessionAllTabs[editSpecID][t] = rules
+                    SetGuiTabRules(editSpecID, t, DeepCopyRules(rules))
+                    if t > 1 then
+                        tabNames[t] = tabs[t].name
+                        SetTabName(editSpecID, t, tabs[t].name)
+                        if type(_G.SBA_Simple_SetTabName) == "function" then
+                            _G.SBA_Simple_SetTabName(t, tabs[t].name)
+                        end
+                    end
+                end
+                -- Drop local state for tabs beyond newCount
+                for t = newCount + 1, tabCount do
+                    allTabRules[t] = nil
+                    tabNames[t]    = nil
+                end
+                tabCount = newCount
+                SetTabCount(editSpecID, tabCount)
+                if type(_G.SBA_Simple_UpdateTabCount) == "function" then
+                    _G.SBA_Simple_UpdateTabCount(editSpecID, tabCount)
+                end
+                -- Switch to tab 1
+                activeTabIdx    = 1
+                workingRules    = allTabRules[1] or {}
+                allTabRules[1]  = workingRules
+                selectedIdx     = (#workingRules > 0) and 1 or 0
+                selectedCondIdx = nil
+                isAddingCond    = false
+                RefreshTabBar()
+                RefreshRuleList()
+                RefreshRightPanel()
+                print("|cff00ff99SBAS Override GUI:|r Imported " .. tostring(newCount)
+                      .. " tab" .. (newCount == 1 and "" or "s")
+                      .. " for " .. GetSpecName(editSpecID)
+                      .. ". Click Save & Apply to compile.")
+                return true
+            end
+            -- Fall back: single-tab import into the active tab
             local imported, err = DeserializeRulesFromExport(payload, editSpecID)
             if not imported then
                 print("|cffff4444SBAS Override GUI:|r Import failed - " .. tostring(err or "invalid text"))
                 return false
             end
-
             workingRules = DeepCopyRules(imported)
-            sessionRules[editSpecID] = workingRules
+            allTabRules[activeTabIdx] = workingRules
+            sessionAllTabs[editSpecID] = sessionAllTabs[editSpecID] or {}
+            sessionAllTabs[editSpecID][activeTabIdx] = workingRules
             selectedIdx = (#workingRules > 0) and 1 or 0
             selectedCondIdx = nil
             isAddingCond = false
             RefreshRuleList()
             RefreshRightPanel()
-
             print("|cff00ff99SBAS Override GUI:|r Imported " .. tostring(#workingRules)
                   .. " priorit" .. ((#workingRules == 1) and "y" or "ies")
                   .. " for " .. GetSpecName(editSpecID)
@@ -4532,7 +5033,11 @@ local function CreateGUI()
     clearBtn:SetPoint("LEFT", importBtn, "RIGHT", 6, 0)
     clearBtn:SetText("Clear All Rules")
     clearBtn:SetScript("OnClick", function()
+        -- Clear only the currently-viewed tab
         workingRules = {}
+        allTabRules[activeTabIdx] = workingRules
+        sessionAllTabs[editSpecID] = sessionAllTabs[editSpecID] or {}
+        sessionAllTabs[editSpecID][activeTabIdx] = workingRules
         selectedIdx  = 0
         isAddingCond = false
         RefreshRuleList()
@@ -4541,10 +5046,10 @@ local function CreateGUI()
 
     local function LayoutGUI()
         local leftW, rightW = GetPanelWidths(f:GetWidth())
-        leftSF:SetSize(leftW, f:GetHeight() - 136)
+        leftSF:SetSize(leftW, f:GetHeight() - 168)
         lc:SetWidth(leftW)
         addSpellBtn:SetWidth(leftW)
-        rp:SetSize(rightW, f:GetHeight() - 110)
+        rp:SetSize(rightW, f:GetHeight() - 142)
         rpHdr:SetWidth(rightW - 16)
         addCondBtn:SetWidth(rightW - 12)
         if condInputArea and condInputArea.RefreshSize then
@@ -4581,24 +5086,40 @@ local function OpenGUI(specID, displayName)
         editSpecID = targetSpec
         -- Refresh the condition editor's secondary-resource button label for the new spec
         if condInputArea and condInputArea.RefreshSpec then condInputArea.RefreshSpec() end
-        if sessionRules[editSpecID] then
-            -- Already seen this spec this session — reuse the live in-memory table
-            workingRules = sessionRules[editSpecID]
-        else
-            -- First time opening this spec this session: load from persistent storage
-            workingRules = DeepCopyRules(GetGuiRules(editSpecID))
+        -- Load tab count and all tabs
+        tabCount = GetTabCount(editSpecID)
+        sessionAllTabs[editSpecID] = sessionAllTabs[editSpecID] or {}
+        allTabRules = {}
+        tabNames    = {}
+        for t = 1, tabCount do
+            if sessionAllTabs[editSpecID][t] then
+                allTabRules[t] = sessionAllTabs[editSpecID][t]
+            else
+                allTabRules[t] = DeepCopyRules(GetGuiTabRules(editSpecID, t))
+                sessionAllTabs[editSpecID][t] = allTabRules[t]
+            end
+            tabNames[t] = GetTabName(editSpecID, t)
         end
+        activeTabIdx = 1
+        workingRules = allTabRules[1] or {}
+        allTabRules[1] = workingRules
         selectedIdx  = (#workingRules > 0) and 1 or 0
         isAddingCond = false
+    else
+        -- Same spec: working rules unchanged, but sync allTabRules for current tab
+        allTabRules[activeTabIdx] = workingRules
     end
-    -- Same spec: workingRules unchanged — all unsaved edits are still in memory.
-    -- Seed the session cache if this is the very first open.
-    if not sessionRules[editSpecID] then
-        sessionRules[editSpecID] = workingRules
+    -- Seed the session cache if this is the very first open
+    sessionAllTabs[editSpecID] = sessionAllTabs[editSpecID] or {}
+    for t = 1, tabCount do
+        if not sessionAllTabs[editSpecID][t] then
+            sessionAllTabs[editSpecID][t] = allTabRules[t]
+        end
     end
 
     guiFrame.title:SetText("SBA Override Builder — " .. (displayName or GetSpecName(editSpecID)))
     guiFrame:Show()
+    RefreshTabBar()
     -- Refresh the flyout spell list on every open so it reflects the current
     -- spec, any newly cast override spells, and talent changes.
     if guiFrame._refreshSpellPanel then
@@ -4625,7 +5146,9 @@ _G.SBAS_LoadImportTextIntoOverrideGUI = function(specID, displayName, payload)
     end
 
     workingRules = DeepCopyRules(imported)
-    sessionRules[editSpecID] = workingRules
+    allTabRules[activeTabIdx] = workingRules
+    sessionAllTabs[editSpecID] = sessionAllTabs[editSpecID] or {}
+    sessionAllTabs[editSpecID][activeTabIdx] = workingRules
     selectedIdx = (#workingRules > 0) and 1 or 0
     selectedCondIdx = nil
     isAddingCond = false
@@ -4658,7 +5181,9 @@ _G.SBAS_LoadRulesIntoOverrideGUI = function(specID, displayName, rules)
     OpenGUI(specID, displayName)
 
     workingRules = DeepCopyRules(rules)
-    sessionRules[editSpecID] = workingRules
+    allTabRules[activeTabIdx] = workingRules
+    sessionAllTabs[editSpecID] = sessionAllTabs[editSpecID] or {}
+    sessionAllTabs[editSpecID][activeTabIdx] = workingRules
     selectedIdx = (#workingRules > 0) and 1 or 0
     selectedCondIdx = nil
     isAddingCond = false

@@ -1,9 +1,10 @@
 -- SBA_Simple.lua
 -- Displays the next suggested cast from C_AssistedCombat using shmIcons.
 
-local FOLDER_NAME = "CombatCoach_SBA_Simple"
-local ADDON_NAME  = "Rotation Assistant"
-local ICON_KEY   = "Suggested_Spell"
+local FOLDER_NAME    = "CombatCoach_SBA_Simple"
+local ADDON_NAME     = "Rotation Assistant"
+local ICON_KEY       = "Suggested_Spell"
+local MAX_EXTRA_TABS = 4   -- tabs 2-5 (tab 1 is the main ICON_KEY)
 
 -- spellID -> isOnGCD; populated for every spell that has been shown in the icon.
 -- Updated on SPELL_UPDATE_COOLDOWN so SetStacks can ignore GCD-only lockouts.
@@ -12,7 +13,25 @@ local spellGCDState = {}
 -- The spellID currently shown in the icon; used by SPELL_UPDATE_CHARGES.
 local currentDisplayedSpellID = nil
 
+-- Extra-tab tracking (tabs 2-5)
+local activeExtraTabCount  = 0    -- how many extra icons are currently registered
+local extraDisplayedSpell  = {}   -- [tabIdx] -> currently displayed spellID
+local extraOverrideChunks  = {}   -- [tabIdx] -> compiled override function
+
 SBA_SimpleDB = SBA_SimpleDB or {}
+
+-- ── Extra-icon DB (one entry per extra tab, keyed by tab index) ─────────
+local function GetExtraIconDB(tabIdx)
+    SBA_SimpleDB.extraIcons = SBA_SimpleDB.extraIcons or {}
+    local key = "tab" .. tabIdx
+    if not SBA_SimpleDB.extraIcons[key] then
+        SBA_SimpleDB.extraIcons[key] = {
+            x = 0, y = 0, point = "CENTER",
+            size = 64, enabled = true, glow_enabled = false,
+        }
+    end
+    return SBA_SimpleDB.extraIcons[key]
+end
 
 -- ── Default DB schema (shmIcons will write x/y/size back on move/resize) ──
 local function GetDB()
@@ -56,7 +75,7 @@ end
 -- C_AssistedCombat suggestion. Errors are swallowed silently per-frame to
 -- avoid chat spam; compile errors are caught once at save time instead.
 
-local overrideChunk = nil  -- compiled function, rebuilt when code is saved
+local overrideChunk = nil  -- compiled function, rebuilt when code is saved (tab 1)
 
 -- target spec we're editing via the override editor (nil -> current spec)
 local overrideEditorTargetSpec = nil
@@ -108,6 +127,24 @@ local function Override()
     return result
 end
 
+-- ── Extra-tab override compile/run ──────────────────────────────────────
+local function CompileExtraOverride(tabIdx, code)
+    if not code or code:match("^%s*$") then
+        extraOverrideChunks[tabIdx] = nil
+        return
+    end
+    local chunk = loadstring(code)
+    extraOverrideChunks[tabIdx] = chunk  -- nil on compile failure
+end
+
+local function RunExtraOverride(tabIdx)
+    local chunk = extraOverrideChunks[tabIdx]
+    if not chunk then return nil end
+    local ok, result = pcall(chunk)
+    if not ok or type(result) ~= "number" then return nil end
+    return result
+end
+
 -- Public API: allows the GUI builder to push compiled override code for the
 -- current spec without needing direct access to the local CompileOverride closure.
 function SBA_Simple_SetOverrideCode(code)
@@ -121,6 +158,7 @@ end
 -- ── Registration ──────────────────────────────────────────────────────────
 local function RegisterIcon()
     local db = GetDB()
+    db.spellName = "Rotation"
     shmIcons:Register(ADDON_NAME, ICON_KEY, db, {
         onResize = function(sq) db.size = sq end,
         onMove   = function()   end,
@@ -129,6 +167,100 @@ local function RegisterIcon()
     -- Ensure the icon visibility follows the DB setting
     if shmIcons and shmIcons.SetVisible then
         shmIcons:SetVisible(ADDON_NAME, ICON_KEY, (db.enabled ~= false))
+    end
+end
+
+local function RegisterExtraIcon(tabIdx)
+    local db  = GetExtraIconDB(tabIdx)
+    local key = ICON_KEY .. "_" .. tabIdx
+    -- Label shown in CombatCoach menu; updated when the tab is renamed
+    if not db.spellName then
+        SBA_SimpleDB.tabNames = SBA_SimpleDB.tabNames or {}
+        local specID = GetCurrentSpecID()
+        local names  = SBA_SimpleDB.tabNames[specID] or {}
+        db.spellName = names[tabIdx] or ("Tab " .. tabIdx)
+    end
+    shmIcons:Register(ADDON_NAME, key, db, {
+        onResize = function(sq) db.size = sq end,
+        onMove   = function()   end,
+    })
+    shmIcons:SetVisible(ADDON_NAME, key, db.enabled ~= false)
+end
+
+local function UnregisterExtraIcon(tabIdx)
+    shmIcons:Unregister(ADDON_NAME, ICON_KEY .. "_" .. tabIdx)
+end
+
+-- Adjust the set of registered extra icons and (re-)compile their overrides.
+-- Called on spec change and when the GUI adds/removes a tab.
+local function UpdateExtraIconsForSpec(specID)
+    specID = specID or GetCurrentSpecID()
+    if specID == 0 then return end
+    SBA_SimpleDB.tabCount = SBA_SimpleDB.tabCount or {}
+    local newTotal = math.max(1, tonumber(SBA_SimpleDB.tabCount[specID]) or 1)
+    local newExtra = newTotal - 1
+
+    -- Unregister icons beyond the new count
+    for i = newExtra + 2, activeExtraTabCount + 1 do
+        UnregisterExtraIcon(i)
+        extraOverrideChunks[i] = nil
+        extraDisplayedSpell[i] = nil
+    end
+    -- Register newly needed icons
+    for i = activeExtraTabCount + 2, newExtra + 1 do
+        RegisterExtraIcon(i)
+        extraDisplayedSpell[i] = nil
+    end
+    activeExtraTabCount = newExtra
+
+    -- (Re-)compile override code for each active extra tab
+    local specEntry = SBA_SimpleDB.specs and SBA_SimpleDB.specs[specID]
+    for i = 2, newExtra + 1 do
+        local code = specEntry and specEntry["overrideCode_" .. i] or ""
+        CompileExtraOverride(i, code)
+    end
+end
+
+-- Public: called from OverrideGUI when a tab is renamed so the CombatCoach
+-- menu label updates immediately without needing a re-register.
+function SBA_Simple_SetTabName(tabIdx, name)
+    if tabIdx == 1 then
+        local db = GetDB()
+        db.spellName = name or "Rotation"
+        return
+    end
+    local db = GetExtraIconDB(tabIdx)
+    db.spellName = name or ("Tab " .. tabIdx)
+end
+
+-- Public: called from OverrideGUI when the user adds or removes a tab
+function SBA_Simple_UpdateTabCount(specID, newCount)
+    SBA_SimpleDB.tabCount          = SBA_SimpleDB.tabCount or {}
+    SBA_SimpleDB.tabCount[specID]  = math.max(1, newCount)
+    UpdateExtraIconsForSpec(specID)
+end
+
+-- Public: store and live-apply override codes for all tabs of a spec.
+-- codes[1] = tab-1 code, codes[2] = tab-2 code, etc.
+function SBA_Simple_SetAllTabOverrideCodes(specID, codes)
+    SBA_SimpleDB.specs         = SBA_SimpleDB.specs or {}
+    SBA_SimpleDB.specs[specID] = SBA_SimpleDB.specs[specID] or {}
+    local specEntry = SBA_SimpleDB.specs[specID]
+    for i, code in ipairs(codes or {}) do
+        if i == 1 then
+            specEntry.overrideCode   = code
+            specEntry.overrideSource = "gui"
+        else
+            specEntry["overrideCode_" .. i] = code
+        end
+    end
+    SBA_SimpleDB.overrideCode = specEntry.overrideCode or ""
+    -- Apply live only when editing the current spec
+    if specID == GetCurrentSpecID() then
+        CompileOverride(specEntry.overrideCode or "")
+        for i = 2, activeExtraTabCount + 1 do
+            CompileExtraOverride(i, specEntry["overrideCode_" .. i] or "")
+        end
     end
 end
 
@@ -152,103 +284,92 @@ function SBA_Simple_SetSize(size)
     RegisterIcon()
 end
 
---local reasoncd = 2
--- ── Per-frame update ──────────────────────────────────────────────────────
-local ticker = CreateFrame("Frame")
-ticker:SetScript("OnUpdate", function()
-    -- Override() takes priority over the assisted combat suggestion
-    local spellID = Override() or C_AssistedCombat.GetNextCastSpell()
-
-    -- Register new spell IDs for GCD tracking (value filled on SPELL_UPDATE_COOLDOWN).
-    -- SetStacks is called at "creation time": first sight of a spell, or whenever
-    -- the suggested spell changes. After that, only SPELL_UPDATE_CHARGES updates it.
+-- ── Shared per-icon update helper ────────────────────────────────────────
+-- Updates texture, cooldown sweep, stacks, range, usability for one icon.
+-- gcdState is a shared spellID->isOnGCD table; prevSpellID is what was shown
+-- last frame (used to decide when to re-query charges).
+-- Returns spellID (to store as new prevSpellID).
+local function UpdateShmIcon(iconKey, spellID, prevSpellID)
+    -- Stacks: refresh when spell first seen or when it changes
     if spellID then
         if spellGCDState[spellID] == nil then
             spellGCDState[spellID] = false
             local ci = C_Spell.GetSpellCharges(spellID)
             if ci and ci.maxCharges and ci.maxCharges > 1 then
-                shmIcons:SetStacks(ADDON_NAME, ICON_KEY, ci.currentCharges)
+                shmIcons:SetStacks(ADDON_NAME, iconKey, ci.currentCharges)
             end
-        elseif spellID ~= currentDisplayedSpellID then
+        elseif spellID ~= prevSpellID then
             local ci = C_Spell.GetSpellCharges(spellID)
             if ci and ci.maxCharges and ci.maxCharges > 1 then
-                shmIcons:SetStacks(ADDON_NAME, ICON_KEY, ci.currentCharges)
+                shmIcons:SetStacks(ADDON_NAME, iconKey, ci.currentCharges)
             end
         end
     end
-    currentDisplayedSpellID = spellID
 
-    -- ── Icon texture ─────────────────────────────────────────────────────
-    if spellID then
-        local iconID = C_Spell.GetSpellTexture(spellID) or 134400
-        shmIcons:SetIcon(ADDON_NAME, ICON_KEY, iconID)
-    else
-        shmIcons:SetIcon(ADDON_NAME, ICON_KEY, 134400)
-    end
+    -- Icon texture
+    shmIcons:SetIcon(ADDON_NAME, iconKey,
+        spellID and (C_Spell.GetSpellTexture(spellID) or 134400) or 134400)
 
-    -- ── Cooldown ─────────────────────────────────────────────────────────
     if spellID then
         local cdInfo         = C_Spell.GetSpellCooldown(spellID)
         local durationObject = C_Spell.GetSpellCooldownDuration(spellID)
         local chargeInfo     = C_Spell.GetSpellCharges(spellID)
         local isChargeSpell  = chargeInfo and chargeInfo.maxCharges and chargeInfo.maxCharges > 1
         local chargeDuration = C_Spell.GetSpellChargeDuration(spellID)
-        shmIcons:SetGlow(ADDON_NAME, ICON_KEY, false) --TODO: Fix glow logic for SBAS
-        
-       if isChargeSpell then
+        shmIcons:SetGlow(ADDON_NAME, iconKey, false)
+        if isChargeSpell then
             if durationObject and cdInfo and cdInfo.isActive then
-                shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, durationObject)
-                --if(reasoncd ~= 0) then print ("0") reasoncd = 0 end
+                shmIcons:SetCooldown(ADDON_NAME, iconKey, durationObject)
             elseif chargeDuration and chargeInfo and chargeInfo.isActive then
-                shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, chargeDuration)
-                --if(reasoncd ~= 1) then print ("1") reasoncd = 1 end
-                --shmIcons:SetGlow(ADDON_NAME, ICON_KEY, false)
+                shmIcons:SetCooldown(ADDON_NAME, iconKey, chargeDuration)
             else
-                --if spellID == 121253 then print("3") end
-                --if(reasoncd ~= 2) then print ("2") reasoncd = 2 end
-                shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, nil)
-                --shmIcons:SetGlow(ADDON_NAME, ICON_KEY, true)
+                shmIcons:SetCooldown(ADDON_NAME, iconKey, nil)
             end
-            
-            --if (chargeInfo and not chargeInfo.isActive) or (cdInfo and cdInfo.isOnGCD) then
             if cdInfo and (not cdInfo.isActive or cdInfo.isOnGCD) then
-                shmIcons:SetStacks(ADDON_NAME, ICON_KEY, chargeInfo.currentCharges)
+                shmIcons:SetStacks(ADDON_NAME, iconKey, chargeInfo.currentCharges)
             else
-                shmIcons:SetStacks(ADDON_NAME, ICON_KEY, 0)
+                shmIcons:SetStacks(ADDON_NAME, iconKey, 0)
             end
         else
-            --shmIcons:SetChargeCooldown(ADDON_NAME, ICON_KEY, nil)
             if durationObject and cdInfo and cdInfo.isActive then
-                --if spellID == 121253 then print("4") end
-                shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, durationObject)
-                --shmIcons:SetGlow(ADDON_NAME, ICON_KEY, false)
+                shmIcons:SetCooldown(ADDON_NAME, iconKey, durationObject)
             else
-                --if spellID == 121253 then print("5") end
-                shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, nil)
-                --shmIcons:SetGlow(ADDON_NAME, ICON_KEY, true)
+                shmIcons:SetCooldown(ADDON_NAME, iconKey, nil)
             end
-            shmIcons:SetStacks(ADDON_NAME, ICON_KEY, 0)
+            shmIcons:SetStacks(ADDON_NAME, iconKey, 0)
         end
-
-        
-        -- ── Range ─────────────────────────────────────────────────────────
         if UnitExists("target") then
-            shmIcons:SetRange(ADDON_NAME, ICON_KEY, C_Spell.IsSpellInRange(spellID, "target"))
+            shmIcons:SetRange(ADDON_NAME, iconKey, C_Spell.IsSpellInRange(spellID, "target"))
         else
-            shmIcons:SetRange(ADDON_NAME, ICON_KEY, nil)
+            shmIcons:SetRange(ADDON_NAME, iconKey, nil)
         end
-
-        -- ── Usability ─────────────────────────────────────────────────────
-        shmIcons:SetUsable(ADDON_NAME, ICON_KEY, C_Spell.IsSpellUsable(spellID))
+        shmIcons:SetUsable(ADDON_NAME, iconKey, C_Spell.IsSpellUsable(spellID))
     else
-        shmIcons:SetCooldown(ADDON_NAME, ICON_KEY, nil)
-        --shmIcons:SetChargeCooldown(ADDON_NAME, ICON_KEY, nil)
-        shmIcons:SetStacks(ADDON_NAME, ICON_KEY, 0)
-        shmIcons:SetRange(ADDON_NAME, ICON_KEY, nil)
-        shmIcons:SetUsable(ADDON_NAME, ICON_KEY, true)
+        shmIcons:SetCooldown(ADDON_NAME, iconKey, nil)
+        shmIcons:SetStacks(ADDON_NAME, iconKey, 0)
+        shmIcons:SetRange(ADDON_NAME, iconKey, nil)
+        shmIcons:SetUsable(ADDON_NAME, iconKey, true)
     end
+    shmIcons:SetGlow(ADDON_NAME, iconKey, false)
+    return spellID
+end
 
-    shmIcons:SetGlow(ADDON_NAME, ICON_KEY, false)
+-- ── Per-frame update ──────────────────────────────────────────────────────
+local ticker = CreateFrame("Frame")
+ticker:SetScript("OnUpdate", function()
+    -- Tab 1: main icon
+    local spellID = Override() or C_AssistedCombat.GetNextCastSpell()
+    currentDisplayedSpellID = UpdateShmIcon(ICON_KEY, spellID, currentDisplayedSpellID)
+
+    -- Extra tabs (tabs 2+)
+    for tabIdx = 2, activeExtraTabCount + 1 do
+        local db = GetExtraIconDB(tabIdx)
+        if db.enabled ~= false then
+            local extraSpell = RunExtraOverride(tabIdx) or C_AssistedCombat.GetNextCastSpell()
+            extraDisplayedSpell[tabIdx] = UpdateShmIcon(
+                ICON_KEY .. "_" .. tabIdx, extraSpell, extraDisplayedSpell[tabIdx])
+        end
+    end
 end)
 
 -- ── Monk add-on loader ───────────────────────────────────────────────────
@@ -294,6 +415,8 @@ events:SetScript("OnEvent", function(_, event)
     if event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_SPECIALIZATION_CHANGED" then
         shmIcons:Unregister(ADDON_NAME, ICON_KEY)
         RegisterIcon()
+        -- Re-setup extra icons for the new spec
+        C_Timer.After(0, function() UpdateExtraIconsForSpec(GetCurrentSpecID()) end)
         -- Defer override compilation by one frame so spec data is fully available.
         -- GetSpecialization() may return nil during PLAYER_ENTERING_WORLD otherwise.
         C_Timer.After(0, function()
