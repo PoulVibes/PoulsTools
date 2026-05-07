@@ -666,6 +666,10 @@ local function OnBuildUI(parent)
                             SBA_SimpleDB.specs[targetID].overrideCode = ""
                             SBA_SimpleDB.specs[targetID].overrideMode = "blizzard"
                             pendingOptimizedBaseline[targetID] = nil
+                            -- Reset the GUI priority list for tab-1 to the SBA default
+                            if type(_G.SBAS_ResetToBlizzardSBA) == "function" then
+                                _G.SBAS_ResetToBlizzardSBA(targetID)
+                            end
                             specLabel:SetTextColor(unpack(W.colors.textMuted))
                             RefreshHighlight()
                         end },

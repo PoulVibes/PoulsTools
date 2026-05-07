@@ -306,9 +306,16 @@ local function UpdateShmIcon(iconKey, spellID, prevSpellID)
         end
     end
 
-    -- Icon texture
-    shmIcons:SetIcon(ADDON_NAME, iconKey,
-        spellID and (C_Spell.GetSpellTexture(spellID) or 134400) or 134400)
+    -- Icon visibility + texture
+    if not spellID then
+        shmIcons:SetVisible(ADDON_NAME, iconKey, false)
+        shmIcons:SetCooldown(ADDON_NAME, iconKey, nil)
+        shmIcons:SetStacks(ADDON_NAME, iconKey, 0)
+        shmIcons:SetGlow(ADDON_NAME, iconKey, false)
+        return nil
+    end
+    shmIcons:SetVisible(ADDON_NAME, iconKey, true)
+    shmIcons:SetIcon(ADDON_NAME, iconKey, C_Spell.GetSpellTexture(spellID) or 134400)
 
     if spellID then
         local cdInfo         = C_Spell.GetSpellCooldown(spellID)
@@ -344,11 +351,6 @@ local function UpdateShmIcon(iconKey, spellID, prevSpellID)
             shmIcons:SetRange(ADDON_NAME, iconKey, nil)
         end
         shmIcons:SetUsable(ADDON_NAME, iconKey, C_Spell.IsSpellUsable(spellID))
-    else
-        shmIcons:SetCooldown(ADDON_NAME, iconKey, nil)
-        shmIcons:SetStacks(ADDON_NAME, iconKey, 0)
-        shmIcons:SetRange(ADDON_NAME, iconKey, nil)
-        shmIcons:SetUsable(ADDON_NAME, iconKey, true)
     end
     shmIcons:SetGlow(ADDON_NAME, iconKey, false)
     return spellID
@@ -358,14 +360,14 @@ end
 local ticker = CreateFrame("Frame")
 ticker:SetScript("OnUpdate", function()
     -- Tab 1: main icon
-    local spellID = Override() or C_AssistedCombat.GetNextCastSpell()
+    local spellID = Override()
     currentDisplayedSpellID = UpdateShmIcon(ICON_KEY, spellID, currentDisplayedSpellID)
 
     -- Extra tabs (tabs 2+)
     for tabIdx = 2, activeExtraTabCount + 1 do
         local db = GetExtraIconDB(tabIdx)
         if db.enabled ~= false then
-            local extraSpell = RunExtraOverride(tabIdx) or C_AssistedCombat.GetNextCastSpell()
+            local extraSpell = RunExtraOverride(tabIdx)
             extraDisplayedSpell[tabIdx] = UpdateShmIcon(
                 ICON_KEY .. "_" .. tabIdx, extraSpell, extraDisplayedSpell[tabIdx])
         end

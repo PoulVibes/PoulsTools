@@ -404,9 +404,17 @@ local function GuiDB()
     return SBA_SimpleDB.gui
 end
 
+-- The default priority list for every spec: a single unconditional
+-- "Single-Button Assistant" entry (delegates to Blizzard's SBA button).
+local function GetBlizzardSBADefaultRules()
+    return { { spellID = SBA_BUTTON_SPELL_ID, name = "Single-Button Assistant", conditions = {} } }
+end
+
 local function GetGuiRules(specID)
     local db = GuiDB()
-    db[specID] = db[specID] or {}
+    if not db[specID] or #db[specID] == 0 then
+        db[specID] = GetBlizzardSBADefaultRules()
+    end
     return db[specID]
 end
 
@@ -1133,7 +1141,6 @@ local function GenerateCode(rules)
     -- so no top-level local is needed (assigning a secret value to a local taints it).
     local _sec = SPEC_SECONDARY[editSpecID]   -- nil for specs with no queryable secondary
 
-    L[#L+1] = "local spellID = C_AssistedCombat.GetNextCastSpell()"
     if _sec and not _sec.inlineExpr then
         -- Declare a local for the secondary resource only when it is read via
         -- UnitPower.  Specs using inlineExpr (e.g. BM Hunter / currentFocus)
@@ -1256,14 +1263,14 @@ local function GenerateCode(rules)
                     expr = expr .. " " .. (junctions[pi] or "and") .. " " .. parts[pi]
                 end
                 if rule.spellID == SBA_BUTTON_SPELL_ID then
-                    L[#L+1] = ("if %s then return spellID end"):format(expr)
+                    L[#L+1] = ("if %s then return C_AssistedCombat.GetNextCastSpell() end"):format(expr)
                 else
                     L[#L+1] = ("if %s then return %d end"):format(expr, rule.spellID)
                 end
             else
                 -- No conditions: unconditional (this blocks everything below it)
                 if rule.spellID == SBA_BUTTON_SPELL_ID then
-                    L[#L+1] = "return spellID  -- unconditional"
+                    L[#L+1] = "return C_AssistedCombat.GetNextCastSpell()  -- unconditional"
                 else
                     L[#L+1] = ("return %d  -- unconditional"):format(rule.spellID)
                 end
@@ -1274,8 +1281,7 @@ local function GenerateCode(rules)
         end
     end
     if not hasUnconditional then
-        L[#L+1] = "-- Fallback: SBA assisted-combat suggestion"
-        L[#L+1] = "return spellID"
+        L[#L+1] = "return nil"
     end
     return table.concat(L, "\n")
 end
@@ -5130,6 +5136,38 @@ local function OpenGUI(specID, displayName)
 end
 
 _G.SBAS_OpenOverrideGUI    = OpenGUI
+
+-- Public: reset tab-1 GUI rules for a spec to the single Blizzard SBA entry
+-- and clear any compiled override code for that spec.
+_G.SBAS_ResetToBlizzardSBA = function(specID)
+    local rules = GetBlizzardSBADefaultRules()
+    SetGuiTabRules(specID, 1, rules)
+    -- Generate the override code from the default rules and push it live
+    SBA_SimpleDB.specs = SBA_SimpleDB.specs or {}
+    SBA_SimpleDB.specs[specID] = SBA_SimpleDB.specs[specID] or {}
+    SBA_SimpleDB.specs[specID].overrideMode = "blizzard"
+    local code = GenerateCode(rules)
+    if type(_G.SBA_Simple_SetAllTabOverrideCodes) == "function" then
+        _G.SBA_Simple_SetAllTabOverrideCodes(specID, { code })
+    else
+        SBA_SimpleDB.specs[specID].overrideCode = code
+    end
+    -- If the GUI is open on this spec, reload tab-1 in-place
+    if guiFrame and guiFrame:IsShown() and editSpecID == specID then
+        local fresh = DeepCopyRules(rules)
+        allTabRules[1]  = fresh
+        sessionAllTabs[editSpecID] = sessionAllTabs[editSpecID] or {}
+        sessionAllTabs[editSpecID][1] = fresh
+        if activeTabIdx == 1 then
+            workingRules = fresh
+            selectedIdx  = 1
+            isAddingCond = false
+            selectedCondIdx = nil
+            RefreshRuleList()
+            RefreshRightPanel()
+        end
+    end
+end
 
 -- Public: open GUI for a spec and load rules from an import/export payload.
 -- This uses the exact same parser as the Import button in the GUI.
