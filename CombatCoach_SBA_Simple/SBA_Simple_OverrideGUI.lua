@@ -1850,6 +1850,25 @@ local function CreateRowFrame(parent)
         end
     end)
 
+    -- Warning icon (shown when sentinel_mark tracking is not ready)
+    -- Anchored left of the remove button so they don't overlap.
+    f.warnIcon = CreateFrame("Frame", nil, f)
+    f.warnIcon:SetSize(18, 18)
+    f.warnIcon:SetPoint("TOPRIGHT", f.removeBtn, "TOPLEFT", -2, 0)
+    f.warnIcon:EnableMouse(true)
+    local warnTex = f.warnIcon:CreateTexture(nil, "OVERLAY")
+    warnTex:SetAllPoints()
+    warnTex:SetTexture("Interface\\DialogFrame\\UI-Dialog-Icon-AlertOther")
+    f.warnIcon:SetScript("OnEnter", function(self)
+        if not self._tooltip then return end
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:SetText("|cffff9900\xE2\x9A\xA0 Sentinel's Mark Warning|r", 1, 1, 1, 1, true)
+        GameTooltip:AddLine(self._tooltip, 1, 0.85, 0.55, true)
+        GameTooltip:Show()
+    end)
+    f.warnIcon:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    f.warnIcon:Hide()
+
     return f
 end
 
@@ -1874,6 +1893,30 @@ local function HasParenMismatch(conds)
         if depth < 0 then return true end   -- unmatched close
     end
     return depth ~= 0                       -- unclosed open(s)
+end
+
+-- Returns true when any condition in the rule is a sentinel_mark plugin check.
+local function RuleHasSentinelMarkCondition(rule)
+    for _, cond in ipairs(rule.conditions or {}) do
+        if cond.type == "plugin" and cond.plugin == "sentinel_mark" then
+            return true
+        end
+    end
+    return false
+end
+
+-- Returns a warning string when sentinel_mark tracking is not operational,
+-- or nil when everything is fine.
+local function GetSentinelMarkWarning()
+    if _G["SentinelMarkTrackerReady"] == true then return nil end
+    if _G["BuffIconCooldownViewer"] == nil then
+        return "Sentinel's Mark condition requires the Cooldown"
+            .. " Manager to be enabled.\n\nEnable it, add"
+            .. " Sentinel to its Tracked Buff Icons, then reload."
+    end
+    return "Sentinel's Mark Condition requires the Cooldown Manager's Tracked Buff Icons"
+            .. "\n\nEnable Blizzard's Cooldown Manager, add Sentinel to the Tracked Buff Icons, then reload."
+        
 end
 
 local function UpdateRowFrame(f, idx, rule)
@@ -2012,11 +2055,33 @@ local function UpdateRowFrame(f, idx, rule)
     f:SetSize(leftW - PAD * 2, rowFrameH)
     f:Show()
 
-    local hasMismatch = HasParenMismatch(rule.conditions)
+    local hasMismatch    = HasParenMismatch(rule.conditions)
+    local sentinelWarn   = RuleHasSentinelMarkCondition(rule) and GetSentinelMarkWarning() or nil
+
+    -- Warning icon: show when sentinel_mark is in use but tracking is broken.
+    if f.warnIcon then
+        if sentinelWarn then
+            f.warnIcon._tooltip = sentinelWarn
+            f.warnIcon:Show()
+        else
+            f.warnIcon._tooltip = nil
+            f.warnIcon:Hide()
+        end
+    end
+
     if hasMismatch then
-        -- Red tint for paren mismatch regardless of selection state
+        -- Bright red: paren mismatch (invalid condition structure)
         f:SetBackdropColor(0.30, 0.04, 0.04, 0.95)
         f:SetBackdropBorderColor(0.90, 0.18, 0.18, 1)
+    elseif sentinelWarn then
+        -- Amber/orange: sentinel_mark condition but tracker not ready
+        if idx == selectedIdx then
+            f:SetBackdropColor(0.28, 0.12, 0.00, 0.95)
+            f:SetBackdropBorderColor(0.90, 0.50, 0.10, 1)
+        else
+            f:SetBackdropColor(0.22, 0.09, 0.00, 0.90)
+            f:SetBackdropBorderColor(0.75, 0.38, 0.08, 1)
+        end
     elseif idx == selectedIdx then
         f:SetBackdropColor(0.08, 0.20, 0.36, 0.95)
         f:SetBackdropBorderColor(0.28, 0.58, 0.90, 1)

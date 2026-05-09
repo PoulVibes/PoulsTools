@@ -2,7 +2,7 @@
 ## Title: OnUseTracker
 ## Notes: Tracks on-use buff windows (Zenith, Bestial Wrath).
 ## Author: Poul
-## Version: 1.2.11
+## Version: 1.2.12
 
 ## SavedVariables: OnUseTrackerDB
 ## Dependencies: CombatCoach_shmIcons

@@ -2,7 +2,7 @@
 ## Title: CombatCoach_SBA_Simple
 ## Notes: Displays the next suggested cast from C_AssistedCombat using shmIcons.
 ## Author: Poul
-## Version: 1.2.4
+## Version: 1.2.5
 
 ## IconTexture: Interface\Icons\ui_spellbook_onebutton
 ## Category-enUS: CombatCoach

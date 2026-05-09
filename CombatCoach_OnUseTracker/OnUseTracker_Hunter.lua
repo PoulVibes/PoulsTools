@@ -532,6 +532,10 @@ end
 -- Viewer child detection: scan BuffIconCooldownViewer for the child whose
 -- icon texture matches the Sentinel Storm texture.
 local function SV_FindMarkChild()
+    -- If CooldownTracker is not loaded the viewer frame may still exist as a
+    -- stale global, but its children will have secret/tainted texture IDs that
+    -- cannot be compared without a Lua error.  Guard on the addon being loaded.
+    if not BuffIconCooldownViewer:IsShown() then return nil end
     local viewer = _G[SV_VIEWER_NAME]
     if not viewer then return nil end
     local n = viewer:GetNumChildren()
@@ -560,6 +564,7 @@ end
 
 local function SV_HookMarkChild(child)
     sv_markChild = child
+    _G["SentinelMarkTrackerReady"] = true
     local hideTimer = nil
     child:HookScript("OnShow", function()
         -- Cancel any pending hide debounce (buff refresh: hide + immediate show)
@@ -715,6 +720,7 @@ local function SV_UnregisterIcons()
     sv_iconRaptorSwipe = nil
     sv_markTimerText   = nil
     sv_tickerFrame:Hide()
+    _G["SentinelMarkTrackerReady"] = false
     sv_iconsRegistered = false
 end
 
