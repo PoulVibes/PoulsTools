@@ -365,3 +365,461 @@ function module.OnSpellCast(spellID, outIconEnabled)
 end
 
 OnUseTracker_RegisterModule(module)
+
+-- ===========================================================================
+-- Survival Hunter (spec 255) — Sentinel's Mark + Tip of the Spear tracking
+-- ===========================================================================
+
+local SV_SPEC_ID = 255
+
+-- Spell IDs
+local SV_KILL_COMMAND_ID  = 259489   -- Kill Command (SV)    !! VERIFY
+local SV_RAPTOR_STRIKE_ID = 186270   -- Raptor Strike
+local SV_RAPTOR_SWIPE_ID  = 1262293  -- Raptor Swipe
+local SV_BOOMSTICK_ID     = 1261193  -- Boomstick             !! VERIFY
+local SV_WILDFIRE_BOMB_ID = 259495   -- Wildfire Bomb
+local SV_HATCHET_TOSS_ID  = 193265   -- Hatchet Toss
+local SV_TAKEDOWN_ID      = 1250646  -- Takedown
+local SV_TOTS_SPELL_ID    = 260286   -- Tip of the Spear buff
+local SV_SENTINEL_MARK_ID = 1253601  -- Sentinel's Mark        !! VERIFY
+
+local SV_SENTINEL_TEXTURE          = 5927647  -- Sentinel Storm texture (viewer child detection)
+local SV_RAPTOR_SWIPE_OVERRIDE_TEX = 7514183  -- texture[1] of spell 186270 when Raptor Swipe overrides Raptor Strike
+local SV_VIEWER_NAME      = "BuffIconCooldownViewer"
+local SV_MARK_DURATION    = 12
+local SV_TOTS_DURATION    = 10
+local SV_TOTS_MAX_STACKS  = 3
+
+local SV_ALL_CONSUMERS = {
+    [SV_RAPTOR_STRIKE_ID] = true,
+    [SV_RAPTOR_SWIPE_ID]  = true,
+    [SV_BOOMSTICK_ID]     = true,
+    [SV_WILDFIRE_BOMB_ID] = true,
+    [SV_HATCHET_TOSS_ID]  = true,
+    [SV_TAKEDOWN_ID]      = true,
+}
+
+local KEY_SV_TOTS         = "Sentinel Tip of the Spear"
+local KEY_SV_MARK         = "Sentinel's Mark"
+local KEY_SV_RAPTOR_SWIPE = "Raptor Swipe Override"
+
+local SV_TOTS_ICON_DEFAULTS         = { x =  0, y =  36, point = "CENTER", size = 64, enabled = true, glow_enabled = false }
+local SV_MARK_ICON_DEFAULTS         = { x =  0, y = -36, point = "CENTER", size = 64, enabled = true, glow_enabled = true  }
+local SV_RAPTOR_SWIPE_ICON_DEFAULTS = { x = 72, y =   0, point = "CENTER", size = 64, enabled = true, glow_enabled = true  }
+
+-- State
+local sv_iconsRegistered        = false
+local sv_lockCallbackRegistered = false
+local sv_iconTots               = nil
+local sv_iconMark               = nil
+local sv_markTimerText          = nil
+local sv_totsStacks             = 0
+local sv_markExpiry             = 0
+local sv_markChild              = nil
+
+local sv_totsTimer     = nil
+local sv_totsTicker    = nil
+local sv_totsExpiresAt = 0
+
+local sv_wildfireBombPending      = false
+local sv_wildfireBombPendingTimer = nil
+
+local sv_iconRaptorSwipe   = nil
+local sv_raptorSwipeActive = false
+local sv_raptorSwipeTicker = nil
+
+-- Timer helpers
+local SV_UpdateIconState  -- forward declaration (defined below)
+local function SV_MarkActive()    return sv_markExpiry > 0 and GetTime() < sv_markExpiry end
+local function SV_SetMarkActive() sv_markExpiry = GetTime() + SV_MARK_DURATION end
+local function SV_ClearMark()     sv_markExpiry = 0 end
+
+local function SV_ClearTotsTracking()
+    if sv_totsTimer  then sv_totsTimer:Cancel()  end
+    if sv_totsTicker then sv_totsTicker:Cancel() end
+    sv_totsTimer     = nil
+    sv_totsTicker    = nil
+    sv_totsExpiresAt = 0
+    sv_totsStacks    = 0
+    _G["TipOfTheSpearTimerActive"] = false
+    _G["TipOfTheSpearRemaining"]   = 0
+    _G["TipOfTheSpearStacks"]      = 0
+    if sv_iconsRegistered then
+        shmIcons:SetVisible(ADDON_NAME, KEY_SV_TOTS, false)
+        shmIcons:SetCooldownRaw(ADDON_NAME, KEY_SV_TOTS, 0, 0)
+        shmIcons:SetStacks(ADDON_NAME, KEY_SV_TOTS, 0)
+    end
+end
+
+local function SV_StartTotsTimer()
+    if sv_totsTimer  then sv_totsTimer:Cancel()  end
+    if sv_totsTicker then sv_totsTicker:Cancel() end
+    sv_totsTimer     = nil
+    sv_totsTicker    = nil
+    sv_totsExpiresAt = GetTime() + SV_TOTS_DURATION
+    if sv_iconsRegistered then
+        shmIcons:SetCooldownRaw(ADDON_NAME, KEY_SV_TOTS, GetTime(), SV_TOTS_DURATION)
+    end
+    sv_totsTicker = C_Timer.NewTicker(0.1, function()
+        local remains = sv_totsExpiresAt - GetTime()
+        _G["TipOfTheSpearTimerActive"] = remains > 0
+        _G["TipOfTheSpearRemaining"]   = math.max(0, remains)
+    end)
+    sv_totsTimer = C_Timer.NewTimer(SV_TOTS_DURATION, function()
+        sv_totsTimer = nil
+        SV_ClearTotsTracking()
+        SV_UpdateIconState()
+    end)
+end
+
+local function SV_SetWildfireBombPending()
+    sv_wildfireBombPending = true
+    if sv_wildfireBombPendingTimer then sv_wildfireBombPendingTimer:Cancel() end
+    sv_wildfireBombPendingTimer = C_Timer.NewTimer(0.5, function()
+        sv_wildfireBombPending      = false
+        sv_wildfireBombPendingTimer = nil
+    end)
+end
+
+local function SV_ConsumeWildfireBombPending()
+    sv_wildfireBombPending = false
+    if sv_wildfireBombPendingTimer then
+        sv_wildfireBombPendingTimer:Cancel()
+        sv_wildfireBombPendingTimer = nil
+    end
+end
+
+-- Ticker frame for Sentinel's Mark countdown text
+local sv_tickerFrame = CreateFrame("Frame")
+sv_tickerFrame:Hide()
+sv_tickerFrame:SetScript("OnUpdate", function()
+    if not sv_markTimerText then sv_tickerFrame:Hide() return end
+    local remaining = sv_markExpiry > 0 and (sv_markExpiry - GetTime()) or 0
+    if remaining > 0 then
+        sv_markTimerText:SetText(string.format("%d", math.ceil(remaining)))
+    else
+        sv_markTimerText:SetText("")
+        sv_tickerFrame:Hide()
+    end
+end)
+
+SV_UpdateIconState = function()
+    if sv_iconTots then
+        shmIcons:SetStacks(ADDON_NAME, KEY_SV_TOTS, sv_totsStacks)
+        shmIcons:SetVisible(ADDON_NAME, KEY_SV_TOTS, sv_totsStacks > 0)
+        if sv_totsStacks == 0 then
+            shmIcons:SetCooldownRaw(ADDON_NAME, KEY_SV_TOTS, 0, 0)
+        end
+    end
+    local active = SV_MarkActive()
+    if sv_iconMark then
+        shmIcons:SetGlow(ADDON_NAME, KEY_SV_MARK, active)
+        shmIcons:SetVisible(ADDON_NAME, KEY_SV_MARK, active)
+    end
+    if active then
+        sv_tickerFrame:Show()
+    else
+        if sv_markTimerText then sv_markTimerText:SetText("") end
+        sv_tickerFrame:Hide()
+    end
+    _G["SentinelMarkActiveTracker"] = active
+    _G["SentinelMarkRemaining"]     = active and math.max(0, sv_markExpiry - GetTime()) or 0
+    _G["TipOfTheSpearStacks"]       = sv_totsStacks
+    _G["TipOfTheSpearTimerActive"]  = sv_totsExpiresAt > 0 and GetTime() < sv_totsExpiresAt
+    _G["TipOfTheSpearRemaining"]    = (_G["TipOfTheSpearTimerActive"] and math.max(0, sv_totsExpiresAt - GetTime())) or 0
+end
+
+-- Viewer child detection: scan BuffIconCooldownViewer for the child whose
+-- icon texture matches the Sentinel Storm texture.
+local function SV_FindMarkChild()
+    local viewer = _G[SV_VIEWER_NAME]
+    if not viewer then return nil end
+    local n = viewer:GetNumChildren()
+    for i = 1, n do
+        local child = select(i, viewer:GetChildren())
+        for j = 1, select("#", child:GetRegions()) do
+            local r = select(j, child:GetRegions())
+            if r:GetObjectType() == "Texture" then
+                local ok, tid = pcall(r.GetTexture, r)
+                if ok and tid == SV_SENTINEL_TEXTURE then return child end
+            end
+        end
+        for j = 1, child:GetNumChildren() do
+            local gc = select(j, child:GetChildren())
+            for k = 1, select("#", gc:GetRegions()) do
+                local r = select(k, gc:GetRegions())
+                if r:GetObjectType() == "Texture" then
+                    local ok, tid = pcall(r.GetTextureID, r)
+                    if ok and tid == SV_SENTINEL_TEXTURE then return child end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function SV_HookMarkChild(child)
+    sv_markChild = child
+    local hideTimer = nil
+    child:HookScript("OnShow", function()
+        -- Cancel any pending hide debounce (buff refresh: hide + immediate show)
+        if hideTimer then hideTimer:Cancel() hideTimer = nil end
+        -- Only reset the timer on a fresh application or a Wildfire Bomb refresh.
+        -- Other consumers (Raptor Strike, etc.) trigger hide+show but must NOT reset.
+        local freshApply = not SV_MarkActive()
+        local wfbRefresh = sv_wildfireBombPending
+        if wfbRefresh then SV_ConsumeWildfireBombPending() end
+        if freshApply or wfbRefresh then SV_SetMarkActive() end
+        SV_UpdateIconState()
+    end)
+    child:HookScript("OnHide", function()
+        -- Defer clear so a same-frame OnShow (refresh) can cancel it
+        hideTimer = C_Timer.NewTimer(0.05, function()
+            hideTimer = nil
+            SV_ClearMark()
+            SV_UpdateIconState()
+        end)
+    end)
+    if child:IsShown() then
+        SV_SetMarkActive()
+        SV_UpdateIconState()
+    end
+end
+
+local sv_markRetryPending = false
+
+local function SV_InitMarkTracking(isFinalAttempt)
+    local child = SV_FindMarkChild()
+    if child then
+        sv_markRetryPending = false
+        SV_HookMarkChild(child)
+    elseif not isFinalAttempt and not sv_markRetryPending then
+        sv_markRetryPending = true
+        C_Timer.After(20, function()
+            sv_markRetryPending = false
+            SV_InitMarkTracking(true)
+        end)
+    elseif isFinalAttempt then
+        print("OnUseTracker (SV): Sentinel's Mark texture not found in " .. SV_VIEWER_NAME
+            .. " — ensure it is added to the Tracked Buffs bar")
+    end
+end
+
+-- Polls C_Spell.GetSpellTexture(SV_RAPTOR_STRIKE_ID) to detect the Raptor Swipe override.
+-- When texture[1] == SV_RAPTOR_SWIPE_OVERRIDE_TEX the spell button is showing Raptor Swipe.
+local function SV_CheckRaptorSwipeOverride()
+    local tex1 = C_Spell.GetSpellTexture(SV_RAPTOR_STRIKE_ID)
+    local isOverride = (tex1 == SV_RAPTOR_SWIPE_OVERRIDE_TEX)
+    if isOverride ~= sv_raptorSwipeActive then
+        sv_raptorSwipeActive = isOverride
+        _G["RaptorSwipeOverrideActive"] = isOverride
+        if sv_iconsRegistered then
+            shmIcons:SetVisible(ADDON_NAME, KEY_SV_RAPTOR_SWIPE, isOverride)
+            shmIcons:SetGlow(ADDON_NAME, KEY_SV_RAPTOR_SWIPE, isOverride)
+        end
+    end
+end
+
+local function SV_RegisterIcons()
+    if sv_iconsRegistered then return end
+    OnUseTrackerDB = OnUseTrackerDB or {}
+    -- Tip of the Spear icon
+    if not OnUseTrackerDB[KEY_SV_TOTS] then
+        local d = {}
+        for k, v in pairs(SV_TOTS_ICON_DEFAULTS) do d[k] = v end
+        OnUseTrackerDB[KEY_SV_TOTS] = d
+    end
+    local totsDB = OnUseTrackerDB[KEY_SV_TOTS]
+    sv_iconTots = shmIcons:Register(ADDON_NAME, KEY_SV_TOTS, totsDB, {
+        onResize = function(sq) totsDB.size = sq end,
+        onMove   = function() end,
+    })
+    shmIcons:SetIcon(ADDON_NAME, KEY_SV_TOTS, C_Spell.GetSpellTexture(SV_TOTS_SPELL_ID))
+    shmIcons:SetVisible(ADDON_NAME, KEY_SV_TOTS, false)
+    -- Sentinel's Mark icon
+    if not OnUseTrackerDB[KEY_SV_MARK] then
+        local d = {}
+        for k, v in pairs(SV_MARK_ICON_DEFAULTS) do d[k] = v end
+        OnUseTrackerDB[KEY_SV_MARK] = d
+    end
+    local markDB = OnUseTrackerDB[KEY_SV_MARK]
+    sv_iconMark = shmIcons:Register(ADDON_NAME, KEY_SV_MARK, markDB, {
+        onResize = function(sq)
+            markDB.size = sq
+            if sv_markTimerText then
+                sv_markTimerText:SetFont(
+                    "Fonts\\FRIZQT__.TTF",
+                    math.max(8, math.floor(sq * 0.45)),
+                    "OUTLINE")
+            end
+        end,
+        onMove = function() end,
+    })
+    shmIcons:SetIcon(ADDON_NAME, KEY_SV_MARK,
+        C_Spell.GetSpellTexture(SV_SENTINEL_MARK_ID) or SV_SENTINEL_TEXTURE)
+    shmIcons:SetVisible(ADDON_NAME, KEY_SV_MARK, false)
+    -- Countdown font string on mark icon frame
+    if sv_iconMark and sv_iconMark.frame then
+        sv_markTimerText = sv_iconMark.frame:CreateFontString(nil, "OVERLAY")
+        sv_markTimerText:SetFont(
+            "Fonts\\FRIZQT__.TTF",
+            math.max(8, math.floor(markDB.size * 0.45)),
+            "OUTLINE")
+        sv_markTimerText:SetPoint("CENTER", sv_iconMark.frame, "CENTER", 0, 0)
+        sv_markTimerText:SetTextColor(1, 1, 1, 1)
+        sv_markTimerText:SetText("")
+    end
+    -- Raptor Swipe Override icon
+    if not OnUseTrackerDB[KEY_SV_RAPTOR_SWIPE] then
+        local d = {}
+        for k, v in pairs(SV_RAPTOR_SWIPE_ICON_DEFAULTS) do d[k] = v end
+        OnUseTrackerDB[KEY_SV_RAPTOR_SWIPE] = d
+    end
+    local raptorSwipeDB = OnUseTrackerDB[KEY_SV_RAPTOR_SWIPE]
+    sv_iconRaptorSwipe = shmIcons:Register(ADDON_NAME, KEY_SV_RAPTOR_SWIPE, raptorSwipeDB, {
+        onResize = function(sq) raptorSwipeDB.size = sq end,
+        onMove   = function() end,
+    })
+    shmIcons:SetIcon(ADDON_NAME, KEY_SV_RAPTOR_SWIPE, C_Spell.GetSpellTexture(SV_RAPTOR_SWIPE_ID))
+    shmIcons:SetVisible(ADDON_NAME, KEY_SV_RAPTOR_SWIPE, false)
+    -- Lock callback (SV-specific; BM already has its own separate callback)
+    if not sv_lockCallbackRegistered and shmIcons and shmIcons.RegisterLockCallback then
+        sv_lockCallbackRegistered = true
+        shmIcons:RegisterLockCallback(function(locked)
+            if locked and sv_iconsRegistered then
+                shmIcons:SetVisible(ADDON_NAME, KEY_SV_TOTS, false)
+                shmIcons:SetCooldownRaw(ADDON_NAME, KEY_SV_TOTS, 0, 0)
+                shmIcons:SetGlow(ADDON_NAME, KEY_SV_TOTS, false)
+                shmIcons:SetVisible(ADDON_NAME, KEY_SV_MARK, false)
+                shmIcons:SetGlow(ADDON_NAME, KEY_SV_MARK, false)
+                shmIcons:SetVisible(ADDON_NAME, KEY_SV_RAPTOR_SWIPE, false)
+                shmIcons:SetGlow(ADDON_NAME, KEY_SV_RAPTOR_SWIPE, false)
+                if sv_markTimerText then sv_markTimerText:SetText("") end
+                sv_tickerFrame:Hide()
+            elseif not locked and sv_iconsRegistered then
+                SV_UpdateIconState()
+                SV_CheckRaptorSwipeOverride()
+            end
+        end)
+    end
+    sv_iconsRegistered = true
+end
+
+local function SV_UnregisterIcons()
+    if not sv_iconsRegistered then return end
+    shmIcons:Unregister(ADDON_NAME, KEY_SV_TOTS)
+    shmIcons:Unregister(ADDON_NAME, KEY_SV_MARK)
+    shmIcons:Unregister(ADDON_NAME, KEY_SV_RAPTOR_SWIPE)
+    sv_iconTots        = nil
+    sv_iconMark        = nil
+    sv_iconRaptorSwipe = nil
+    sv_markTimerText   = nil
+    sv_tickerFrame:Hide()
+    sv_iconsRegistered = false
+end
+
+-- ---- Module interface ----
+
+local svModule = {}
+svModule.specID = SV_SPEC_ID
+
+function svModule.GetIconTextureSpellID()
+    return SV_KILL_COMMAND_ID
+end
+
+function svModule.GetTimerDuration()
+    return SV_MARK_DURATION
+end
+
+function svModule.Enable(_iconFrame)
+    if not sv_iconsRegistered then SV_RegisterIcons() end
+    sv_totsStacks = 0
+    sv_markChild  = nil
+    SV_ClearMark()
+    SV_UpdateIconState()
+    SV_InitMarkTracking()
+    -- Poll Raptor Strike's texture every 0.2s to detect the Raptor Swipe override.
+    if sv_raptorSwipeTicker then sv_raptorSwipeTicker:Cancel() end
+    sv_raptorSwipeTicker = C_Timer.NewTicker(0.2, SV_CheckRaptorSwipeOverride)
+    SV_CheckRaptorSwipeOverride()
+    -- SV_InitMarkTracking may run before PLAYER_ENTERING_WORLD (e.g. on
+    -- PLAYER_LOGIN) when BuffIconCooldownViewer children aren't set up yet.
+    -- The sv_worldFrame below retries once the world is fully loaded, exactly
+    -- mirroring what the original SentinelTracker did with its own event frame.
+end
+
+function svModule.Disable()
+    SV_ClearTotsTracking()
+    sv_markChild  = nil
+    SV_ClearMark()
+    if sv_raptorSwipeTicker then sv_raptorSwipeTicker:Cancel() sv_raptorSwipeTicker = nil end
+    sv_raptorSwipeActive = false
+    SV_UnregisterIcons()
+    _G["SentinelMarkActiveTracker"] = false
+    _G["SentinelMarkRemaining"]     = 0
+    _G["TipOfTheSpearStacks"]       = 0
+    _G["TipOfTheSpearTimerActive"]  = false
+    _G["TipOfTheSpearRemaining"]    = 0
+    _G["RaptorSwipeOverrideActive"] = false
+end
+
+function svModule.OnSpellCast(spellID, _outIconEnabled)
+    if spellID == SV_KILL_COMMAND_ID then
+        sv_totsStacks = math.min(sv_totsStacks + 2, SV_TOTS_MAX_STACKS)
+        SV_StartTotsTimer()
+        SV_UpdateIconState()
+    elseif SV_ALL_CONSUMERS[spellID] then
+        sv_totsStacks = math.max(sv_totsStacks - 1, 0)
+        if spellID == SV_WILDFIRE_BOMB_ID then
+            SV_SetWildfireBombPending()
+        end
+        SV_UpdateIconState()
+    end
+end
+
+OnUseTracker_RegisterModule(svModule)
+
+-- Mirror the original SentinelTracker: re-run child detection on every
+-- PLAYER_ENTERING_WORLD so the hook is attached even if Enable() ran
+-- before BuffIconCooldownViewer children were populated (e.g. PLAYER_LOGIN).
+local sv_worldFrame = CreateFrame("Frame")
+sv_worldFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+sv_worldFrame:SetScript("OnEvent", function()
+    if sv_iconsRegistered and not sv_markChild then
+        sv_markRetryPending = false   -- cancel any in-flight retry timer
+        SV_InitMarkTracking(false)
+    end
+end)
+
+-- Slash commands for SV debug / management
+SLASH_SENTINELTRACKER1 = "/st"
+SlashCmdList["SENTINELTRACKER"] = function(msg)
+    msg = msg:lower():match("^%s*(.-)%s*$")
+    if msg == "lock" then
+        local locked = shmIcons:ToggleLock()
+        print("shmIcons: All icons " .. (locked and "Locked." or "Unlocked."))
+    elseif msg == "reset" then
+        if OnUseTrackerDB then
+            local totsSize = OnUseTrackerDB[KEY_SV_TOTS] and OnUseTrackerDB[KEY_SV_TOTS].size or ICON_SIZE_DEFAULT
+            local markSize = OnUseTrackerDB[KEY_SV_MARK] and OnUseTrackerDB[KEY_SV_MARK].size or ICON_SIZE_DEFAULT
+            shmIcons:ResetIcon(ADDON_NAME, KEY_SV_TOTS, totsSize)
+            shmIcons:ResetIcon(ADDON_NAME, KEY_SV_MARK, markSize)
+            print("OnUseTracker (SV): Icons reset to center.")
+        end
+    elseif msg == "reinit" then
+        sv_markChild = nil
+        sv_markRetryPending = false
+        SV_ClearMark()
+        SV_InitMarkTracking(false)
+        print("OnUseTracker (SV): Mark child detection re-run.")
+    elseif msg == "status" then
+        print(string.format(
+            "OnUseTracker (SV): mark=%s(%.1fs) tots=%d markChild=%s",
+            tostring(SV_MarkActive()),
+            math.max(0, sv_markExpiry - GetTime()),
+            sv_totsStacks,
+            tostring(sv_markChild ~= nil)))
+    else
+        print("OnUseTracker (SV): /st lock | reset | reinit | status")
+    end
+end

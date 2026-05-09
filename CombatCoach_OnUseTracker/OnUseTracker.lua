@@ -46,6 +46,12 @@ _G["VivifyProcActiveTracker"]        = false
 _G["VivifyProcRemaining"]            = 0
 _G["HojsActiveTracker"]              = false
 _G["HojsRemaining"]                  = 0
+_G["SentinelMarkActiveTracker"]      = false
+_G["SentinelMarkRemaining"]          = 0
+_G["TipOfTheSpearStacks"]            = 0
+_G["TipOfTheSpearTimerActive"]       = false
+_G["TipOfTheSpearRemaining"]         = 0
+_G["RaptorSwipeOverrideActive"]      = false
 
 local OUT_IconEnabled = false
 

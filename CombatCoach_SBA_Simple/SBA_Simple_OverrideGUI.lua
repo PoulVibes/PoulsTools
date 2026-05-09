@@ -160,9 +160,14 @@ local PLUGIN_OPTS_BM = {
 }
 
 local PLUGIN_OPTS_SV = {
-    { id = "howl_proc",              label = "Howl of the Pack Leader", supportsProcMode = true, default = 29 },
-    { id = "hogstrider_proc",        label = "Hogstrider",              supportsProcMode = true, default = 19 },
-    { id = "moonlight_chakram_proc", label = "Moonlight Chakram",       supportsProcMode = true, default = 14 },
+    { id = "sentinel_mark",        label = "Sentinel's Mark",           supportsProcMode = true, default = 12    },
+    { id = "tots_stacks",          label = "Tip of the Spear Stacks",   supportsProcMode = true, default = 1,
+                                   valueLabel = "Stacks",               procCompareOnly = true                    },
+    { id = "tots_timer",           label = "Tip of the Spear Timer",    supportsProcMode = true, default = 5     },
+    { id = "raptor_swipe_override", label = "Raptor Swipe Override"                                               },
+    { id = "howl_proc",            label = "Howl of the Pack Leader",   supportsProcMode = true, default = 29    },
+    { id = "hogstrider_proc",      label = "Hogstrider",                supportsProcMode = true, default = 19    },
+    { id = "moonlight_chakram_proc", label = "Moonlight Chakram",       supportsProcMode = true, default = 14    },
 }
 
 -- Brewmaster (268) and Mistweaver (270) share the same plugin options.
@@ -307,6 +312,24 @@ local PROC_PLUGIN_BY_ID = {
         activeFlag = "moonlight_chakram_proc_active",
         timerVar = "moonlight_chakram_proc_timer",
     },
+    sentinel_mark = {
+        label = "Sentinel's Mark",
+        activeFlag = "SentinelMarkActiveTracker",
+        timerVar = "SentinelMarkRemaining",
+    },
+    tots_stacks = {
+        label = "Tip of the Spear Stacks",
+        timerVar = "TipOfTheSpearStacks",
+    },
+    tots_timer = {
+        label = "Tip of the Spear Timer",
+        activeFlag = "TipOfTheSpearTimerActive",
+        timerVar = "TipOfTheSpearRemaining",
+    },
+    raptor_swipe_override = {
+        label = "Raptor Swipe Override",
+        activeFlag = "RaptorSwipeOverrideActive",
+    },
 }
 
 local VALID_COMP_OPS = {
@@ -339,8 +362,8 @@ end
 BuildPluginConditionExpr = function(cond, ruleSpellID)
     local plugin, op, value = NormalizePluginState(cond)
     if plugin == "zenith" then return "ZenithActiveTracker" end
-    if plugin == "bestial_wrath_active" then return "BestialWrathActiveTracker" end
-    if plugin == "withering_fire_active" then return "WitheringFireActiveTracker" end
+    if plugin == "bestial_wrath_active"  then return "BestialWrathActiveTracker"  end
+    if plugin == "withering_fire_active"  then return "WitheringFireActiveTracker"  end
     if plugin == "last_combo_eq" then
         return ("LastComboStrikeSpellID == %d"):format(ruleSpellID or 0)
     end
@@ -348,22 +371,22 @@ BuildPluginConditionExpr = function(cond, ruleSpellID)
     local meta = PROC_PLUGIN_BY_ID[plugin]
     if not meta then return "false" end
     if IsCompOp(op) then
-        if plugin == "withering_fire" then
-            return ("(WitheringFireActiveTracker == true) and ((tonumber(%s) or 0) %s %d)"):format(meta.timerVar, op, value or 10)
-        end
-        if plugin == "bestial_wrath_cooldown" then
-            return ("(((%s == true) and (tonumber(%s) or 0)) or 0) %s %d")
-                :format(meta.activeFlag, meta.timerVar, op, value or 90)
-        end
-        if plugin == "barbed_shot_debuff" then
-            return ("(((%s == true) and (tonumber(%s) or 0)) or 0) %s %d")
-                :format(meta.activeFlag, meta.timerVar, op, value or 12)
-        end
-        if plugin == "beast_cleave" then
-            return ("(((%s == true) and (tonumber(%s) or 0)) or 0) %s %d")
-                :format(meta.activeFlag, meta.timerVar, op, value or 8)
-        end
+        -- All timer comparisons treat absent/expired as 0:
+        --   timer < N  is true when inactive (0 < N)
+        --   timer > N  is false when inactive (0 > N)
+        if plugin == "withering_fire"       then return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 10) end
+        if plugin == "bestial_wrath_cooldown" then return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 90) end
+        if plugin == "barbed_shot_debuff"   then return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 12) end
+        if plugin == "beast_cleave"         then return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 8)  end
+        if plugin == "sentinel_mark"        then return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 12) end
+        if plugin == "tots_timer"           then return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 5)  end
         return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 4)
+    end
+    if plugin == "tots_stacks" then
+        return ("(tonumber(%s) or 0) > 0"):format(meta.timerVar)
+    end
+    if plugin == "tots_timer" then
+        return ("(%s == true)"):format(meta.activeFlag)
     end
     return ("(%s == true)"):format(meta.activeFlag)
 end
