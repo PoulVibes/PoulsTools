@@ -380,7 +380,7 @@ local SV_BOOMSTICK_ID     = 1261193  -- Boomstick             !! VERIFY
 local SV_WILDFIRE_BOMB_ID = 259495   -- Wildfire Bomb
 local SV_HATCHET_TOSS_ID  = 193265   -- Hatchet Toss
 local SV_TAKEDOWN_ID      = 1250646  -- Takedown
-local SV_TOTS_TALENT_ID    = 260286   -- Tip of the Spear (talent node)
+local SV_TOTS_TALENT_ID    = 260285   -- Tip of the Spear (talent node)
 local SV_PRIMAL_SURGE_TALENT_ID = 141452  -- Primal Surge: KC grants +1 extra TotS stack
 local SV_TWIN_FANGS_TALENT_ID   = 140445  -- Twin Fangs: Takedown sets TotS to max stacks
 local SV_SENTINEL_MARK_ID    = 1253601  -- Sentinel's Mark        !! VERIFY
@@ -706,7 +706,7 @@ local function SV_RegisterIcons()
         onResize = function(sq) totsDB.size = sq end,
         onMove   = function() end,
     })
-    shmIcons:SetIcon(ADDON_NAME, KEY_SV_TOTS, C_Spell.GetSpellTexture(SV_TOTS_SPELL_ID))
+    shmIcons:SetIcon(ADDON_NAME, KEY_SV_TOTS, C_Spell.GetSpellTexture(SV_TOTS_TALENT_ID))
     shmIcons:SetVisible(ADDON_NAME, KEY_SV_TOTS, false)
     -- Sentinel's Mark icon
     if not OnUseTrackerDB[KEY_SV_MARK] then
