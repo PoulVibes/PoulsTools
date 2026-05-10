@@ -389,6 +389,7 @@ local SV_VIEWER_NAME      = "BuffIconCooldownViewer"
 local SV_MARK_DURATION    = 12
 local SV_TOTS_DURATION    = 10
 local SV_TOTS_MAX_STACKS  = 3
+local SV_TAKEDOWN_BUFF_DURATION = 10
 
 local SV_ALL_CONSUMERS = {
     [SV_RAPTOR_STRIKE_ID] = true,
@@ -402,10 +403,12 @@ local SV_ALL_CONSUMERS = {
 local KEY_SV_TOTS         = "Sentinel Tip of the Spear"
 local KEY_SV_MARK         = "Sentinel's Mark"
 local KEY_SV_RAPTOR_SWIPE = "Raptor Swipe Override"
+local KEY_SV_TAKEDOWN     = "Takedown Buff"
 
 local SV_TOTS_ICON_DEFAULTS         = { x =  0, y =  36, point = "CENTER", size = 64, enabled = true, glow_enabled = false }
 local SV_MARK_ICON_DEFAULTS         = { x =  0, y = -36, point = "CENTER", size = 64, enabled = true, glow_enabled = true  }
 local SV_RAPTOR_SWIPE_ICON_DEFAULTS = { x = 72, y =   0, point = "CENTER", size = 64, enabled = true, glow_enabled = true  }
+local SV_TAKEDOWN_ICON_DEFAULTS     = { x =-72, y =   0, point = "CENTER", size = 64, enabled = true, glow_enabled = true  }
 
 -- State
 local sv_iconsRegistered        = false
@@ -428,11 +431,53 @@ local sv_iconRaptorSwipe   = nil
 local sv_raptorSwipeActive = false
 local sv_raptorSwipeTicker = nil
 
+local sv_takedownTimer     = nil
+local sv_takedownTicker    = nil
+local sv_takedownExpiresAt = 0
+
 -- Timer helpers
 local SV_UpdateIconState  -- forward declaration (defined below)
 local function SV_MarkActive()    return sv_markExpiry > 0 and GetTime() < sv_markExpiry end
 local function SV_SetMarkActive() sv_markExpiry = GetTime() + SV_MARK_DURATION end
 local function SV_ClearMark()     sv_markExpiry = 0 end
+
+local function SV_ClearTakedownTracking()
+    if sv_takedownTimer  then sv_takedownTimer:Cancel()  end
+    if sv_takedownTicker then sv_takedownTicker:Cancel() end
+    sv_takedownTimer     = nil
+    sv_takedownTicker    = nil
+    sv_takedownExpiresAt = 0
+    _G["TakedownBuffActive"]    = false
+    _G["TakedownBuffRemaining"] = 0
+    if sv_iconsRegistered then
+        shmIcons:SetVisible(ADDON_NAME, KEY_SV_TAKEDOWN, false)
+        shmIcons:SetCooldownRaw(ADDON_NAME, KEY_SV_TAKEDOWN, 0, 0)
+        shmIcons:SetGlow(ADDON_NAME, KEY_SV_TAKEDOWN, false)
+    end
+end
+
+local function SV_StartTakedownTracking()
+    SV_ClearTakedownTracking()
+    sv_takedownExpiresAt = GetTime() + SV_TAKEDOWN_BUFF_DURATION
+    _G["TakedownBuffActive"]    = true
+    _G["TakedownBuffRemaining"] = SV_TAKEDOWN_BUFF_DURATION
+    if sv_iconsRegistered then
+        shmIcons:SetVisible(ADDON_NAME, KEY_SV_TAKEDOWN, true)
+        shmIcons:SetCooldownRaw(ADDON_NAME, KEY_SV_TAKEDOWN, GetTime(), SV_TAKEDOWN_BUFF_DURATION)
+        shmIcons:SetGlow(ADDON_NAME, KEY_SV_TAKEDOWN, true)
+    end
+    sv_takedownTicker = C_Timer.NewTicker(0.1, function()
+        local remains = sv_takedownExpiresAt - GetTime()
+        if remains > 0 then
+            _G["TakedownBuffRemaining"] = remains
+        else
+            SV_ClearTakedownTracking()
+        end
+    end)
+    sv_takedownTimer = C_Timer.NewTimer(SV_TAKEDOWN_BUFF_DURATION, function()
+        SV_ClearTakedownTracking()
+    end)
+end
 
 local function SV_ClearTotsTracking()
     if sv_totsTimer  then sv_totsTimer:Cancel()  end
@@ -687,6 +732,19 @@ local function SV_RegisterIcons()
     })
     shmIcons:SetIcon(ADDON_NAME, KEY_SV_RAPTOR_SWIPE, C_Spell.GetSpellTexture(SV_RAPTOR_SWIPE_ID))
     shmIcons:SetVisible(ADDON_NAME, KEY_SV_RAPTOR_SWIPE, false)
+    -- Takedown Buff icon
+    if not OnUseTrackerDB[KEY_SV_TAKEDOWN] then
+        local d = {}
+        for k, v in pairs(SV_TAKEDOWN_ICON_DEFAULTS) do d[k] = v end
+        OnUseTrackerDB[KEY_SV_TAKEDOWN] = d
+    end
+    local takedownDB = OnUseTrackerDB[KEY_SV_TAKEDOWN]
+    shmIcons:Register(ADDON_NAME, KEY_SV_TAKEDOWN, takedownDB, {
+        onResize = function(sq) takedownDB.size = sq end,
+        onMove   = function() end,
+    })
+    shmIcons:SetIcon(ADDON_NAME, KEY_SV_TAKEDOWN, C_Spell.GetSpellTexture(SV_TAKEDOWN_ID))
+    shmIcons:SetVisible(ADDON_NAME, KEY_SV_TAKEDOWN, false)
     -- Lock callback (SV-specific; BM already has its own separate callback)
     if not sv_lockCallbackRegistered and shmIcons and shmIcons.RegisterLockCallback then
         sv_lockCallbackRegistered = true
@@ -699,6 +757,9 @@ local function SV_RegisterIcons()
                 shmIcons:SetGlow(ADDON_NAME, KEY_SV_MARK, false)
                 shmIcons:SetVisible(ADDON_NAME, KEY_SV_RAPTOR_SWIPE, false)
                 shmIcons:SetGlow(ADDON_NAME, KEY_SV_RAPTOR_SWIPE, false)
+                shmIcons:SetVisible(ADDON_NAME, KEY_SV_TAKEDOWN, false)
+                shmIcons:SetCooldownRaw(ADDON_NAME, KEY_SV_TAKEDOWN, 0, 0)
+                shmIcons:SetGlow(ADDON_NAME, KEY_SV_TAKEDOWN, false)
                 if sv_markTimerText then sv_markTimerText:SetText("") end
                 sv_tickerFrame:Hide()
             elseif not locked and sv_iconsRegistered then
@@ -715,6 +776,7 @@ local function SV_UnregisterIcons()
     shmIcons:Unregister(ADDON_NAME, KEY_SV_TOTS)
     shmIcons:Unregister(ADDON_NAME, KEY_SV_MARK)
     shmIcons:Unregister(ADDON_NAME, KEY_SV_RAPTOR_SWIPE)
+    shmIcons:Unregister(ADDON_NAME, KEY_SV_TAKEDOWN)
     sv_iconTots        = nil
     sv_iconMark        = nil
     sv_iconRaptorSwipe = nil
@@ -756,6 +818,7 @@ end
 
 function svModule.Disable()
     SV_ClearTotsTracking()
+    SV_ClearTakedownTracking()
     sv_markChild  = nil
     SV_ClearMark()
     if sv_raptorSwipeTicker then sv_raptorSwipeTicker:Cancel() sv_raptorSwipeTicker = nil end
@@ -767,6 +830,8 @@ function svModule.Disable()
     _G["TipOfTheSpearTimerActive"]  = false
     _G["TipOfTheSpearRemaining"]    = 0
     _G["RaptorSwipeOverrideActive"] = false
+    _G["TakedownBuffActive"]        = false
+    _G["TakedownBuffRemaining"]     = 0
 end
 
 function svModule.OnSpellCast(spellID, _outIconEnabled)
@@ -780,6 +845,9 @@ function svModule.OnSpellCast(spellID, _outIconEnabled)
             SV_SetWildfireBombPending()
         end
         SV_UpdateIconState()
+    end
+    if spellID == SV_TAKEDOWN_ID then
+        SV_StartTakedownTracking()
     end
 end
 

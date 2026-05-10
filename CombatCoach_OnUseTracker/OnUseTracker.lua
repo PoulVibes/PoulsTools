@@ -53,6 +53,8 @@ _G["TipOfTheSpearTimerActive"]       = false
 _G["TipOfTheSpearRemaining"]         = 0
 _G["RaptorSwipeOverrideActive"]      = false
 _G["SentinelMarkTrackerReady"]       = false
+_G["TakedownBuffActive"]             = false
+_G["TakedownBuffRemaining"]          = 0
 
 local OUT_IconEnabled = false
 

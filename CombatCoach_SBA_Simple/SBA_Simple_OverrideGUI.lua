@@ -164,6 +164,7 @@ local PLUGIN_OPTS_SV = {
     { id = "tots_stacks",          label = "Tip of the Spear Stacks",   supportsProcMode = true, default = 1,
                                    valueLabel = "Stacks",               procCompareOnly = true                    },
     { id = "tots_timer",           label = "Tip of the Spear Timer",    supportsProcMode = true, default = 5     },
+    { id = "takedown_buff",        label = "Takedown Buff",             supportsProcMode = true, default = 5     },
     { id = "raptor_swipe_override", label = "Raptor Swipe Override"                                               },
     { id = "howl_proc",            label = "Howl of the Pack Leader",   supportsProcMode = true, default = 29    },
     { id = "hogstrider_proc",      label = "Hogstrider",                supportsProcMode = true, default = 19    },
@@ -326,6 +327,11 @@ local PROC_PLUGIN_BY_ID = {
         activeFlag = "TipOfTheSpearTimerActive",
         timerVar = "TipOfTheSpearRemaining",
     },
+    takedown_buff = {
+        label = "Takedown Buff",
+        activeFlag = "TakedownBuffActive",
+        timerVar = "TakedownBuffRemaining",
+    },
     raptor_swipe_override = {
         label = "Raptor Swipe Override",
         activeFlag = "RaptorSwipeOverrideActive",
@@ -380,6 +386,7 @@ BuildPluginConditionExpr = function(cond, ruleSpellID)
         if plugin == "beast_cleave"         then return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 8)  end
         if plugin == "sentinel_mark"        then return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 12) end
         if plugin == "tots_timer"           then return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 5)  end
+        if plugin == "takedown_buff"        then return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 5)  end
         return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 4)
     end
     if plugin == "tots_stacks" then
