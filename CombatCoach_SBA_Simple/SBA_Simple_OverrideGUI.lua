@@ -5238,6 +5238,15 @@ end
 
 _G.SBAS_OpenOverrideGUI    = OpenGUI
 
+-- Called by OnUseTracker_Hunter when the Sentinel's Mark cooldown viewer child is
+-- successfully hooked (immediately or after the 20 s retry).  Refreshes the rule
+-- list so any tracker-missing warning icons are cleared.
+_G.SBAS_OnSentinelMarkTrackerReady = function()
+    if guiFrame and guiFrame:IsShown() then
+        RefreshRuleList()
+    end
+end
+
 -- Public: reset tab-1 GUI rules for a spec to the single Blizzard SBA entry
 -- and clear any compiled override code for that spec.
 _G.SBAS_ResetToBlizzardSBA = function(specID)

@@ -381,7 +381,8 @@ local SV_WILDFIRE_BOMB_ID = 259495   -- Wildfire Bomb
 local SV_HATCHET_TOSS_ID  = 193265   -- Hatchet Toss
 local SV_TAKEDOWN_ID      = 1250646  -- Takedown
 local SV_TOTS_SPELL_ID    = 260286   -- Tip of the Spear buff
-local SV_SENTINEL_MARK_ID = 1253601  -- Sentinel's Mark        !! VERIFY
+local SV_SENTINEL_MARK_ID    = 1253601  -- Sentinel's Mark        !! VERIFY
+local SV_SENTINEL_TALENT_ID  = 1253599  -- Sentinel (talent node; gates mark tracking)
 
 local SV_SENTINEL_TEXTURE          = 5927647  -- Sentinel Storm texture (viewer child detection)
 local SV_RAPTOR_SWIPE_OVERRIDE_TEX = 7514183  -- texture[1] of spell 186270 when Raptor Swipe overrides Raptor Strike
@@ -400,7 +401,7 @@ local SV_ALL_CONSUMERS = {
     [SV_TAKEDOWN_ID]      = true,
 }
 
-local KEY_SV_TOTS         = "Sentinel Tip of the Spear"
+local KEY_SV_TOTS         = "Tip of the Spear"
 local KEY_SV_MARK         = "Sentinel's Mark"
 local KEY_SV_RAPTOR_SWIPE = "Raptor Swipe Override"
 local KEY_SV_TAKEDOWN     = "Takedown Buff"
@@ -610,6 +611,10 @@ end
 local function SV_HookMarkChild(child)
     sv_markChild = child
     _G["SentinelMarkTrackerReady"] = true
+    -- Notify the SBAS Override GUI so it can clear any tracker-missing warnings.
+    if type(_G.SBAS_OnSentinelMarkTrackerReady) == "function" then
+        _G.SBAS_OnSentinelMarkTrackerReady()
+    end
     local hideTimer = nil
     child:HookScript("OnShow", function()
         -- Cancel any pending hide debounce (buff refresh: hide + immediate show)
@@ -637,21 +642,36 @@ local function SV_HookMarkChild(child)
 end
 
 local sv_markRetryPending = false
+local sv_markRetryCount   = 0
+local SV_MARK_MAX_RETRIES = 10   -- 10 × 3 s = 30 s total per attempt cycle
 
-local function SV_InitMarkTracking(isFinalAttempt)
+local function SV_InitMarkTracking()
+    if sv_markChild then return end   -- already hooked
+    -- Skip entirely if the talent is not learned; wait for TRAIT_CONFIG_UPDATED.
+    if not IsPlayerSpell(SV_SENTINEL_TALENT_ID) then
+        sv_markRetryPending = false
+        sv_markRetryCount   = 0
+        return
+    end
     local child = SV_FindMarkChild()
     if child then
         sv_markRetryPending = false
+        sv_markRetryCount   = 0
         SV_HookMarkChild(child)
-    elseif not isFinalAttempt and not sv_markRetryPending then
+    elseif not sv_markRetryPending then
+        if sv_markRetryCount >= SV_MARK_MAX_RETRIES then
+            -- Give up for this attempt cycle and emit a warning once.
+            sv_markRetryCount = 0
+            print("OnUseTracker (SV): Sentinel's Mark texture not found in " .. SV_VIEWER_NAME
+                .. " — ensure it is added to the Tracked Buffs bar")
+            return
+        end
+        sv_markRetryCount   = sv_markRetryCount + 1
         sv_markRetryPending = true
-        C_Timer.After(20, function()
+        C_Timer.After(3, function()
             sv_markRetryPending = false
-            SV_InitMarkTracking(true)
+            SV_InitMarkTracking()
         end)
-    elseif isFinalAttempt then
-        print("OnUseTracker (SV): Sentinel's Mark texture not found in " .. SV_VIEWER_NAME
-            .. " — ensure it is added to the Tracked Buffs bar")
     end
 end
 
@@ -858,10 +878,22 @@ OnUseTracker_RegisterModule(svModule)
 -- before BuffIconCooldownViewer children were populated (e.g. PLAYER_LOGIN).
 local sv_worldFrame = CreateFrame("Frame")
 sv_worldFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-sv_worldFrame:SetScript("OnEvent", function()
+sv_worldFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
+sv_worldFrame:SetScript("OnEvent", function(_, event)
     if sv_iconsRegistered and not sv_markChild then
         sv_markRetryPending = false   -- cancel any in-flight retry timer
-        SV_InitMarkTracking(false)
+        sv_markRetryCount   = 0
+        if event == "TRAIT_CONFIG_UPDATED" then
+            -- Defer slightly so CooldownTracker can process the talent change
+            -- and populate BuffIconCooldownViewer before we scan it.
+            C_Timer.After(0.5, function()
+                if sv_iconsRegistered and not sv_markChild then
+                    SV_InitMarkTracking()
+                end
+            end)
+        else
+            SV_InitMarkTracking()
+        end
     end
 end)
 
@@ -881,10 +913,11 @@ SlashCmdList["SENTINELTRACKER"] = function(msg)
             print("OnUseTracker (SV): Icons reset to center.")
         end
     elseif msg == "reinit" then
-        sv_markChild = nil
+        sv_markChild        = nil
         sv_markRetryPending = false
+        sv_markRetryCount   = 0
         SV_ClearMark()
-        SV_InitMarkTracking(false)
+        SV_InitMarkTracking()
         print("OnUseTracker (SV): Mark child detection re-run.")
     elseif msg == "status" then
         print(string.format(
