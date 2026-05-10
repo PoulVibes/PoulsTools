@@ -169,6 +169,8 @@ local PLUGIN_OPTS_SV = {
     { id = "howl_proc",            label = "Howl of the Pack Leader",   supportsProcMode = true, default = 29    },
     { id = "hogstrider_proc",      label = "Hogstrider",                supportsProcMode = true, default = 19    },
     { id = "moonlight_chakram_proc", label = "Moonlight Chakram",       supportsProcMode = true, default = 14    },
+    { id = "wildfire_bomb_stacks", label = "Wildfire Bomb Stacks",      supportsProcMode = true, default = 1,
+                                   valueLabel = "Stacks",               procCompareOnly = true                    },
 }
 
 -- Brewmaster (268) and Mistweaver (270) share the same plugin options.
@@ -335,6 +337,10 @@ local PROC_PLUGIN_BY_ID = {
     raptor_swipe_override = {
         label = "Raptor Swipe Override",
         activeFlag = "RaptorSwipeOverrideActive",
+    },
+    wildfire_bomb_stacks = {
+        label = "Wildfire Bomb Stacks",
+        timerVar = "StackMatcher_WildfireBombStacks",
     },
 }
 
