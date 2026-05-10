@@ -7,6 +7,13 @@ _G.SBAS_RecommendedImports = {
         source = "Working per Spec Overrides/BM Hunter Override.txt",
         importText = [[SBASGUI2|1|253;R,883,Call Pet 1,has_pet~1~this~~~~~~;R,982,Revive Pet,pet_alive~1~this~~~~~~;R,217200,Barbed Shot,(on_cd~1~num~19574~~~~~,&&plugin~0~this~~~<~bestial_wrath_cooldown~2~);R,19574,Bestial Wrath,on_cd~0~this~~~~~~;R,1264359,Wild Thrash,on_cd~0~this~~~~~~,&&target_count~0~this~~~>=~~2~;R,34026,Kill Command,((plugin~0~this~~~==~kill_command_stacks~2~,|plugin~0~this~~~>~bestial_wrath_cooldown~4~),&&(plugin~0~this~~~~natures_ally~~,|plugin~0~this~~~~howl_proc~~)),&&last_ability_eq~1~this~~~~~~,&&usable~0~this~~~~~~;R,466930,Black Arrow,plugin~0~this~~~~withering_fire~~,&&on_cd~0~this~~~~~~,&&plugin~0~this~~~~black_arrow_proc~~;R,392060,Wailing Arrow,plugin~0~this~~~<~withering_fire~4~,&&plugin~0~this~~~~wailing_arrow_proc~~,&&on_cd~0~this~~~~~~;R,34026,Kill Command,on_cd~0~this~~~~~~,&&last_ability_eq~1~this~~~~~~,&&usable~0~this~~~~~~;R,217200,Barbed Shot,plugin~0~this~~~==~barbed_shot_stacks~2~,&&resource~0~this~~chi~<~~75~;R,466930,Black Arrow,on_cd~0~this~~~~~~,&&reactive_enabled~0~this~~~~~~;R,193455,Cobra Shot,usable~0~this~~~~~~,&&(plugin~0~this~~~~hogstrider_proc~~,|last_ability_eq~0~num~34026~~~~~,|plugin~0~this~~~==~kill_command_stacks~0~);R,1229376,Single-Button Assistant]],
     },
+    [255] = {
+        name = "Survival Hunter",
+        source = "Working per Spec Overrides/Survival Hunter Override.txt",
+        importText = [[SBASGUI_MULTI;1;2;Rotation;Cooldowns
+SBASGUI2|1|255;R,259489,Kill Command,plugin~0~this~~~<=~tots_stacks~1~,&&on_cd~0~this~~~~~~;R,259495,Wildfire Bomb,((talented~1~num~1253599~~~~~,&&plugin~0~this~~~~tots_stacks~~),|(plugin~0~this~~~~tots_stacks~~,&&talented~0~num~1253599~~~~~,&&plugin~0~this~~~~sentinel_mark~~)),&&on_cd~0~this~~~~~~;R,1261193,Boomstick,plugin~0~this~~~~tots_stacks~~,&&on_cd~0~this~~~~~~,&&usable~0~this~~~~~~;R,1264949,Moonlight Chakram,talented~0~this~~~~~~,&&on_cd~0~this~~~~~~;R,1251592,Flamefang Pitch,talented~0~this~~~~~~;R,1262343,Raptor Swipe,plugin~0~this~~~~raptor_swipe_override~~,&&plugin~0~this~~~~tots_stacks~~,&&usable~0~this~~~~~~;R,186270,Raptor Strike,plugin~1~this~~~~raptor_swipe_override~~,&&usable~0~this~~~~~~;R,259489,Kill Command
+SBASGUI2|1|255;R,1264949,Moonlight Chakram,plugin~0~this~~~~moonlight_chakram_proc~~,&&on_cd~0~this~~~~~~;R,1250646,Takedown]],
+    },
     [269] = {
         name = "Windwalker Monk",
         source = "Working per Spec Overrides/WW Monk Override.txt",

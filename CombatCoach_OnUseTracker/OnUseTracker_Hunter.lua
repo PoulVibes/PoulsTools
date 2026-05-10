@@ -380,7 +380,9 @@ local SV_BOOMSTICK_ID     = 1261193  -- Boomstick             !! VERIFY
 local SV_WILDFIRE_BOMB_ID = 259495   -- Wildfire Bomb
 local SV_HATCHET_TOSS_ID  = 193265   -- Hatchet Toss
 local SV_TAKEDOWN_ID      = 1250646  -- Takedown
-local SV_TOTS_SPELL_ID    = 260286   -- Tip of the Spear buff
+local SV_TOTS_TALENT_ID    = 260286   -- Tip of the Spear (talent node)
+local SV_PRIMAL_SURGE_TALENT_ID = 141452  -- Primal Surge: KC grants +1 extra TotS stack
+local SV_TWIN_FANGS_TALENT_ID   = 140445  -- Twin Fangs: Takedown sets TotS to max stacks
 local SV_SENTINEL_MARK_ID    = 1253601  -- Sentinel's Mark        !! VERIFY
 local SV_SENTINEL_TALENT_ID  = 1253599  -- Sentinel (talent node; gates mark tracking)
 
@@ -855,16 +857,29 @@ function svModule.Disable()
 end
 
 function svModule.OnSpellCast(spellID, _outIconEnabled)
+    local totsActive = IsPlayerSpell(SV_TOTS_TALENT_ID)
     if spellID == SV_KILL_COMMAND_ID then
-        sv_totsStacks = math.min(sv_totsStacks + 2, SV_TOTS_MAX_STACKS)
-        SV_StartTotsTimer()
-        SV_UpdateIconState()
+        if totsActive then
+            local kcGrant = IsPlayerSpell(SV_PRIMAL_SURGE_TALENT_ID) and 2 or 1
+            sv_totsStacks = math.min(sv_totsStacks + kcGrant, SV_TOTS_MAX_STACKS)
+            SV_StartTotsTimer()
+            SV_UpdateIconState()
+        end
     elseif SV_ALL_CONSUMERS[spellID] then
-        sv_totsStacks = math.max(sv_totsStacks - 1, 0)
+        if totsActive then
+            if spellID == SV_TAKEDOWN_ID and IsPlayerSpell(SV_TWIN_FANGS_TALENT_ID) then
+                -- Twin Fangs grants 3 stacks before the cast, then Takedown consumes 1 as a
+                -- normal consumer — net result is max - 1 = 2 stacks.
+                sv_totsStacks = SV_TOTS_MAX_STACKS - 1
+                SV_StartTotsTimer()
+            else
+                sv_totsStacks = math.max(sv_totsStacks - 1, 0)
+            end
+            SV_UpdateIconState()
+        end
         if spellID == SV_WILDFIRE_BOMB_ID then
             SV_SetWildfireBombPending()
         end
-        SV_UpdateIconState()
     end
     if spellID == SV_TAKEDOWN_ID then
         SV_StartTakedownTracking()

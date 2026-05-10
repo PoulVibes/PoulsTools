@@ -5005,9 +5005,16 @@ local function CreateGUI()
         print("|cff00ff99SBAS Override GUI:|r " .. tabCount .. " tab"
               .. (tabCount == 1 and "" or "s") .. " saved for "
               .. GetSpecName(editSpecID))
-        -- Notify CombatCoach integration (pass tab-1 export for baseline comparison)
+        -- Notify CombatCoach integration (pass full export for baseline comparison)
         if type(_G.SBAS_OnGuiSaveAndApply) == "function" then
-            local savedExport = SerializeRulesForExportV2(editSpecID, allTabRules[1] or {})
+            local savedExport
+            if tabCount > 1 then
+                local tabsRules = {}
+                for t = 1, tabCount do tabsRules[t] = allTabRules[t] or {} end
+                savedExport = SerializeAllTabsForExport(editSpecID, tabsRules, tabCount)
+            else
+                savedExport = SerializeRulesForExportV2(editSpecID, allTabRules[1] or {})
+            end
             _G.SBAS_OnGuiSaveAndApply(editSpecID, savedExport)
         end
         f:Hide()
@@ -5288,6 +5295,53 @@ _G.SBAS_LoadImportTextIntoOverrideGUI = function(specID, displayName, payload)
 
     OpenGUI(specID, displayName)
 
+    -- Multi-tab import (SBASGUI_MULTI header): mirrors the import button logic.
+    local tabs, merr = DeserializeAllTabsFromExport(payload, editSpecID)
+    if tabs then
+        local newCount = #tabs
+        for t = newCount + 1, tabCount do
+            SetGuiTabRules(editSpecID, t, {})
+            SetTabName(editSpecID, t, nil)
+            if SBA_SimpleDB.guiTabs and SBA_SimpleDB.guiTabs[editSpecID] then
+                SBA_SimpleDB.guiTabs[editSpecID][t] = nil
+            end
+        end
+        for t = 1, newCount do
+            local rules = DeepCopyRules(tabs[t].rules)
+            allTabRules[t] = rules
+            sessionAllTabs[editSpecID] = sessionAllTabs[editSpecID] or {}
+            sessionAllTabs[editSpecID][t] = rules
+            SetGuiTabRules(editSpecID, t, DeepCopyRules(rules))
+            if t > 1 then
+                tabNames[t] = tabs[t].name
+                SetTabName(editSpecID, t, tabs[t].name)
+                if type(_G.SBA_Simple_SetTabName) == "function" then
+                    _G.SBA_Simple_SetTabName(t, tabs[t].name)
+                end
+            end
+        end
+        for t = newCount + 1, tabCount do
+            allTabRules[t] = nil
+            tabNames[t]    = nil
+        end
+        tabCount = newCount
+        SetTabCount(editSpecID, tabCount)
+        if type(_G.SBA_Simple_UpdateTabCount) == "function" then
+            _G.SBA_Simple_UpdateTabCount(editSpecID, tabCount)
+        end
+        activeTabIdx    = 1
+        workingRules    = allTabRules[1] or {}
+        allTabRules[1]  = workingRules
+        selectedIdx     = (#workingRules > 0) and 1 or 0
+        selectedCondIdx = nil
+        isAddingCond    = false
+        RefreshTabBar()
+        RefreshRuleList()
+        RefreshRightPanel()
+        return true
+    end
+
+    -- Single-tab import (SBASGUI2 header).
     local imported, err = DeserializeRulesFromExport(payload, editSpecID)
     if not imported then
         return false, err or "invalid import payload"
@@ -5314,6 +5368,15 @@ _G.SBAS_NormalizeImportText = function(importText, specID)
     if type(importText) ~= "string" or importText:match("^%s*$") then
         return nil, "empty import text"
     end
+    -- Try multi-tab first so SBASGUI_MULTI strings normalize to the same
+    -- format that Save & Apply produces for multi-tab specs.
+    local tabs, merr = DeserializeAllTabsFromExport(importText, specID)
+    if tabs then
+        local tabsRules = {}
+        for t, tab in ipairs(tabs) do tabsRules[t] = tab.rules end
+        return SerializeAllTabsForExport(specID, tabsRules, #tabs)
+    end
+    -- Fall back to single-tab.
     local rules, err = DeserializeRulesFromExport(importText, specID)
     if not rules then return nil, err or "parse error" end
     return SerializeRulesForExportV2(specID, rules)
