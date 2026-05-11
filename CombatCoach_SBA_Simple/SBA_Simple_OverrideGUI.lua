@@ -92,7 +92,7 @@ local COND_TYPES = {
       generate = function(c, s)
           local id = (not c.spell or c.spell == "this") and s
                      or (type(c.spell) == "number" and c.spell or c.targetID or s)
-          return ("spellID == %d"):format(id)
+          return ("C_AssistedCombat.GetNextCastSpell() == %d"):format(id)
       end },
     -- Resource (Chi / Energy with operator)
         { id = "resource",     label = "Resource Check", needsResource = true,
@@ -1256,6 +1256,30 @@ local function GenerateCode(rules)
                 local pattern = "C_Spell%.GetSpellCooldown%(" .. id .. "%)"
                 for pi, part in ipairs(rp.parts) do
                     rp.parts[pi] = part:gsub(pattern, varName)
+                end
+            end
+        end
+    end
+
+    -- Hoist C_AssistedCombat.GetNextCastSpell() into a single local whenever
+    -- the sba_suggests condition appears anywhere in the generated script.
+    local sbaSuggPattern = "C_AssistedCombat%.GetNextCastSpell%(%)"
+    local sbaSuggFound = false
+    for _, rp in ipairs(allRuleParts) do
+        if rp then
+            for _, part in ipairs(rp.parts) do
+                if part:find(sbaSuggPattern) then sbaSuggFound = true; break end
+            end
+        end
+        if sbaSuggFound then break end
+    end
+    if sbaSuggFound then
+        L[#L+1] = "local sba_next = C_AssistedCombat.GetNextCastSpell()"
+        L[#L+1] = ""
+        for _, rp in ipairs(allRuleParts) do
+            if rp then
+                for pi, part in ipairs(rp.parts) do
+                    rp.parts[pi] = part:gsub(sbaSuggPattern, "sba_next")
                 end
             end
         end
