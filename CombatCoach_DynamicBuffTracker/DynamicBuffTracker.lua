@@ -147,6 +147,27 @@ local function GetChildStackCount(child)
     return nil
 end
 
+-- Finds a Cooldown grandchild frame and calls SetCooldownRaw on the shmIcon.
+-- grandchild = direct child of the viewer child (gc in the debug snippet).
+local function ApplyChildCooldown(child, key)
+    for j = 1, child:GetNumChildren() do
+        local gc = select(j, child:GetChildren())
+        if gc:GetObjectType() == "Cooldown" then
+            local ok, startMs, endMs = pcall(gc.GetCooldownTimes, gc)
+            if ok and startMs and endMs and endMs > startMs then
+                local startSec    = startMs / 1000
+                local durationSec = (endMs - startMs) / 1000
+                local durationObj = C_DurationUtil.CreateDuration()
+                durationObj:SetTimeSpan(startSec, durationSec)
+                pcall(shmIcons.SetCooldown, shmIcons, ADDON_NAME, key, durationObj)
+            else
+                pcall(shmIcons.SetCooldown, shmIcons, ADDON_NAME, key, nil)
+            end
+            return
+        end
+    end
+end
+
 -- Hooks OnShow/OnHide on a BuffIconCooldownViewer child frame to drive the
 -- shmIcon's visibility and glow.  This is the same pattern as SV_HookMarkChild
 -- in OnUseTracker_Hunter: the viewer child IS the buff-active signal — no aura
@@ -169,7 +190,8 @@ local function HookViewerChild(spellID, child)
         _G[activeFlag] = true
         pcall(shmIcons.SetVisible, shmIcons, ADDON_NAME, key, true)
         pcall(shmIcons.SetGlow,    shmIcons, ADDON_NAME, key, true)
-        pcall(shmIcons.SetStacks, shmIcons, ADDON_NAME, key, GetChildStackCount(child))
+        pcall(shmIcons.SetStacks,  shmIcons, ADDON_NAME, key, GetChildStackCount(child))
+        ApplyChildCooldown(child, key)
     end)
 
     child:HookScript("OnHide", function()
@@ -181,7 +203,8 @@ local function HookViewerChild(spellID, child)
             _G[activeFlag] = false
             pcall(shmIcons.SetVisible, shmIcons, ADDON_NAME, key, false)
             pcall(shmIcons.SetGlow,    shmIcons, ADDON_NAME, key, false)
-            pcall(shmIcons.SetStacks,  shmIcons, ADDON_NAME, key, 0)
+            pcall(shmIcons.SetStacks,   shmIcons, ADDON_NAME, key, 0)
+            pcall(shmIcons.SetCooldown, shmIcons, ADDON_NAME, key, nil)
         end)
     end)
 
@@ -192,6 +215,7 @@ local function HookViewerChild(spellID, child)
     pcall(shmIcons.SetGlow,    shmIcons, ADDON_NAME, key, isShown)
     if isShown then
         pcall(shmIcons.SetStacks, shmIcons, ADDON_NAME, key, GetChildStackCount(child))
+        ApplyChildCooldown(child, key)
     end
 end
 
@@ -463,13 +487,16 @@ pollFrame:Show()
 -- ============================================================
 
 -- Called on UNIT_AURA for "player" or "target".  Iterates all hooked viewer
--- children that are currently shown and pushes fresh stack counts to shmIcons.
-local function UpdateAllStacks()
+-- children that are currently shown and pushes fresh stack counts and cooldowns
+-- to shmIcons.
+local function UpdateActiveIcons()
     for spellIDStr, child in pairs(hookedChildren) do
         if child:IsShown() then
             local spellID = trackedSpells[spellIDStr]
             if spellID then
-                pcall(shmIcons.SetStacks, shmIcons, ADDON_NAME, MakeKey(spellID), GetChildStackCount(child))
+                local key = MakeKey(spellID)
+                pcall(shmIcons.SetStacks, shmIcons, ADDON_NAME, key, GetChildStackCount(child))
+                ApplyChildCooldown(child, key)
             end
         end
     end
@@ -516,7 +543,7 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
         ScanAndSync()
 
     elseif event == "UNIT_AURA" then
-        UpdateAllStacks()
+        UpdateActiveIcons()
 
     end
 end)
