@@ -202,8 +202,17 @@ local function IsVivifyMonkGUI()
 end
 
 local function SupportsPluginGUI()
-    return IsWindwalkerGUI() or IsBeastMasteryHunterGUI()
-        or IsSurvivalHunterGUI() or IsVivifyMonkGUI()
+    if IsWindwalkerGUI() or IsBeastMasteryHunterGUI()
+        or IsSurvivalHunterGUI() or IsVivifyMonkGUI() then
+        return true
+    end
+    -- Enable plugin picker for any spec that has dynamic buff entries registered.
+    if _G.SBAS_DynBuffRegistry then
+        for _, entry in pairs(_G.SBAS_DynBuffRegistry) do
+            if entry.specID == editSpecID then return true end
+        end
+    end
+    return false
 end
 
 local function GetVisibleCondTypes()
@@ -222,11 +231,31 @@ local function GetVisibleCondTypes()
 end
 
 local function GetVisiblePluginOptions()
-    if IsWindwalkerGUI()         then return PLUGIN_OPTS_WW          end
-    if IsBeastMasteryHunterGUI() then return PLUGIN_OPTS_BM          end
-    if IsSurvivalHunterGUI()     then return PLUGIN_OPTS_SV          end
-    if IsVivifyMonkGUI()         then return PLUGIN_OPTS_VIVIFY_MONK end
-    return {}
+    local base
+    if     IsWindwalkerGUI()         then base = PLUGIN_OPTS_WW
+    elseif IsBeastMasteryHunterGUI() then base = PLUGIN_OPTS_BM
+    elseif IsSurvivalHunterGUI()     then base = PLUGIN_OPTS_SV
+    elseif IsVivifyMonkGUI()         then base = PLUGIN_OPTS_VIVIFY_MONK
+    end
+
+    -- Collect dynamic buff entries for this spec (populated by DynamicBuffTracker).
+    local dynOpts = {}
+    if _G.SBAS_DynBuffRegistry then
+        for pluginID, entry in pairs(_G.SBAS_DynBuffRegistry) do
+            if entry.specID == editSpecID then
+                dynOpts[#dynOpts + 1] = { id = pluginID, label = entry.label }
+            end
+        end
+        table.sort(dynOpts, function(a, b) return a.label < b.label end)
+    end
+
+    if #dynOpts == 0 then return base or {} end
+    if not base      then return dynOpts    end
+    -- Merge: static spec options first, then dynamic ones.
+    local merged = {}
+    for _, opt in ipairs(base)    do merged[#merged + 1] = opt end
+    for _, opt in ipairs(dynOpts) do merged[#merged + 1] = opt end
+    return merged
 end
 
 local PROC_PLUGIN_BY_ID = {
@@ -380,6 +409,11 @@ BuildPluginConditionExpr = function(cond, ruleSpellID)
         return ("LastComboStrikeSpellID == %d"):format(ruleSpellID or 0)
     end
 
+    -- Dynamic buff registry (populated by DynamicBuffTracker).
+    if _G.SBAS_DynBuffRegistry and _G.SBAS_DynBuffRegistry[plugin] then
+        return ("(%s == true)"):format(_G.SBAS_DynBuffRegistry[plugin].activeFlag)
+    end
+
     local meta = PROC_PLUGIN_BY_ID[plugin]
     if not meta then return "false" end
     if IsCompOp(op) then
@@ -410,6 +444,11 @@ BuildPluginSummary = function(cond)
     if plugin == "bestial_wrath_active" then return "Bestial Wrath Active" end
     if plugin == "withering_fire_active" then return "Withering Fire Active" end
     if plugin == "last_combo_eq" then return "Combo" end
+
+    -- Dynamic buff registry (populated by DynamicBuffTracker).
+    if _G.SBAS_DynBuffRegistry and _G.SBAS_DynBuffRegistry[plugin] then
+        return _G.SBAS_DynBuffRegistry[plugin].label .. " Active"
+    end
 
     local meta = PROC_PLUGIN_BY_ID[plugin]
     if not meta then return plugin or "?" end
@@ -1067,7 +1106,10 @@ local function ParseConditionRelaxed(parts)
     if def.needsPlugin then
         for _, tok in ipairs(tokens) do
             local plugin = InferMissingPrefix(tok, PLUGIN_SET)
-            if PLUGIN_SET[plugin] then cond.plugin = plugin end
+            if PLUGIN_SET[plugin]
+                or (_G.SBAS_DynBuffRegistry and _G.SBAS_DynBuffRegistry[plugin]) then
+                cond.plugin = plugin
+            end
             if VALID_COMP_OPS[tok] then cond.operator = tok end
             local n = tonumber(tok)
             if n ~= nil then cond.value = n end
