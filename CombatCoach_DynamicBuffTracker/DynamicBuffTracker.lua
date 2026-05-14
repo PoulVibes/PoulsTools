@@ -28,8 +28,16 @@ local MAX_RETRIES    = 6     -- retry attempts when viewer/config isn't ready ye
 local currentSpecID   = 0
 local trackedSpells   = {}   -- [spellIDStr (string)] = spellID (number)
 local hookedChildren  = {}   -- [spellIDStr (string)] = viewer child frame; prevents double-hook
-local retryCount      = 0
-local retryPending    = false
+local retryCount            = 0
+local retryPending          = false
+local remapGeneration       = 0     -- incremented when children are remapped; invalidates stale closures
+local needsRemapAfterCombat = false
+
+-- Forward declarations required because HookViewerChild references these locals
+-- before their definition points in the file.
+local RemapViewerChildren
+local ScanAndSync
+local GetChildTexID
 
 -- ============================================================
 -- Utilities
@@ -132,35 +140,32 @@ end
 -- Viewer child helpers
 -- ============================================================
 
--- Looks up the AuraData for a viewer child using child.auraInstanceID when
--- available (same pattern as DebugTracker Test SpellCD — direct, unambiguous).
--- Falls back to GetAuraDataBySpellName if the instance ID isn't set yet.
--- Returns AuraData table or nil.
-local function GetChildAuraData(child, spellName, unitToken)
+-- Looks up AuraData trying player (HELPFUL) then target (HARMFUL).
+-- auraInstanceID is unit-scoped, so both units must be tried.
+-- Returns auraData, unitToken (or nil, nil if not found).
+local function GetChildAuraData(child, spellName)
     if child.auraInstanceID then
         local ok, ad = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID,
-                             unitToken, child.auraInstanceID)
-        if ok and ad then return ad end
+                             "player", child.auraInstanceID)
+        if ok and ad then return ad, "player" end
+        ok, ad = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID,
+                       "target", child.auraInstanceID)
+        if ok and ad then return ad, "target" end
     end
-    -- Fallback: look up by name (works on initial hook before first UNIT_AURA).
     if spellName then
-        if unitToken == "player" then
-            return C_UnitAuras.GetAuraDataBySpellName(unitToken, spellName, "HELPFUL")
-        else
-            return C_UnitAuras.GetAuraDataBySpellName(unitToken, spellName, "HARMFUL")
-        end
+        local ad = C_UnitAuras.GetAuraDataBySpellName("player", spellName, "HELPFUL")
+        if ad then return ad, "player" end
+        ad = C_UnitAuras.GetAuraDataBySpellName("target", spellName, "HARMFUL")
+        if ad then return ad, "target" end
     end
-    return nil
+    return nil, nil
 end
 
-
 local function GetChildAuraDuration(child, unitToken)
-    if child.auraInstanceID then
-        local ok, ad = pcall(C_UnitAuras.GetAuraDuration,
-                             unitToken, child.auraInstanceID)
+    if child.auraInstanceID and unitToken then
+        local ok, ad = pcall(C_UnitAuras.GetAuraDuration, unitToken, child.auraInstanceID)
         if ok and ad then return ad end
     end
-    
     return nil
 end
 
@@ -168,39 +173,48 @@ end
 -- Viewer child hook (active-state driver)
 -- ============================================================
 
--- Hooks OnHide and two UNIT_AURA frames (player + target) on a
+-- Hooks OnHide/OnShow and two UNIT_AURA frames (player + target) on a
 -- BuffIconCooldownViewer child to drive shmIcon visibility, stacks,
 -- and cooldown sweep.
 --
--- Two separate RegisterUnitEvent calls are required — passing multiple
--- unit tokens to a single RegisterUnitEvent is not supported.
---
--- UpdateFromChild is called on every UNIT_AURA (player or target) and
--- on initial load so stacks and cooldown are always current.
-local function HookViewerChild(spellID, child)
+-- Before clearing on a nil aura lookup, the other unit is cross-checked so
+-- a target UNIT_AURA event cannot falsely clear a player buff (and vice-versa).
+-- expectedTexID: the texture the child had at hook time; used to detect reorders.
+local function HookViewerChild(spellID, child, expectedTexID)
     local spellIDStr = tostring(spellID)
     -- Guard: only hook each (spellID, child) pair once.
     if hookedChildren[spellIDStr] == child then return end
     hookedChildren[spellIDStr] = child
 
-    local hookSpecID = currentSpecID          -- capture spec at hook time
+    local hookSpecID = currentSpecID
+    local hookGen    = remapGeneration   -- stale when remapGeneration advances
     local activeFlag = MakeActiveFlag(hookSpecID, spellID)
     local key        = MakeKey(spellID)
-    -- Resolve spell name once for the GetAuraDataBySpellName fallback.
     local ok2, spellInfo2 = pcall(C_Spell.GetSpellInfo, spellID)
     local spellName = (ok2 and spellInfo2) and spellInfo2.name or nil
-    
-    
 
-    local function UpdateFromChild(unitToken)
-        -- Discard events that arrive after a spec change has replaced this hook.
+    local function UpdateFromChild()
         if currentSpecID ~= hookSpecID then return end
+        if remapGeneration ~= hookGen then return end
 
-        -- C_UnitAuras lookup via child.auraInstanceID (DebugTracker Test SpellCD pattern).
-        -- Returns plain Lua values — no secret values, no taint in combat.
-        local auraData = GetChildAuraData(child, spellName, unitToken)
-        local auraDuration = GetChildAuraDuration(child, unitToken)
-        
+        -- If this child no longer shows the expected texture it was reordered.
+        -- Trigger a remap so hooks are re-established against the new layout.
+        -- Guard: only remap if we successfully read a texture (non-nil); a nil
+        -- result means the texture is unreadable, not that the child changed.
+        local currentTexID = GetChildTexID(child)
+        if expectedTexID and currentTexID ~= nil and currentTexID ~= expectedTexID then
+            if not InCombatLockdown() then
+                RemapViewerChildren()
+            else
+                needsRemapAfterCombat = true
+            end
+            return
+        end
+
+        local auraData, unitFound = GetChildAuraData(child, spellName)
+        --print("Updating", spellName, "found on unit:", unitFound or "none")
+        local auraDuration = GetChildAuraDuration(child, unitFound)
+
         if not auraData then
             _G[activeFlag] = false
             pcall(shmIcons.SetVisible,  shmIcons, ADDON_NAME, key, false)
@@ -213,45 +227,43 @@ local function HookViewerChild(spellID, child)
         _G[activeFlag] = true
         pcall(shmIcons.SetVisible, shmIcons, ADDON_NAME, key, true)
         pcall(shmIcons.SetGlow,    shmIcons, ADDON_NAME, key, true)
-        -- Stacks: plain number from aura data.
-        pcall(shmIcons.SetStacks, shmIcons, ADDON_NAME, key, auraData.applications or 0)
-        -- Cooldown: prefer durationObject (C DurationObject) when present, otherwise
-        -- derive start time from plain expirationTime/duration numbers.
-        if auraDuration then
-            pcall(shmIcons.SetCooldown, shmIcons, ADDON_NAME, key, auraDuration)
-        else
-            pcall(shmIcons.SetCooldown, shmIcons, ADDON_NAME, key, nil)
-        end
+        pcall(shmIcons.SetStacks,  shmIcons, ADDON_NAME, key, auraData.applications or 0)
+        pcall(shmIcons.SetCooldown, shmIcons, ADDON_NAME, key, auraDuration or nil)
     end
 
-    -- OnHide: buff fell off — clear immediately without waiting for UNIT_AURA.
+    -- Debounce OnHide so a same-frame Hide+Show (buff refresh) does not flicker.
+    local hideTimer = nil
     child:HookScript("OnHide", function()
         if currentSpecID ~= hookSpecID then return end
-        _G[activeFlag] = false
-        pcall(shmIcons.SetVisible,  shmIcons, ADDON_NAME, key, false)
-        pcall(shmIcons.SetGlow,     shmIcons, ADDON_NAME, key, false)
-        pcall(shmIcons.SetStacks,   shmIcons, ADDON_NAME, key, 0)
-        pcall(shmIcons.SetCooldown, shmIcons, ADDON_NAME, key, nil)
+        if remapGeneration ~= hookGen then return end
+        hideTimer = C_Timer.NewTimer(0.1, function()
+            hideTimer = nil
+            if remapGeneration ~= hookGen then return end
+            _G[activeFlag] = false
+            pcall(shmIcons.SetVisible,  shmIcons, ADDON_NAME, key, false)
+            pcall(shmIcons.SetGlow,     shmIcons, ADDON_NAME, key, false)
+            pcall(shmIcons.SetStacks,   shmIcons, ADDON_NAME, key, 0)
+            pcall(shmIcons.SetCooldown, shmIcons, ADDON_NAME, key, nil)
+        end)
+    end)
+    child:HookScript("OnShow", function()
+        if hideTimer then hideTimer:Cancel() hideTimer = nil end
+        if currentSpecID ~= hookSpecID then return end
+        if remapGeneration ~= hookGen then return end
+        UpdateFromChild()
     end)
 
-    -- Player aura frame: drives buff updates on player-sourced auras.
+    -- Register both units: BuffIconCooldownViewer tracks player buffs and target debuffs.
+    -- UpdateFromChild checks both units itself so neither event causes a false clear.
     local playerFrame = CreateFrame("Frame")
     playerFrame:RegisterUnitEvent("UNIT_AURA", "player")
-    playerFrame:SetScript("OnEvent", function()
-        UpdateFromChild("player")
-    end)
+    playerFrame:SetScript("OnEvent", UpdateFromChild)
 
-    -- Target aura frame: drives updates for debuffs tracked on the target.
-    -- Must be a separate RegisterUnitEvent call — multi-unit registration
-    -- in one call is not supported.
     local targetFrame = CreateFrame("Frame")
     targetFrame:RegisterUnitEvent("UNIT_AURA", "target")
-    targetFrame:SetScript("OnEvent", function()
-        UpdateFromChild("target")
-    end)
+    targetFrame:SetScript("OnEvent", UpdateFromChild)
 
-    -- Sync immediately on hook so initial shown/hidden state is correct.
-    UpdateFromChild("player")
+    UpdateFromChild()
 end
 
 -- ============================================================
@@ -265,11 +277,16 @@ local IGNORED_TEX_IDS = {
 }
 
 -- Returns the primary non-secret texture file-ID from a viewer child, or nil.
-local function GetChildTexID(child)
+-- Tries GetTextureFileID() first (always numeric); falls back to GetTexture().
+GetChildTexID = function(child)
     for j = 1, select("#", child:GetRegions()) do
         local r = select(j, child:GetRegions())
         if r:GetObjectType() == "Texture" then
-            local ok, tid = pcall(r.GetTexture, r)
+            local ok, tid = pcall(r.GetTextureFileID, r)
+            if ok and type(tid) == "number" and not issecretvalue(tid) and tid > 0 then
+                return tid
+            end
+            ok, tid = pcall(r.GetTexture, r)
             if ok and type(tid) == "number" and not issecretvalue(tid) then
                 return tid
             end
@@ -280,7 +297,11 @@ local function GetChildTexID(child)
         for k = 1, select("#", gc:GetRegions()) do
             local r = select(k, gc:GetRegions())
             if r:GetObjectType() == "Texture" then
-                local ok, tid = pcall(r.GetTexture, r)
+                local ok, tid = pcall(r.GetTextureFileID, r)
+                if ok and type(tid) == "number" and not issecretvalue(tid) and tid > 0 then
+                    return tid
+                end
+                ok, tid = pcall(r.GetTexture, r)
                 if ok and type(tid) == "number" and not issecretvalue(tid) then
                     return tid
                 end
@@ -370,10 +391,23 @@ local function UnloadSpec()
 end
 
 -- ============================================================
+-- Viewer child remapping
+-- ============================================================
+
+-- Clears the child-hook table and re-scans so that new child→spell mappings
+-- are established. Increments remapGeneration to invalidate all stale closures
+-- from the previous mapping (old OnHide/OnShow/UNIT_AURA handlers become no-ops).
+RemapViewerChildren = function()
+    remapGeneration = remapGeneration + 1
+    hookedChildren  = {}
+    ScanAndSync()
+end
+
+-- ============================================================
 -- Main scan
 -- ============================================================
 
-local function ScanAndSync()
+ScanAndSync = function()
     if InCombatLockdown() then return end
 
     local viewer = _G["BuffIconCooldownViewer"]
@@ -384,22 +418,56 @@ local function ScanAndSync()
 
     local buffDB = GetSpecBuffDB(specID)
 
-    -- Build iconID -> spellID map from the talent tree.
-    local _, iconMap = ScanTalentTree()
+    -- Build talent lookup maps.
+    local spellMap, iconMap = ScanTalentTree()
 
-    -- Map each viewer child's plain texture ID to its talent spell.
-    local viewerKids   = GetViewerChildren(viewer)
-    local viewerSpells = {}
-    for texID in pairs(viewerKids) do
-        local spellID = iconMap[texID]
-        if spellID then
-            viewerSpells[spellID] = texID
+    -- Match viewer children to talent spells.
+    -- 1st: child.spellID  — direct field Blizzard stores on each button; readable
+    --      in combat and when no aura is active. Most reliable.
+    -- 2nd: child.auraInstanceID lookup — precise when the buff is active.
+    -- 3rd: texture file-ID matched against talent iconIDs — out-of-combat fallback.
+    local viewerSpells = {}   -- [spellID] = { child, texID }
+
+    for i = 1, viewer:GetNumChildren() do
+        local child = select(i, viewer:GetChildren())
+        if child then
+            -- Method 1: direct spellID field on the button frame.
+            local sid = type(child.spellID) == "number" and child.spellID or nil
+            if sid and spellMap[sid] and not viewerSpells[sid] then
+                viewerSpells[sid] = { child = child, texID = spellMap[sid].iconID }
+            end
         end
     end
 
-    for spellID, texID in pairs(viewerSpells) do
+    for i = 1, viewer:GetNumChildren() do
+        local child = select(i, viewer:GetChildren())
+        if child and child.auraInstanceID then
+            for _, unit in ipairs({ "player", "target" }) do
+                local ok, ad = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID,
+                                     unit, child.auraInstanceID)
+                if ok and ad and ad.spellId and spellMap[ad.spellId]
+                   and not viewerSpells[ad.spellId] then
+                    local iconID = ad.icon or spellMap[ad.spellId].iconID
+                    viewerSpells[ad.spellId] = { child = child, texID = iconID }
+                    break
+                end
+            end
+        end
+    end
+
+    -- Texture-ID fallback for children not yet identified above.
+    local viewerKids = GetViewerChildren(viewer)
+    for texID, child in pairs(viewerKids) do
+        local spellID = iconMap[texID]
+        if spellID and not viewerSpells[spellID] then
+            viewerSpells[spellID] = { child = child, texID = texID }
+        end
+    end
+
+    for spellID, info in pairs(viewerSpells) do
         local spellIDStr = tostring(spellID)
-        local child      = viewerKids[texID]
+        local child      = info.child
+        local texID      = info.texID
 
         -- Create DB entry and register icon for newly-discovered spells.
         if not trackedSpells[spellIDStr] then
@@ -436,7 +504,7 @@ local function ScanAndSync()
         -- Hook viewer child for ALL tracked spells (new and existing).
         -- HookViewerChild guards against re-hooking the same child.
         if child then
-            HookViewerChild(spellID, child)
+            HookViewerChild(spellID, child, texID)
         end
     end
 end
@@ -467,6 +535,64 @@ ScanOrRetry = function()
     retryPending = false
     ScanAndSync()
 end
+
+-- ============================================================
+-- Global aura state driver
+-- ============================================================
+
+-- Checks every tracked spell by name on any UNIT_AURA change.
+-- This is the primary fallback for spells restored from buffDB whose viewer
+-- child was not hooked (e.g. buff was not active at last ScanAndSync).
+local function UpdateAllTrackedSpells()
+    if currentSpecID == 0 then return end
+    local specID = currentSpecID
+    for spellIDStr, spellID in pairs(trackedSpells) do
+        local key        = MakeKey(spellID)
+        local activeFlag = MakeActiveFlag(specID, spellID)
+        local ok, si     = pcall(C_Spell.GetSpellInfo, spellID)
+        local spellName  = ok and si and si.name
+
+        local auraData = nil
+        if spellName then
+            auraData = C_UnitAuras.GetAuraDataBySpellName("player", spellName, "HELPFUL")
+            if not auraData then
+                auraData = C_UnitAuras.GetAuraDataBySpellName("target", spellName, "HARMFUL")
+            end
+        end
+
+        if auraData then
+            _G[activeFlag] = true
+            pcall(shmIcons.SetVisible, shmIcons, ADDON_NAME, key, true)
+            pcall(shmIcons.SetGlow,    shmIcons, ADDON_NAME, key, true)
+            pcall(shmIcons.SetStacks,  shmIcons, ADDON_NAME, key, auraData.applications or 0)
+            local dur = auraData.duration or 0
+            if dur > 0 then
+                local start = (auraData.expirationTime or 0) - dur
+                pcall(shmIcons.SetCooldownRaw, shmIcons, ADDON_NAME, key, start, dur)
+            end
+        else
+            _G[activeFlag] = false
+            pcall(shmIcons.SetVisible,     shmIcons, ADDON_NAME, key, false)
+            pcall(shmIcons.SetGlow,        shmIcons, ADDON_NAME, key, false)
+            pcall(shmIcons.SetStacks,      shmIcons, ADDON_NAME, key, 0)
+            pcall(shmIcons.SetCooldownRaw, shmIcons, ADDON_NAME, key, 0, 0)
+        end
+    end
+end
+
+local globalUpdatePending = false
+
+local globalAuraFrame = CreateFrame("Frame")
+globalAuraFrame:RegisterUnitEvent("UNIT_AURA", "player")
+globalAuraFrame:RegisterUnitEvent("UNIT_AURA", "target")
+globalAuraFrame:SetScript("OnEvent", function()
+    if globalUpdatePending then return end
+    globalUpdatePending = true
+    C_Timer.After(0.1, function()
+        globalUpdatePending = false
+        UpdateAllTrackedSpells()
+    end)
+end)
 
 -- ============================================================
 -- Spec load
@@ -539,7 +665,10 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
         end
 
     elseif event == "PLAYER_REGEN_ENABLED" then
-        ScanAndSync()
+        -- Always remap on leaving combat: texture IDs are secret during combat
+        -- so any children gained mid-fight need fresh hooks now that they're readable.
+        needsRemapAfterCombat = false
+        RemapViewerChildren()
     end
 end)
 
@@ -686,7 +815,6 @@ if CombatCoach then
             for _, r in pairs(rows) do r:Hide() end
             rows     = {}
             rowCount = 0
-
             if currentSpecID == 0 then return end
             local buffDB = GetSpecBuffDB(currentSpecID)
 
@@ -728,7 +856,7 @@ if CombatCoach then
                         RebuildList()
                     end)
                 end
-
+                
                 r:Show()
                 rows[spellIDStr] = r
             end
