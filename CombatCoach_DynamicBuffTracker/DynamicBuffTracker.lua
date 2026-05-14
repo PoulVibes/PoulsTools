@@ -354,6 +354,76 @@ local function UnloadSpec()
 end
 
 -- ============================================================
+-- Spell book scanning
+-- ============================================================
+
+-- Scans the player's spell book and returns an iconMap:
+--   iconMap[iconID] = { spellID = ..., spellName = ... }
+-- Used as the authoritative source for spell names before the talent tree.
+local function ScanSpellBook()
+    local iconMap = {}
+    if not C_SpellBook then return iconMap end
+
+    local numLines = C_SpellBook.GetNumSpellBookSkillLines
+                     and C_SpellBook.GetNumSpellBookSkillLines() or 0
+    for i = 1, numLines do
+        local lineInfo = C_SpellBook.GetSpellBookSkillLineInfo
+                         and C_SpellBook.GetSpellBookSkillLineInfo(i)
+        if lineInfo and lineInfo.itemIndexOffset and lineInfo.numSpellBookItems then
+            for slot = lineInfo.itemIndexOffset + 1,
+                       lineInfo.itemIndexOffset + lineInfo.numSpellBookItems do
+                local ok, itemInfo = pcall(C_SpellBook.GetSpellBookItemInfo,
+                                           slot, Enum.SpellBookSpellBank.Player)
+                if ok and itemInfo and itemInfo.spellID and itemInfo.spellID > 0 then
+                    local ok2, spellInfo = pcall(C_Spell.GetSpellInfo, itemInfo.spellID)
+                    if ok2 and spellInfo and spellInfo.name then
+                        local entry = {
+                            spellID   = itemInfo.spellID,
+                            spellName = spellInfo.name,
+                        }
+                        -- Register icons from the spell itself.
+                        if spellInfo.iconID and not iconMap[spellInfo.iconID] then
+                            iconMap[spellInfo.iconID] = entry
+                        end
+                        if spellInfo.originalIconID
+                           and spellInfo.originalIconID ~= spellInfo.iconID
+                           and not iconMap[spellInfo.originalIconID] then
+                            iconMap[spellInfo.originalIconID] = entry
+                        end
+                        -- Also register icons from the base spell, if different.
+                        -- Use a separate entry so we can record displayIconID: the viewer
+                        -- child will show the base spell's texture, but shmIcons should
+                        -- display the override (spell book) spell's icon instead.
+                        local baseID = C_Spell.GetBaseSpell and
+                                       C_Spell.GetBaseSpell(itemInfo.spellID)
+                        if baseID and baseID ~= itemInfo.spellID then
+                            local ok3, baseInfo = pcall(C_Spell.GetSpellInfo, baseID)
+                            if ok3 and baseInfo then
+                                local baseEntry = {
+                                    spellID       = itemInfo.spellID,
+                                    spellName     = spellInfo.name,
+                                    displayIconID = spellInfo.iconID,
+                                }
+                                if baseInfo.iconID and not iconMap[baseInfo.iconID] then
+                                    iconMap[baseInfo.iconID] = baseEntry
+                                end
+                                if baseInfo.originalIconID
+                                   and baseInfo.originalIconID ~= baseInfo.iconID
+                                   and not iconMap[baseInfo.originalIconID] then
+                                    iconMap[baseInfo.originalIconID] = baseEntry
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return iconMap
+end
+
+-- ============================================================
 -- Main scan
 -- ============================================================
 
@@ -368,29 +438,39 @@ local function ScanAndSync()
 
     local buffDB = GetSpecBuffDB(specID)
 
-    -- Build iconID -> spellID map from the talent tree.
-    local _, iconMap = ScanTalentTree()
+    -- Build iconID -> spell maps; spell book takes priority over talent tree.
+    local sbIconMap        = ScanSpellBook()
+    local _, talentIconMap = ScanTalentTree()
 
-    -- Map each viewer child's plain texture ID to its talent spell.
+    -- Map each viewer child's plain texture ID to its spell.
+    -- Spell book match wins over talent tree match for name resolution.
     local viewerKids   = GetViewerChildren(viewer)
-    local viewerSpells = {}
+    local viewerSpells = {}   -- [spellID] = { texID, spellName }
     for texID in pairs(viewerKids) do
-        local spellID = iconMap[texID]
-        if spellID then
-            viewerSpells[spellID] = texID
+        local sbEntry = sbIconMap[texID]
+        if sbEntry then
+            viewerSpells[sbEntry.spellID] = { texID = texID, spellName = sbEntry.spellName, displayIconID = sbEntry.displayIconID }
+        else
+            local spellID = talentIconMap[texID]
+            if spellID then
+                viewerSpells[spellID] = { texID = texID, spellName = nil }
+            end
         end
     end
 
-    for spellID, texID in pairs(viewerSpells) do
+    for spellID, info in pairs(viewerSpells) do
         local spellIDStr = tostring(spellID)
-        local child      = viewerKids[texID]
+        local child      = viewerKids[info.texID]
 
         -- Create DB entry and register icon for newly-discovered spells.
         if not trackedSpells[spellIDStr] then
             local entry = buffDB[spellIDStr]
             if not entry then
-                local ok, spellInfo = pcall(C_Spell.GetSpellInfo, spellID)
-                local spellName = (ok and spellInfo and spellInfo.name) or ("Spell " .. spellIDStr)
+                local spellName = info.spellName
+                if not spellName then
+                    local ok, spellInfo = pcall(C_Spell.GetSpellInfo, spellID)
+                    spellName = (ok and spellInfo and spellInfo.name) or ("Spell " .. spellIDStr)
+                end
                 local count = 0
                 for _ in pairs(buffDB) do count = count + 1 end
                 local col  = count % 5
@@ -401,7 +481,7 @@ local function ScanAndSync()
                 entry = {
                     spellID      = spellID,
                     spellName    = spellName,
-                    iconID       = texID,
+                    iconID       = info.displayIconID or info.texID,
                     label        = spellName,
                     x            = xOff,
                     y            = yOff,
