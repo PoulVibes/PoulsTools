@@ -22,6 +22,9 @@ local tracked = {}
 -- Change listeners for UI integrations (called when trackers change)
 local changeListeners = {}
 
+-- Tracks which spell keys have already emitted the dormant warning this session.
+local warnedDormant = {}
+
 local function NotifyChangeListeners()
     for _, cb in ipairs(changeListeners) do
         local ok, err = pcall(cb)
@@ -236,7 +239,10 @@ local function AddTracker(spellName, specID)
         -- still picks this entry up on the next login/spec-change and can
         -- attempt to remap it once the talent is (re-)learned.
         db.enabled = true
-        print("|cFFFFFF00CooldownTracker: '" .. spellName .. "' is not currently talented. Tracker inactive until talent is learned.|r")
+        if not warnedDormant[key] then
+            warnedDormant[key] = true
+            print("|cFFFFFF00CooldownTracker: '" .. spellName .. "' is not currently talented. Tracker inactive until talent is learned.|r")
+        end
     end
     EnsureTickerState()
     -- notify any UI listeners so they can refresh lists
@@ -292,6 +298,7 @@ ticker:Hide()
 local function RemoveTracker(key)
     shmIcons:Unregister(ADDON_NAME, key)
     tracked[key] = nil
+    warnedDormant[key] = nil  -- allow the dormant message again if re-added
     local spells = GetSpecSpells(currentSpecID)
     if spells[key] then spells[key].enabled = false end
     EnsureTickerState()

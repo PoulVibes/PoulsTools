@@ -129,49 +129,54 @@ local function ScanTalentTree()
 end
 
 -- ============================================================
--- Viewer child hook (active-state driver)
+-- Viewer child helpers
 -- ============================================================
 
--- Reads the stack count from a viewer child using the same approach as
--- DebugTracker: the 3rd grandchild frame holds the FontString with stack text.
-local function GetChildStackCount(child)
-    local gc3 = select(3, child:GetChildren())
-    if not gc3 then return nil end
-    for k = 1, select("#", gc3:GetRegions()) do
-        local r = select(k, gc3:GetRegions())
-        if r:GetObjectType() == "FontString" then
-            local ok, t = pcall(r.GetText, r)
-            if ok then return t end
+-- Looks up the AuraData for a viewer child using child.auraInstanceID when
+-- available (same pattern as DebugTracker Test SpellCD — direct, unambiguous).
+-- Falls back to GetAuraDataBySpellName if the instance ID isn't set yet.
+-- Returns AuraData table or nil.
+local function GetChildAuraData(child, spellName, unitToken)
+    if child.auraInstanceID then
+        local ok, ad = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID,
+                             unitToken, child.auraInstanceID)
+        if ok and ad then return ad end
+    end
+    -- Fallback: look up by name (works on initial hook before first UNIT_AURA).
+    if spellName then
+        if unitToken == "player" then
+            return C_UnitAuras.GetAuraDataBySpellName(unitToken, spellName, "HELPFUL")
+        else
+            return C_UnitAuras.GetAuraDataBySpellName(unitToken, spellName, "HARMFUL")
         end
     end
     return nil
 end
 
--- Finds a Cooldown grandchild frame and calls SetCooldownRaw on the shmIcon.
--- grandchild = direct child of the viewer child (gc in the debug snippet).
-local function ApplyChildCooldown(child, key)
-    for j = 1, child:GetNumChildren() do
-        local gc = select(j, child:GetChildren())
-        if gc:GetObjectType() == "Cooldown" then
-            local ok, startMs, endMs = pcall(gc.GetCooldownTimes, gc)
-            if ok and startMs and endMs and endMs > startMs then
-                local startSec    = startMs / 1000
-                local durationSec = (endMs - startMs) / 1000
-                local durationObj = C_DurationUtil.CreateDuration()
-                durationObj:SetTimeSpan(startSec, durationSec)
-                pcall(shmIcons.SetCooldown, shmIcons, ADDON_NAME, key, durationObj)
-            else
-                pcall(shmIcons.SetCooldown, shmIcons, ADDON_NAME, key, nil)
-            end
-            return
-        end
+
+local function GetChildAuraDuration(child, unitToken)
+    if child.auraInstanceID then
+        local ok, ad = pcall(C_UnitAuras.GetAuraDuration,
+                             unitToken, child.auraInstanceID)
+        if ok and ad then return ad end
     end
+    
+    return nil
 end
 
--- Hooks OnShow/OnHide on a BuffIconCooldownViewer child frame to drive the
--- shmIcon's visibility and glow.  This is the same pattern as SV_HookMarkChild
--- in OnUseTracker_Hunter: the viewer child IS the buff-active signal — no aura
--- field comparisons, no secret values.
+-- ============================================================
+-- Viewer child hook (active-state driver)
+-- ============================================================
+
+-- Hooks OnHide and two UNIT_AURA frames (player + target) on a
+-- BuffIconCooldownViewer child to drive shmIcon visibility, stacks,
+-- and cooldown sweep.
+--
+-- Two separate RegisterUnitEvent calls are required — passing multiple
+-- unit tokens to a single RegisterUnitEvent is not supported.
+--
+-- UpdateFromChild is called on every UNIT_AURA (player or target) and
+-- on initial load so stacks and cooldown are always current.
 local function HookViewerChild(spellID, child)
     local spellIDStr = tostring(spellID)
     -- Guard: only hook each (spellID, child) pair once.
@@ -181,42 +186,72 @@ local function HookViewerChild(spellID, child)
     local hookSpecID = currentSpecID          -- capture spec at hook time
     local activeFlag = MakeActiveFlag(hookSpecID, spellID)
     local key        = MakeKey(spellID)
+    -- Resolve spell name once for the GetAuraDataBySpellName fallback.
+    local ok2, spellInfo2 = pcall(C_Spell.GetSpellInfo, spellID)
+    local spellName = (ok2 and spellInfo2) and spellInfo2.name or nil
+    
+    
 
-    local hideTimer = nil
+    local function UpdateFromChild(unitToken)
+        -- Discard events that arrive after a spec change has replaced this hook.
+        if currentSpecID ~= hookSpecID then return end
 
-    child:HookScript("OnShow", function()
-        if currentSpecID ~= hookSpecID then return end   -- stale hook after spec change
-        if hideTimer then hideTimer:Cancel(); hideTimer = nil end
+        -- C_UnitAuras lookup via child.auraInstanceID (DebugTracker Test SpellCD pattern).
+        -- Returns plain Lua values — no secret values, no taint in combat.
+        local auraData = GetChildAuraData(child, spellName, unitToken)
+        local auraDuration = GetChildAuraDuration(child, unitToken)
+        
+        if not auraData then
+            _G[activeFlag] = false
+            pcall(shmIcons.SetVisible,  shmIcons, ADDON_NAME, key, false)
+            pcall(shmIcons.SetGlow,     shmIcons, ADDON_NAME, key, false)
+            pcall(shmIcons.SetStacks,   shmIcons, ADDON_NAME, key, 0)
+            pcall(shmIcons.SetCooldown, shmIcons, ADDON_NAME, key, nil)
+            return
+        end
+
         _G[activeFlag] = true
         pcall(shmIcons.SetVisible, shmIcons, ADDON_NAME, key, true)
         pcall(shmIcons.SetGlow,    shmIcons, ADDON_NAME, key, true)
-        pcall(shmIcons.SetStacks,  shmIcons, ADDON_NAME, key, GetChildStackCount(child))
-        ApplyChildCooldown(child, key)
-    end)
-
-    child:HookScript("OnHide", function()
-        if currentSpecID ~= hookSpecID then return end   -- stale hook after spec change
-        -- Debounce: a same-frame hide+show (buff refresh) should not flicker.
-        hideTimer = C_Timer.NewTimer(0.05, function()
-            hideTimer = nil
-            if currentSpecID ~= hookSpecID then return end
-            _G[activeFlag] = false
-            pcall(shmIcons.SetVisible, shmIcons, ADDON_NAME, key, false)
-            pcall(shmIcons.SetGlow,    shmIcons, ADDON_NAME, key, false)
-            pcall(shmIcons.SetStacks,   shmIcons, ADDON_NAME, key, 0)
+        -- Stacks: plain number from aura data.
+        pcall(shmIcons.SetStacks, shmIcons, ADDON_NAME, key, auraData.applications or 0)
+        -- Cooldown: prefer durationObject (C DurationObject) when present, otherwise
+        -- derive start time from plain expirationTime/duration numbers.
+        if auraDuration then
+            pcall(shmIcons.SetCooldown, shmIcons, ADDON_NAME, key, auraDuration)
+        else
             pcall(shmIcons.SetCooldown, shmIcons, ADDON_NAME, key, nil)
-        end)
+        end
+    end
+
+    -- OnHide: buff fell off — clear immediately without waiting for UNIT_AURA.
+    child:HookScript("OnHide", function()
+        if currentSpecID ~= hookSpecID then return end
+        _G[activeFlag] = false
+        pcall(shmIcons.SetVisible,  shmIcons, ADDON_NAME, key, false)
+        pcall(shmIcons.SetGlow,     shmIcons, ADDON_NAME, key, false)
+        pcall(shmIcons.SetStacks,   shmIcons, ADDON_NAME, key, 0)
+        pcall(shmIcons.SetCooldown, shmIcons, ADDON_NAME, key, nil)
     end)
 
-    -- Set initial state from the child's current visibility.
-    local isShown = child:IsShown()
-    _G[activeFlag] = isShown
-    pcall(shmIcons.SetVisible, shmIcons, ADDON_NAME, key, isShown)
-    pcall(shmIcons.SetGlow,    shmIcons, ADDON_NAME, key, isShown)
-    if isShown then
-        pcall(shmIcons.SetStacks, shmIcons, ADDON_NAME, key, GetChildStackCount(child))
-        ApplyChildCooldown(child, key)
-    end
+    -- Player aura frame: drives buff updates on player-sourced auras.
+    local playerFrame = CreateFrame("Frame")
+    playerFrame:RegisterUnitEvent("UNIT_AURA", "player")
+    playerFrame:SetScript("OnEvent", function()
+        UpdateFromChild("player")
+    end)
+
+    -- Target aura frame: drives updates for debuffs tracked on the target.
+    -- Must be a separate RegisterUnitEvent call — multi-unit registration
+    -- in one call is not supported.
+    local targetFrame = CreateFrame("Frame")
+    targetFrame:RegisterUnitEvent("UNIT_AURA", "target")
+    targetFrame:SetScript("OnEvent", function()
+        UpdateFromChild("target")
+    end)
+
+    -- Sync immediately on hook so initial shown/hidden state is correct.
+    UpdateFromChild("player")
 end
 
 -- ============================================================
@@ -229,9 +264,7 @@ local IGNORED_TEX_IDS = {
     [6739577] = true,
 }
 
--- Returns the primary texture file-ID from a viewer child frame, or nil.
--- issecretvalue() is AllowedWhenUntainted and accepts SecretArguments, so it
--- is safe to call on a value that may be secret — it simply returns true/false.
+-- Returns the primary non-secret texture file-ID from a viewer child, or nil.
 local function GetChildTexID(child)
     for j = 1, select("#", child:GetRegions()) do
         local r = select(j, child:GetRegions())
@@ -283,7 +316,7 @@ local function RegisterIcon(spellID, db)
         onMove   = function() end,
     })
     shmIcons:SetIcon(ADDON_NAME, key, db.iconID)
-    shmIcons:SetVisible(ADDON_NAME, key, false)  -- hidden until viewer child OnShow fires
+    shmIcons:SetVisible(ADDON_NAME, key, false)
     shmIcons:SetGlow(ADDON_NAME, key, false)
 end
 
@@ -333,19 +366,13 @@ local function UnloadSpec()
         end
     end
     trackedSpells  = {}
-    hookedChildren = {}  -- stale child refs; new hooks set on next ScanAndSync
+    hookedChildren = {}
 end
 
 -- ============================================================
 -- Main scan
 -- ============================================================
 
--- Scans BuffIconCooldownViewer to discover which talent spells are being
--- tracked in the CooldownManager.  For newly-found spells, creates a DB entry,
--- shmIcon, and SBAS entry.  For ALL found spells (new and existing), hooks the
--- viewer child's OnShow/OnHide to drive icon visibility — matching the pattern
--- used by SV_HookMarkChild in OnUseTracker_Hunter.
--- Icons are NEVER removed here; they persist until the user removes them explicitly.
 local function ScanAndSync()
     if InCombatLockdown() then return end
 
@@ -358,11 +385,11 @@ local function ScanAndSync()
     local buffDB = GetSpecBuffDB(specID)
 
     -- Build iconID -> spellID map from the talent tree.
-    local _, iconMap = ScanTalentTree()  -- iconMap[iconID] = spellID
+    local _, iconMap = ScanTalentTree()
 
     -- Map each viewer child's plain texture ID to its talent spell.
-    local viewerKids   = GetViewerChildren(viewer)  -- [texID -> child]
-    local viewerSpells = {}                          -- [spellID] = texID
+    local viewerKids   = GetViewerChildren(viewer)
+    local viewerSpells = {}
     for texID in pairs(viewerKids) do
         local spellID = iconMap[texID]
         if spellID then
@@ -418,12 +445,10 @@ end
 -- Scan with retry
 -- ============================================================
 
-local ScanOrRetry  -- forward declaration
+local ScanOrRetry
 
 ScanOrRetry = function()
     if InCombatLockdown() then return end
-    -- Both the viewer frame and talent config may not be ready immediately
-    -- after login; retry until both are available.
     local viewer   = _G["BuffIconCooldownViewer"]
     local configID = C_ClassTalents and C_ClassTalents.GetActiveConfigID and
                      C_ClassTalents.GetActiveConfigID()
@@ -451,8 +476,6 @@ local function LoadSpec(specID)
     UnloadSpec()
     currentSpecID = specID
     if specID == 0 then return end
-    -- Immediately re-register all icons and SBAS entries saved from prior sessions.
-    -- Icons start hidden; ScanOrRetry will hook viewer children and show them if active.
     local buffDB = GetSpecBuffDB(specID)
     for spellIDStr, entry in pairs(buffDB) do
         local spellID = tonumber(spellIDStr)
@@ -462,7 +485,7 @@ local function LoadSpec(specID)
             RegisterSBASEntry(specID, spellID, entry.label)
         end
     end
-    ScanOrRetry()  -- hooks viewer children; sets initial show/hide state via child:IsShown()
+    ScanOrRetry()
 end
 
 -- ============================================================
@@ -483,26 +506,6 @@ end)
 pollFrame:Show()
 
 -- ============================================================
--- Stack update (UNIT_AURA-driven)
--- ============================================================
-
--- Called on UNIT_AURA for "player" or "target".  Iterates all hooked viewer
--- children that are currently shown and pushes fresh stack counts and cooldowns
--- to shmIcons.
-local function UpdateActiveIcons()
-    for spellIDStr, child in pairs(hookedChildren) do
-        if child:IsShown() then
-            local spellID = trackedSpells[spellIDStr]
-            if spellID then
-                local key = MakeKey(spellID)
-                pcall(shmIcons.SetStacks, shmIcons, ADDON_NAME, key, GetChildStackCount(child))
-                ApplyChildCooldown(child, key)
-            end
-        end
-    end
-end
-
--- ============================================================
 -- Event handling
 -- ============================================================
 
@@ -511,8 +514,6 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_FOLDER then
         DynamicBuffTrackerDB       = DynamicBuffTrackerDB or {}
         DynamicBuffTrackerDB.specs = DynamicBuffTrackerDB.specs or {}
-        -- Migrate: remove old-format entries that used texID as primary key
-        -- (pre-v2 entries have a texID field but no spellID).
         for _, specData in pairs(DynamicBuffTrackerDB.specs) do
             if type(specData) == "table" and specData.buffs then
                 for k, entry in pairs(specData.buffs) do
@@ -531,7 +532,6 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
         LoadSpec(GetCurrentSpecID())
 
     elseif event == "TRAIT_CONFIG_UPDATED" then
-        -- Defer slightly so the trait config is fully updated before we scan.
         if not InCombatLockdown() then
             C_Timer.After(0.5, function()
                 if not InCombatLockdown() then ScanAndSync() end
@@ -539,12 +539,7 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
         end
 
     elseif event == "PLAYER_REGEN_ENABLED" then
-        -- Left combat: run any deferred scans.
         ScanAndSync()
-
-    elseif event == "UNIT_AURA" then
-        UpdateActiveIcons()
-
     end
 end)
 
@@ -553,7 +548,6 @@ eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 eventFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-eventFrame:RegisterUnitEvent("UNIT_AURA", "player", "target")
 
 -- ============================================================
 -- Slash commands
@@ -677,7 +671,6 @@ if CombatCoach then
         end)
         y = -4
 
-        -- Tracked talents list
         local div2, dy2 = W:SectionHeader(parent, anchor, y, "Tracked Talents (this spec)")
         anchor = div2
         y = dy2
@@ -745,7 +738,6 @@ if CombatCoach then
 
         RebuildList()
 
-        -- Re-build when switching back to this panel.
         if parent.SetScript then
             parent:HookScript("OnShow", RebuildList)
         end
