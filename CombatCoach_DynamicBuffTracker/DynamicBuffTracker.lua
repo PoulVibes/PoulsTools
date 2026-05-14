@@ -236,6 +236,12 @@ local function HookViewerChild(spellID, child)
     targetFrame:SetScript("OnEvent", UpdateFromChild)
 
     UpdateFromChild()
+    -- Defer a second update so that aura duration / stack data is correct
+    -- even when the icon is first discovered right at login, before the
+    -- aura system has fully settled.
+    C_Timer.After(1.0, function()
+        if currentSpecID == hookSpecID then UpdateFromChild() end
+    end)
 end
 
 -- ============================================================
