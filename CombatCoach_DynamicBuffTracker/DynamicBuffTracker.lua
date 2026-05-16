@@ -559,14 +559,10 @@ local function LoadSpec(specID)
     -- name/icon when the Wither talent is taken). We do NOT write this back to the
     -- DB entry so the base spell ID is permanently the canonical key.
     for spellIDStr, spellID in pairs(trackedSpells) do
-        --print("Resolved spellID:", spellID, " name:", spellInfo.name, " iconID:", spellInfo.iconID)
-        --print("Loading spellID:", spellID)
         local ok, spellInfo = pcall(C_Spell.GetSpellInfo, spellID)
-        --print("Resolved spellID:", spellID, " name:", spellInfo.name, " iconID:", spellInfo.iconID)
         if ok and spellInfo then
             ok, spellInfo = pcall(C_Spell.GetSpellInfo, spellInfo.name)
         end
-        --print("Resolved spellID:", spellID, " name:", spellInfo.name, " iconID:", spellInfo.iconID)
         if ok and spellInfo then
             if spellInfo.iconID then
                 if not spellInfo then spellInfo = C_Spell.GetSpellInfo(spellID) end
@@ -586,23 +582,6 @@ local function LoadSpec(specID)
     ResyncCDMFrames()
     ScanOrRetry()
 end
-
--- ============================================================
--- Periodic check (re-scan if viewer contents change)
--- ============================================================
-
-local pollFrame   = CreateFrame("Frame")
-local pollElapsed = 0
-
-pollFrame:SetScript("OnUpdate", function(_, elapsed)
-    if InCombatLockdown() then return end
-    pollElapsed = pollElapsed + elapsed
-    if pollElapsed < SCAN_INTERVAL then return end
-    pollElapsed = 0
-    ScanAndSync()
-end)
-
-pollFrame:Show()
 
 -- ============================================================
 -- Event handling
@@ -647,8 +626,6 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
             end)
         end
 
-    elseif event == "PLAYER_REGEN_ENABLED" then
-        ScanAndSync()
     end
 end)
 
@@ -656,7 +633,6 @@ eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 eventFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
-eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 -- ============================================================
 -- Slash commands

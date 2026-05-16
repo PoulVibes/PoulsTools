@@ -49,9 +49,10 @@ local CORNER_COORDS = {
 -- Addons whose icons are driven by game state (combat, spell readiness, etc.)
 -- and should be shown during Edit Mode for positioning but hidden again on exit.
 local EDIT_MODE_REACTIVE_ADDONS = {
-    ["Combo Tracker"]      = true,
-    ["On Use Tracker"]     = true,
-    ["Spell Glow Tracker"] = true,
+    ["Combo Tracker"]        = true,
+    ["On Use Tracker"]       = true,
+    ["Spell Glow Tracker"]   = true,
+    ["Dynamic Buff Tracker"] = true,
 }
 
 -- ============================================================
@@ -1542,6 +1543,14 @@ function shmIcons:SetVisible(addonName, id, visible)
     -- Do not allow showing if the icon is disabled
     if not icon.enabled then
         icon.frame:Hide()
+        return
+    end
+    -- When unlocked for positioning or during WoW Edit Mode, keep all enabled
+    -- frames visible regardless of game-state hide signals from consumer addons.
+    -- This lets DBT (and other reactive addons) be dragged/resized even when
+    -- their buff/cooldown is not currently active.
+    if not isLocked or isInEditMode then
+        icon.frame:Show()
         return
     end
     if visible then icon.frame:Show() else icon.frame:Hide() end
