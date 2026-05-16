@@ -67,6 +67,19 @@ local function GetSpecBuffDB(specID)
     return DynamicBuffTrackerDB.specs[specID].buffs
 end
 
+-- Returns the removed-spells deny-list for a spec.
+-- Spells added here are never auto-discovered by ScanAndSync again.
+-- The list is cleared when the user runs /dbt clear (which wipes the whole spec entry).
+local function GetSpecRemovedDB(specID)
+    DynamicBuffTrackerDB.specs = DynamicBuffTrackerDB.specs or {}
+    if not DynamicBuffTrackerDB.specs[specID] then
+        DynamicBuffTrackerDB.specs[specID] = { buffs = {} }
+    end
+    DynamicBuffTrackerDB.specs[specID].removed =
+        DynamicBuffTrackerDB.specs[specID].removed or {}
+    return DynamicBuffTrackerDB.specs[specID].removed
+end
+
 -- shmIcons key for a given spell ID.
 local function MakeKey(spellID)
     return "dbt_" .. tostring(spellID)
@@ -97,8 +110,13 @@ end
 -- GetBaseSpell on an unlearned override spell is unreliable (the client may
 -- not have the spell data loaded), so we avoid it entirely here.
 local function GetFrameSpellID(frame)
-    if not frame.cooldownInfo or not frame.cooldownID then return nil end
-    return frame.cooldownInfo.spellID
+    -- cooldownInfo.spellID is set whenever the CDM has this frame assigned to a
+    -- spell, even when the buff/cooldown is not currently active.  We do NOT
+    -- require cooldownID here so that inactive-but-configured CDM frames are
+    -- also recorded in cdmSpellToFrame for cross-spec discovery.
+    if not frame.cooldownInfo then return nil end
+    local id = frame.cooldownInfo.spellID
+    return (id and id > 0) and id or nil
 end
 
 -- ============================================================
@@ -184,6 +202,47 @@ local function GetChildAuraDuration(child, unitToken)
     return nil
 end
 
+-- Syncs the shmIcon visibility/state for spellID using the CDM frame
+-- currently assigned to it in cdmSpellToFrame.  specID defaults to
+-- currentSpecID.  Safe to call at any time; exits silently when no frame is
+-- mapped or the frame has been reassigned to a different spell.
+-- Called both from UpdateFromChild closures (via hookSpecID) and directly
+-- from ScanAndSync / ProcessFrameCurrentSpell for immediate forced syncs.
+local function SyncIconFromCDMFrame(spellID, specID)
+    local child = cdmSpellToFrame[spellID]
+    if not child or cdmFrameToSpell[child] ~= spellID then return end
+
+    specID = specID or currentSpecID
+    local key        = MakeKey(spellID)
+    local activeFlag = MakeActiveFlag(specID, spellID)
+
+    local auraData, unitFound = GetChildAuraData(child)
+    local auraDuration        = GetChildAuraDuration(child, unitFound)
+
+    -- Check whether this spell's icon display is enabled (user-toggled per-entry).
+    -- The activeFlag is always updated so SBAS conditions work regardless.
+    local buffDB    = GetSpecBuffDB(specID)
+    local entry     = buffDB[tostring(spellID)]
+    local isEnabled = entry and entry.enabled
+
+    if not auraData then
+        _G[activeFlag] = false
+        pcall(shmIcons.SetVisible,  shmIcons, ADDON_NAME, key, false)
+        pcall(shmIcons.SetGlow,     shmIcons, ADDON_NAME, key, false)
+        pcall(shmIcons.SetStacks,   shmIcons, ADDON_NAME, key, 0)
+        pcall(shmIcons.SetCooldown, shmIcons, ADDON_NAME, key, nil)
+        return
+    end
+
+    _G[activeFlag] = true
+    if isEnabled then
+        pcall(shmIcons.SetVisible,  shmIcons, ADDON_NAME, key, true)
+        pcall(shmIcons.SetGlow,     shmIcons, ADDON_NAME, key, true)
+        pcall(shmIcons.SetStacks,   shmIcons, ADDON_NAME, key, auraData.applications or 0)
+        pcall(shmIcons.SetCooldown, shmIcons, ADDON_NAME, key, auraDuration or nil)
+    end
+end
+
 -- ============================================================
 -- Viewer child hook (active-state driver)
 -- ============================================================
@@ -212,24 +271,7 @@ local function HookViewerChild(spellID, child)
 
     local function UpdateFromChild()
         if not IsOwner() then return end
-
-        local auraData, unitFound = GetChildAuraData(child)
-        local auraDuration = GetChildAuraDuration(child, unitFound)
-
-        if not auraData then
-            _G[activeFlag] = false
-            pcall(shmIcons.SetVisible,  shmIcons, ADDON_NAME, key, false)
-            pcall(shmIcons.SetGlow,     shmIcons, ADDON_NAME, key, false)
-            pcall(shmIcons.SetStacks,   shmIcons, ADDON_NAME, key, 0)
-            pcall(shmIcons.SetCooldown, shmIcons, ADDON_NAME, key, nil)
-            return
-        end
-
-        _G[activeFlag] = true
-        pcall(shmIcons.SetVisible, shmIcons, ADDON_NAME, key, true)
-        pcall(shmIcons.SetGlow,    shmIcons, ADDON_NAME, key, true)
-        pcall(shmIcons.SetStacks,  shmIcons, ADDON_NAME, key, auraData.applications or 0)
-        pcall(shmIcons.SetCooldown, shmIcons, ADDON_NAME, key, auraDuration or nil)
+        SyncIconFromCDMFrame(spellID, hookSpecID)
     end
 
     -- Debounce OnHide so a same-frame Hide+Show (buff refresh) does not flicker.
@@ -280,7 +322,19 @@ local ScanAndSync
 -- HookViewerChild is already guarded against re-hooking the same (spell, child) pair.
 local function ProcessFrameCurrentSpell(frame)
     local spellID = GetFrameSpellID(frame)
-    if not spellID then return end
+    if not spellID then
+        -- Frame has no spell assigned (unconfigured / returned to pool).
+        -- Clear any stale mapping so pooled frames do not ghost in cdmSpellToFrame
+        -- and incorrectly satisfy the cross-spec CDM presence check.
+        local oldSpellID = cdmFrameToSpell[frame]
+        if oldSpellID then
+            if cdmSpellToFrame[oldSpellID] == frame then
+                cdmSpellToFrame[oldSpellID] = nil
+            end
+            cdmFrameToSpell[frame] = nil
+        end
+        return
+    end
 
     -- Clear stale entries for the spell this frame was previously carrying.
     -- This must happen before updating cdmFrameToSpell so that any in-flight
@@ -301,8 +355,18 @@ local function ProcessFrameCurrentSpell(frame)
 
     -- If we are already tracking this spell, wire up the child immediately.
     local spellIDStr = tostring(spellID)
-    if trackedSpells[spellIDStr] and hookedChildren[spellIDStr] ~= frame then
-        HookViewerChild(spellID, frame)
+    if trackedSpells[spellIDStr] then
+        if hookedChildren[spellIDStr] ~= frame then
+            HookViewerChild(spellID, frame)
+        end
+        -- SetAuraInstanceInfo just fired: auraInstanceID is now set on the
+        -- frame.  Defer a sync so C_UnitAuras data is fully ready first.
+        local capturedSpec = currentSpecID
+        C_Timer.After(0, function()
+            if currentSpecID == capturedSpec then
+                SyncIconFromCDMFrame(spellID, capturedSpec)
+            end
+        end)
     end
 end
 
@@ -415,8 +479,14 @@ local function UnloadSpec()
             _G[MakeActiveFlag(specID, spellID)] = false
         end
     end
-    trackedSpells  = {}
-    hookedChildren = {}
+    trackedSpells   = {}
+    hookedChildren  = {}
+    -- Clear stale spell<->frame mappings so ScanAndSync never writes old-spec
+    -- spells into the new spec's buffDB.  cdmFrames (the hook-installed set)
+    -- is preserved because hooksecurefunc hooks are permanent; ResyncCDMFrames
+    -- in LoadSpec will rebuild both tables from the frames' current state.
+    cdmSpellToFrame = {}
+    cdmFrameToSpell = {}
 end
 
 -- ============================================================
@@ -435,7 +505,8 @@ ScanAndSync = function()
     -- Ensure all current CDM children are hooked so cdmSpellToFrame is populated.
     HookViewerChildren(viewer)
 
-    local buffDB   = GetSpecBuffDB(specID)
+    local buffDB    = GetSpecBuffDB(specID)
+    local removedDB = GetSpecRemovedDB(specID)
 
     -- Refresh the runtime display icon and SBAS label for every tracked spell.
     -- GetSpellInfo(baseID) resolves active overrides natively in WoW Midnight:
@@ -460,13 +531,13 @@ ScanAndSync = function()
     -- This handles both talent spells and any other spell the user has added
     -- to the CDM (e.g. base spells, class spells without a talent node).
     for spellID, child in pairs(cdmSpellToFrame) do
-        -- child.cooldownID is a canary that the frame is actively in use.
-        if child.cooldownID then
-            local spellIDStr = tostring(spellID)
+        local spellIDStr = tostring(spellID)
 
+        -- child.cooldownID signals the frame has an active buff/cooldown right now.
+        if child.cooldownID then
             if not trackedSpells[spellIDStr] then
                 local entry = buffDB[spellIDStr]
-                if not entry then
+                if not entry and not removedDB[spellIDStr] then
                     -- GetSpellInfo(spellID) resolves active overrides natively:
                     -- GetSpellInfo(immolateID) returns Wither's name/icon when
                     -- the Wither talent is active. No GetOverrideSpell needed.
@@ -494,7 +565,7 @@ ScanAndSync = function()
                             y            = yOff,
                             point        = "CENTER",
                             size         = DEFAULT_SIZE,
-                            enabled      = true,
+                            enabled      = false,
                             glow_enabled = false,
                         }
                         buffDB[spellIDStr] = entry
@@ -509,8 +580,68 @@ ScanAndSync = function()
             end
 
             HookViewerChild(spellID, child)
+            -- If the buff is already active in CDM right now, show the icon
+            -- immediately.  HookViewerChild short-circuits when the same
+            -- (spell, child) pair is already hooked (skipping UpdateFromChild),
+            -- so we force a sync here to cover that case.
+            SyncIconFromCDMFrame(spellID, specID)
+        elseif trackedSpells[spellIDStr] then
+            -- CDM has this spell configured for this spec but the buff is not
+            -- currently active.  Install event listeners now so the very first
+            -- activation is caught immediately without needing another scan.
+            HookViewerChild(spellID, child)
         end
     end
+
+    -- Cross-spec discovery: a spell tracked on any other spec whose CDM frame is
+    -- also present on this spec (cooldownInfo set, even if the buff is not yet
+    -- active) is auto-added to the current spec.  This lets a spell configured in
+    -- CDM on multiple specs be discovered here the first time a scan runs, rather
+    -- than only when the buff happens to be active during the scan.
+    -- Guard: current spec's removedDB is always respected, so the user can click
+    -- the X button to opt out of a spell on this spec permanently.
+    for anySpecID, anySpecData in pairs(DynamicBuffTrackerDB.specs) do
+        if anySpecID ~= specID and anySpecData.buffs then
+            for spellIDStr, srcEntry in pairs(anySpecData.buffs) do
+                local spellID = tonumber(spellIDStr)
+                if spellID
+                   and not trackedSpells[spellIDStr]
+                   and not removedDB[spellIDStr]
+                   and cdmSpellToFrame[spellID]  -- CDM frame exists on this spec
+                then
+                    local entry = buffDB[spellIDStr]
+                    if not entry then
+                        local count = 0
+                        for _ in pairs(buffDB) do count = count + 1 end
+                        local col = count % 5
+                        local row = math.floor(count / 5)
+                        entry = {
+                            spellID      = spellID,
+                            spellName    = srcEntry.spellName,
+                            iconID       = srcEntry.iconID,
+                            label        = srcEntry.label or srcEntry.spellName,
+                            x            = (col - 2) * (DEFAULT_SIZE + 4),
+                            y            = row > 0 and (-row * (DEFAULT_SIZE + 4)) or 0,
+                            point        = "CENTER",
+                            size         = srcEntry.size or DEFAULT_SIZE,
+                            enabled      = false,
+                            glow_enabled = false,
+                        }
+                        buffDB[spellIDStr] = entry
+                    end
+                    RegisterIcon(spellID, entry)
+                    trackedSpells[spellIDStr] = spellID
+                    RegisterSBASEntry(specID, spellID, entry.label)
+                    local child = cdmSpellToFrame[spellID]
+                    if child then
+                        HookViewerChild(spellID, child)
+                        SyncIconFromCDMFrame(spellID, specID)
+                    end
+                end
+            end
+        end
+    end
+
     if rebuildCombatCoachList then rebuildCombatCoachList() end
 end
 
@@ -789,6 +920,20 @@ if CombatCoach then
         end)
         y = -4
 
+        anchor = W:Button(parent, anchor, y, "Clear This Spec", function()
+            if InCombatLockdown() then
+                print("|cFFFF4444DynamicBuffTracker: Cannot clear in combat.|r")
+                return
+            end
+            UnloadSpec()
+            if DynamicBuffTrackerDB and DynamicBuffTrackerDB.specs then
+                DynamicBuffTrackerDB.specs[currentSpecID] = nil
+            end
+            print("|cFFFFFF00DynamicBuffTracker: Cleared all tracked talents for this spec.|r")
+            if rebuildCombatCoachList then rebuildCombatCoachList() end
+        end)
+        y = -4
+
         local div2, dy2 = W:SectionHeader(parent, anchor, y, "Tracked Talents (this spec)")
         anchor = div2
         y = dy2
@@ -851,8 +996,12 @@ if CombatCoach then
                             UnregisterIcon(capturedSpellID)
                             UnregisterSBASEntry(currentSpecID, capturedSpellID)
                             _G[MakeActiveFlag(currentSpecID, capturedSpellID)] = false
-                            trackedSpells[tostring(capturedSpellID)] = nil
-                            buffDB[tostring(capturedSpellID)] = nil
+                            local sid = tostring(capturedSpellID)
+                            trackedSpells[sid] = nil
+                            buffDB[sid]        = nil
+                            -- Deny-list so ScanAndSync does not re-discover this
+                            -- spell for this spec from CDM on the next scan.
+                            GetSpecRemovedDB(currentSpecID)[sid] = true
                         end
                         RebuildList()
                     end)
@@ -888,6 +1037,46 @@ if CombatCoach then
                 cdTextLbl:SetPoint("RIGHT", cdTextChk, "LEFT", -2, 0)
                 cdTextLbl:SetText("Timer")
                 cdTextLbl:SetTextColor(0.72, 0.82, 0.92, 1)
+
+                -- Enable/disable toggle: controls whether the shmIcon is ever made visible.
+                -- The SBAS active flag is always updated regardless of this setting.
+                local enableChk = CreateFrame("CheckButton", nil, r, "UICheckButtonTemplate")
+                enableChk:SetSize(20, 20)
+                enableChk:SetPoint("RIGHT", cdTextLbl, "LEFT", -10, 0)
+                enableChk:SetChecked(entry.enabled == true)
+                enableChk:SetScript("OnEnter", function(self)
+                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                    GameTooltip:SetText("Show Icon", 1, 1, 1)
+                    GameTooltip:AddLine(
+                        "Enable or disable the visible shmIcon for this buff.\n"
+                        .. "The SBAS condition flag is always tracked regardless.",
+                        nil, nil, nil, true)
+                    GameTooltip:Show()
+                end)
+                enableChk:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                do
+                    local capturedSpellID4 = spellID
+                    local capturedSpecID4  = currentSpecID
+                    enableChk:SetScript("OnClick", function(self)
+                        if not capturedSpellID4 then return end
+                        -- Convert to strict boolean: GetChecked() may return 1 or nil.
+                        local nowEnabled = self:GetChecked() and true or false
+                        local key = MakeKey(capturedSpellID4)
+                        -- SetEnabled updates both icon.enabled and icon.db.enabled (our entry).
+                        -- It also hides/shows the frame immediately on disable.
+                        pcall(shmIcons.SetEnabled, shmIcons, ADDON_NAME, key, nowEnabled)
+                        if nowEnabled then
+                            -- icon.enabled is now true; sync current buff state so the icon
+                            -- appears immediately if the buff is already active.
+                            SyncIconFromCDMFrame(capturedSpellID4, capturedSpecID4)
+                        end
+                    end)
+                end
+
+                local enableLbl = r:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+                enableLbl:SetPoint("RIGHT", enableChk, "LEFT", -2, 0)
+                enableLbl:SetText("Show")
+                enableLbl:SetTextColor(0.72, 0.82, 0.92, 1)
 
                 r:Show()
                 rows[spellIDStr] = r
