@@ -867,7 +867,7 @@ if CombatCoach then
         id        = "DynamicBuffTracker",
         name      = "Dynamic Buff Tracker",
         icon      = "Interface\\Icons\\inv_misc_eye_02",
-        desc      = "Buffs Mirroring Blizz Cooldown Manager.",
+        desc      = "Buffs mirroring Blizz cooldown manager.",
         OnBuildUI = OnBuildUI,
     })
 end
