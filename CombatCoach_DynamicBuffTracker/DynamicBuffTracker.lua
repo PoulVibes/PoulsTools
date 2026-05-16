@@ -359,6 +359,7 @@ local function RegisterIcon(spellID, db)
         onResize = function(sq) db.size = sq end,
         onMove   = function() end,
     })
+    shmIcons:SetCooldownReverse(ADDON_NAME, key, true)
     spellInfo = C_Spell.GetSpellInfo(spellID)
     if spellInfo then spellInfo = C_Spell.GetSpellInfo(spellInfo.name) end
     if not spellInfo then spellInfo = C_Spell.GetSpellInfo(spellID) end

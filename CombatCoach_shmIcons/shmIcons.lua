@@ -1533,6 +1533,14 @@ function shmIcons:SetChargeCooldown(addonName, id, durationObject)
     end
 end
 
+-- Reverse (or un-reverse) the cooldown swipe direction for an icon.
+-- Pass true to make the swipe grow clockwise (buff-expiry style),
+-- false (default) for the standard ability-cooldown anti-clockwise drain.
+function shmIcons:SetCooldownReverse(addonName, id, reverse)
+    local icon = icons[addonName .. ":" .. tostring(id)]
+    if icon then icon.cd:SetReverse(reverse and true or false) end
+end
+
 function shmIcons:SetGlow(addonName, id, show)
     local icon = icons[addonName .. ":" .. tostring(id)]
     if not icon then return end
