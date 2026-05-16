@@ -32,6 +32,7 @@ local trackedSpells   = {}   -- [spellIDStr (string)] = spellID (number)
 local hookedChildren  = {}   -- [spellIDStr (string)] = viewer child frame; prevents double-hook
 local retryCount      = 0
 local retryPending    = false
+local rebuildCombatCoachList  -- set by OnBuildUI when the CombatCoach panel is constructed
 
 -- CDM frame tracking (TellMeWhen approach)
 -- cdmFrames[frame]        = true    (all frames we have hooked SetAuraInstanceInfo on)
@@ -361,7 +362,7 @@ local function RegisterIcon(spellID, db)
     spellInfo = C_Spell.GetSpellInfo(spellID)
     if spellInfo then spellInfo = C_Spell.GetSpellInfo(spellInfo.name) end
     if not spellInfo then spellInfo = C_Spell.GetSpellInfo(spellID) end
-    print("Registering icon for spellID:", spellID, " iconID:", spellInfo and spellInfo.iconID)
+    --print("Registering icon for spellID:", spellID, " iconID:", spellInfo and spellInfo.iconID)
     shmIcons:SetIcon(ADDON_NAME, key, spellInfo.iconID)
     shmIcons:SetVisible(ADDON_NAME, key, false)
     shmIcons:SetGlow(ADDON_NAME, key, false)
@@ -445,7 +446,7 @@ ScanAndSync = function()
         if ok and spellInfo then
             if spellInfo.iconID then
                 if not spellInfo then spellInfo = C_Spell.GetSpellInfo(spellID) end
-                print("Updating icon for spellID:", spellID, " iconID:", spellInfo.iconID)
+                --print("Updating icon for spellID:", spellID, " iconID:", spellInfo.iconID)
                 shmIcons:SetIcon(ADDON_NAME, MakeKey(spellID), spellInfo.iconID)
             end
             if spellInfo.name then
@@ -508,6 +509,7 @@ ScanAndSync = function()
             HookViewerChild(spellID, child)
         end
     end
+    if rebuildCombatCoachList then rebuildCombatCoachList() end
 end
 
 -- ============================================================
@@ -566,11 +568,11 @@ local function LoadSpec(specID)
         if ok and spellInfo then
             if spellInfo.iconID then
                 if not spellInfo then spellInfo = C_Spell.GetSpellInfo(spellID) end
-                print("Setting icon for spellID:", spellID, " iconID:", spellInfo.iconID)
+                --print("Setting icon for spellID:", spellID, " iconID:", spellInfo.iconID)
                 shmIcons:SetIcon(ADDON_NAME, MakeKey(spellID), spellInfo.iconID)
             end
             if spellInfo.name then
-                print("Setting icon for spellID:", spellID, " iconID:", spellInfo.iconID)
+                --print("Setting icon for spellID:", spellID, " iconID:", spellInfo.iconID)
                 RegisterSBASEntry(specID, spellID, spellInfo.name)
             end
         end
@@ -794,13 +796,12 @@ if CombatCoach then
                 local displayIconID = entry.iconID
                 local displayLabel  = entry.label
                 if spellID then
-                    local ok, spellInfo = pcall(C_Spell.GetSpellInfo, entry.label)
+                    local ok, spellInfo = pcall(C_Spell.GetSpellInfo, spellID)
                     if ok and spellInfo then
                         if spellInfo.iconID then displayIconID = spellInfo.iconID end
                         if spellInfo.name   then displayLabel  = spellInfo.name  end
                     end
                 end
-                print("Resetting: spellID:", spellID, " displayIconID:", displayIconID, " displayLabel:", displayLabel)
                 local icon = r:CreateTexture(nil, "ARTWORK")
                 icon:SetSize(20, 20)
                 icon:SetPoint("LEFT", r, "LEFT", 0, 0)
@@ -840,11 +841,26 @@ if CombatCoach then
             listContainer:SetHeight(math.max(4, rowCount * 24))
         end
 
+        -- Only call RebuildList while the panel is actually visible so that
+        -- frames are always created in a visible parent chain.  If the panel
+        -- is closed when ScanAndSync fires, the canvas-frame OnShow below
+        -- will rebuild the list the moment the user navigates to this page.
+        rebuildCombatCoachList = function()
+            if listContainer:IsVisible() then RebuildList() end
+        end
         RebuildList()
 
-        if parent.SetScript then
-            parent:HookScript("OnShow", RebuildList)
+        -- Walk up to the canvas frame registered with the Settings API
+        -- (the highest ancestor before UIParent).  The Settings API
+        -- explicitly Show()/Hide()s this frame when switching categories,
+        -- so OnShow fires reliably on both the first and every subsequent
+        -- visit — unlike hooking a scroll-child frame that is never
+        -- explicitly hidden and therefore may not fire OnShow on first show.
+        local canvasFrame = parent
+        while canvasFrame:GetParent() and canvasFrame:GetParent() ~= UIParent do
+            canvasFrame = canvasFrame:GetParent()
         end
+        canvasFrame:HookScript("OnShow", RebuildList)
     end
 
     CombatCoach.Menu:RegisterAddon({

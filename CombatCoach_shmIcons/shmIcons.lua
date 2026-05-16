@@ -703,7 +703,40 @@ local function BuildEditModeGroupFrame(group)
         local virtualCY = curY + cursorOffY
 
         if IsShiftKeyDown() then
-            -- Find best edge-to-edge snap for any member vs any outside icon
+            -- Step 1: live resize — find nearest outside icon of ANY size and
+            -- resize all group members to match (mirrors BuildIconFrame solo drag).
+            -- This lets the user match icon sizes across different addons.
+            do
+                local nearestDist = math.huge
+                local nearestSize = nil
+                for _, entry in ipairs(offsets) do
+                    local memberCX = virtualCX + entry.offsetX
+                    local memberCY = virtualCY + entry.offsetY
+                    for otherID, other in pairs(icons) do
+                        if not groupIDSet[otherID] and other.frame:IsShown()
+                           and not other.db.ctrlAttachedTo then
+                            local oCX, oCY = other.frame:GetCenter()
+                            local d = math.sqrt((memberCX - oCX)^2 + (memberCY - oCY)^2)
+                            if d < nearestDist then
+                                nearestDist = d
+                                nearestSize = math.floor(other.frame:GetHeight() + 0.5)
+                            end
+                        end
+                    end
+                end
+                if nearestSize and nearestSize ~= mySize then
+                    local scale = nearestSize / mySize
+                    for _, entry in ipairs(offsets) do
+                        entry.offsetX = entry.offsetX * scale
+                        entry.offsetY = entry.offsetY * scale
+                        entry.icon.frame:SetSize(nearestSize, nearestSize)
+                    end
+                    mySize = nearestSize
+                    isSnapFrozen = false  -- revert any freeze so snap re-evaluates
+                end
+            end
+
+            -- Step 2: edge-to-edge snap using the (now updated) mySize.
             local bestDist  = math.huge
             local bestSnapCX, bestSnapCY = nil, nil
 
