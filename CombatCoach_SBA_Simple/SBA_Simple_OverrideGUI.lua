@@ -1941,7 +1941,7 @@ local function CreateRowFrame(parent)
     f.warnIcon:SetScript("OnEnter", function(self)
         if not self._tooltip then return end
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-        GameTooltip:SetText("|cffff9900\xE2\x9A\xA0 Sentinel's Mark Warning|r", 1, 1, 1, 1, true)
+        GameTooltip:SetText(self._title or "|cffff9900\xE2\x9A\xA0 Condition Warning|r", 1, 1, 1, 1, true)
         GameTooltip:AddLine(self._tooltip, 1, 0.85, 0.55, true)
         GameTooltip:Show()
     end)
@@ -1996,6 +1996,31 @@ local function GetSentinelMarkWarning()
     return "Sentinel's Mark Condition requires the Cooldown Manager's Tracked Buff Icons"
             .. "\n\nEnable Blizzard's Cooldown Manager, add Sentinel to the Tracked Buff Icons, then reload."
         
+end
+
+-- Returns a warning string when any dynbuff_ plugin condition in the rule
+-- references a spell that is not currently registered in SBAS_DynBuffRegistry
+-- (i.e. the spell is not being actively tracked by Dynamic Buff Tracker).
+-- Returns nil when all dynbuff conditions are satisfied.
+local function GetDynBuffWarning(rule)
+    local untracked = {}
+    for _, cond in ipairs(rule.conditions or {}) do
+        if cond.type == "plugin" and type(cond.plugin) == "string"
+                and cond.plugin:match("^dynbuff_") then
+            if not (_G.SBAS_DynBuffRegistry and _G.SBAS_DynBuffRegistry[cond.plugin]) then
+                local spellID = tonumber(cond.plugin:match("^dynbuff_%d+_(%d+)$"))
+                local si = spellID and C_Spell and C_Spell.GetSpellInfo
+                           and C_Spell.GetSpellInfo(spellID)
+                untracked[#untracked + 1] = (si and si.name)
+                                            or ("spell " .. tostring(spellID or "?"))
+            end
+        end
+    end
+    if #untracked == 0 then return nil end
+    local list = table.concat(untracked, ", ")
+    return list .. " is not being tracked by Dynamic Buff Tracker."
+        .. "\n\nOpen Blizzard's Cooldown Manager with |cffffd700/cdm|r, add the spell to its Tracked Buff Icons, trigger the Buff at least once"
+        .. "then run |cffffd700/dbt scan|r to register it."
 end
 
 local function UpdateRowFrame(f, idx, rule)
@@ -2134,15 +2159,32 @@ local function UpdateRowFrame(f, idx, rule)
     f:SetSize(leftW - PAD * 2, rowFrameH)
     f:Show()
 
-    local hasMismatch    = HasParenMismatch(rule.conditions)
-    local sentinelWarn   = RuleHasSentinelMarkCondition(rule) and GetSentinelMarkWarning() or nil
+    local hasMismatch  = HasParenMismatch(rule.conditions)
+    local sentinelWarn = RuleHasSentinelMarkCondition(rule) and GetSentinelMarkWarning() or nil
+    local dynBuffWarn  = GetDynBuffWarning(rule)
 
-    -- Warning icon: show when sentinel_mark is in use but tracking is broken.
+    -- Build combined warning text and title for the warning icon.
+    local warnTitle, warnBody
+    if sentinelWarn and dynBuffWarn then
+        warnTitle = "|cffff9900\xE2\x9A\xA0 Condition Warnings|r"
+        warnBody  = sentinelWarn .. "\n\n" .. dynBuffWarn
+    elseif sentinelWarn then
+        warnTitle = "|cffff9900\xE2\x9A\xA0 Sentinel's Mark Warning|r"
+        warnBody  = sentinelWarn
+    elseif dynBuffWarn then
+        warnTitle = "|cffff9900\xE2\x9A\xA0 Dynamic Buff Tracker Warning|r"
+        warnBody  = dynBuffWarn
+    end
+    local anyWarn = warnBody ~= nil
+
+    -- Warning icon: show when any condition has an unmet tracking requirement.
     if f.warnIcon then
-        if sentinelWarn then
-            f.warnIcon._tooltip = sentinelWarn
+        if anyWarn then
+            f.warnIcon._title   = warnTitle
+            f.warnIcon._tooltip = warnBody
             f.warnIcon:Show()
         else
+            f.warnIcon._title   = nil
             f.warnIcon._tooltip = nil
             f.warnIcon:Hide()
         end
@@ -2152,8 +2194,8 @@ local function UpdateRowFrame(f, idx, rule)
         -- Bright red: paren mismatch (invalid condition structure)
         f:SetBackdropColor(0.30, 0.04, 0.04, 0.95)
         f:SetBackdropBorderColor(0.90, 0.18, 0.18, 1)
-    elseif sentinelWarn then
-        -- Amber/orange: sentinel_mark condition but tracker not ready
+    elseif anyWarn then
+        -- Amber/orange: one or more conditions have unmet tracking requirements
         if idx == selectedIdx then
             f:SetBackdropColor(0.28, 0.12, 0.00, 0.95)
             f:SetBackdropBorderColor(0.90, 0.50, 0.10, 1)
