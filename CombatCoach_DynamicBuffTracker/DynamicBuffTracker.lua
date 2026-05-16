@@ -866,7 +866,8 @@ if CombatCoach then
     CombatCoach.Menu:RegisterAddon({
         id        = "DynamicBuffTracker",
         name      = "Dynamic Buff Tracker",
-        desc      = "Discovers selected talents and creates shmIcons / SBAS conditions for each one.",
+        icon      = "Interface\\Icons\\inv_misc_eye_02",
+        desc      = "Buffs Mirroring Blizz Cooldown Manager.",
         OnBuildUI = OnBuildUI,
     })
 end
