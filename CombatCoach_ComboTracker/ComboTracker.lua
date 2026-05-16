@@ -36,7 +36,6 @@ local function ResetStreak()
     shmIcons:SetCooldownRaw(ADDON_NAME, "Hit Combo", 0, 0)
     shmIcons:SetStacks(ADDON_NAME, "Hit Combo", 0)
     shmIcons:SetGlow(ADDON_NAME, "Hit Combo", false)
-    shmIcons:SetReverse(ADDON_NAME, "Hit Combo", true)
 end
 
 local REQUIRED_CLASS = "MONK"
@@ -82,6 +81,7 @@ local function RegisterComboIcons()
                 shmIcons:SetCooldownRaw(ADDON_NAME, "Hit Combo", 0, 0)
                 shmIcons:SetStacks(ADDON_NAME, "Hit Combo", 0)
                 shmIcons:SetGlow(ADDON_NAME, "Hit Combo", false)
+                shmIcons:SetCooldownReverse(ADDON_NAME, "Hit Combo", true)
             end
         end)
     end
@@ -190,6 +190,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             shmIcons:SetCooldownRaw(ADDON_NAME, "Hit Combo", GetTime(), 29)
             shmIcons:SetStacks(ADDON_NAME, "Hit Combo", ComboStrikeStreak)
             shmIcons:SetGlow(ADDON_NAME, "Hit Combo", false)
+            shmIcons:SetCooldownReverse(ADDON_NAME, "Hit Combo", true)
             if timerHandle then timerHandle:Cancel() end
             timerHandle = C_Timer.NewTimer(30, ResetStreak)
         end
