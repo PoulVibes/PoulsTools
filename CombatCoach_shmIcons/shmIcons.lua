@@ -1522,18 +1522,16 @@ function shmIcons:SetStacks(addonName, id, count)
     local icon = icons[addonName .. ":" .. tostring(id)]
     if not icon then return end
 
-    local drawStacks
-    if issecretvalue(count) then
-            drawStacks = true -- Setting this to 0 is handled by the calling app so always draw the secret value stacks
-    else
-        drawStacks = count and count > 0
-    end
-
-    if count and drawStacks then
+    if count then
+        -- SetAlpha accepts secret values natively; the engine clamps to [0,1],
+        -- so a secret or plain 0 → invisible, any positive integer → alpha 1.
+        -- This avoids any Lua comparison against a secret value.
         icon.stackLabel:SetText(tostring(count))
         icon.stackLabel:Show()
+        icon.stackLabel:SetAlpha(count)
     else
         icon.stackLabel:SetText("")
+        icon.stackLabel:SetAlpha(0)
         icon.stackLabel:Hide()
     end
 end

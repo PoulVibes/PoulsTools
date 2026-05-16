@@ -2,8 +2,10 @@
 -- Dynamically generates shmIcons and SBAS plugin conditions for every
 -- selected talent in the player's active talent tree.
 --
--- Discovery uses C_Traits / C_ClassTalents (no protected frame access,
--- no secret texture IDs). Active-buff state is tracked via UNIT_AURA events.
+-- Discovery uses C_Traits / C_ClassTalents plus CDM child frame hooks
+-- (same approach as TellMeWhen) to identify spells from cooldownInfo.spellID
+-- rather than texture IDs, which works correctly even when aura data is
+-- secret/tainted in combat.
 --
 -- Triggers a scan on: login, reload, spec change, and talent/trait update.
 -- Per-spec discovered spells are persisted in DynamicBuffTrackerDB so icons
@@ -30,6 +32,18 @@ local trackedSpells   = {}   -- [spellIDStr (string)] = spellID (number)
 local hookedChildren  = {}   -- [spellIDStr (string)] = viewer child frame; prevents double-hook
 local retryCount      = 0
 local retryPending    = false
+
+-- CDM frame tracking (TellMeWhen approach)
+-- cdmFrames[frame]        = true    (all frames we have hooked SetAuraInstanceInfo on)
+-- cdmSpellToFrame[spellID] = frame  (most-recently-assigned frame for a spell ID)
+-- cdmFrameToSpell[frame]  = spellID (reverse: current spell assigned to a frame)
+--
+-- cdmFrameToSpell is the key guard against stale hooks: HookScript accumulates
+-- permanently, so when a frame is reassigned to a different spell, every old
+-- closure checks cdmFrameToSpell[child] ~= spellID and returns immediately.
+local cdmFrames       = {}
+local cdmSpellToFrame = {}
+local cdmFrameToSpell = {}
 
 -- ============================================================
 -- Utilities
@@ -68,22 +82,42 @@ local function MakePluginID(specID, spellID)
 end
 
 -- ============================================================
+-- CDM frame spell ID resolution (TellMeWhen approach)
+-- ============================================================
+
+-- Reads the base spell ID from a CDM child frame's cooldownInfo struct.
+-- cooldownInfo.spellID is populated by Blizzard before secrets are applied,
+-- so it is safe to read even in combat.
+--
+-- We always return this base ID as the canonical shmIcon key so it remains
+-- stable regardless of whether an override talent (e.g. Wither for Immolate)
+-- is currently purchased. The displayed name and icon are resolved separately
+-- at runtime via GetOverrideSpell so they stay current without rehooking.
+-- GetBaseSpell on an unlearned override spell is unreliable (the client may
+-- not have the spell data loaded), so we avoid it entirely here.
+local function GetFrameSpellID(frame)
+    if not frame.cooldownInfo or not frame.cooldownID then return nil end
+    return frame.cooldownInfo.spellID
+end
+
+-- ============================================================
 -- Talent tree scanning
 -- ============================================================
 
--- Walks the active talent config and returns two lookup tables:
+-- Walks the active talent config and returns a spellMap:
 --   spellMap[spellID] = { spellID, spellName, iconID }  (every purchased node)
---   iconMap[iconID]   = spellID  (for fast texture-ID to spell resolution)
+-- Only purchased nodes (currentRank > 0) are included. No alias expansion is
+-- done; GetFrameSpellID already resolves override/linked IDs correctly, and
+-- ScanAndSync falls back to C_Spell.GetSpellInfo for any spell not in spellMap.
 local function ScanTalentTree()
     local spellMap = {}
-    local iconMap  = {}
-    if not (C_ClassTalents and C_ClassTalents.GetActiveConfigID) then return spellMap, iconMap end
+    if not (C_ClassTalents and C_ClassTalents.GetActiveConfigID) then return spellMap end
     local configID = C_ClassTalents.GetActiveConfigID()
-    if not configID then return spellMap, iconMap end
+    if not configID then return spellMap end
 
-    if not C_Traits then return spellMap, iconMap end
+    if not C_Traits then return spellMap end
     local configInfo = C_Traits.GetConfigInfo and C_Traits.GetConfigInfo(configID)
-    if not configInfo or not configInfo.treeIDs then return spellMap, iconMap end
+    if not configInfo or not configInfo.treeIDs then return spellMap end
 
     for _, treeID in ipairs(configInfo.treeIDs) do
         local nodeIDs = C_Traits.GetTreeNodes and C_Traits.GetTreeNodes(treeID)
@@ -105,17 +139,12 @@ local function ScanTalentTree()
                             if defInfo and defInfo.spellID and defInfo.spellID > 0 then
                                 local ok, spellInfo = pcall(C_Spell.GetSpellInfo, defInfo.spellID)
                                 if ok and spellInfo and spellInfo.name and spellInfo.iconID then
-                                    local sid    = defInfo.spellID
-                                    local iconID = spellInfo.iconID
+                                    local sid = defInfo.spellID
                                     spellMap[sid] = {
                                         spellID   = sid,
                                         spellName = spellInfo.name,
-                                        iconID    = iconID,
+                                        iconID    = spellInfo.iconID,
                                     }
-                                    -- First purchased talent found for an icon wins.
-                                    if not iconMap[iconID] then
-                                        iconMap[iconID] = sid
-                                    end
                                 end
                             end
                         end
@@ -125,17 +154,16 @@ local function ScanTalentTree()
         end
     end
 
-    return spellMap, iconMap
+    return spellMap
 end
 
 -- ============================================================
 -- Viewer child helpers
 -- ============================================================
 
--- Looks up AuraData trying player (HELPFUL) then target (HARMFUL).
--- auraInstanceID is unit-scoped, so both units must be tried.
+-- Looks up AuraData by auraInstanceID on player then target.
 -- Returns auraData, unitToken (or nil, nil if not found).
-local function GetChildAuraData(child, spellName)
+local function GetChildAuraData(child)
     if child.auraInstanceID then
         local ok, ad = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID,
                              "player", child.auraInstanceID)
@@ -143,12 +171,6 @@ local function GetChildAuraData(child, spellName)
         ok, ad = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID,
                        "target", child.auraInstanceID)
         if ok and ad then return ad, "target" end
-    end
-    if spellName then
-        local ad = C_UnitAuras.GetAuraDataBySpellName("player", spellName, "HELPFUL")
-        if ad then return ad, "player" end
-        ad = C_UnitAuras.GetAuraDataBySpellName("target", spellName, "HARMFUL")
-        if ad then return ad, "target" end
     end
     return nil, nil
 end
@@ -165,12 +187,10 @@ end
 -- Viewer child hook (active-state driver)
 -- ============================================================
 
--- Hooks OnHide/OnShow and two UNIT_AURA frames (player + target) on a
--- BuffIconCooldownViewer child to drive shmIcon visibility, stacks,
--- and cooldown sweep.
---
--- Before clearing on a nil aura lookup, the other unit is cross-checked so
--- a target UNIT_AURA event cannot falsely clear a player buff (and vice-versa).
+-- Hooks OnHide/OnShow and UNIT_AURA listeners on a CDM child frame to drive
+-- shmIcon visibility, stacks, and cooldown sweep.
+-- child.auraInstanceID is kept current by the SetAuraInstanceInfo hook below,
+-- so we never need to fall back to spell-name lookups here.
 local function HookViewerChild(spellID, child)
     local spellIDStr = tostring(spellID)
     -- Guard: only hook each (spellID, child) pair once.
@@ -180,14 +200,19 @@ local function HookViewerChild(spellID, child)
     local hookSpecID = currentSpecID
     local activeFlag = MakeActiveFlag(hookSpecID, spellID)
     local key        = MakeKey(spellID)
-    local ok2, spellInfo2 = pcall(C_Spell.GetSpellInfo, spellID)
-    local spellName = (ok2 and spellInfo2) and spellInfo2.name or nil
+
+    -- This guard is the critical defence against stale closures.
+    -- HookScript is permanent, so when the CDM frame pool reassigns this child
+    -- to a different spell, cdmFrameToSpell[child] changes and every callback
+    -- below returns immediately rather than updating the wrong shmIcon.
+    local function IsOwner()
+        return currentSpecID == hookSpecID and cdmFrameToSpell[child] == spellID
+    end
 
     local function UpdateFromChild()
-        if currentSpecID ~= hookSpecID then return end
+        if not IsOwner() then return end
 
-        local auraData, unitFound = GetChildAuraData(child, spellName)
-        --print("Updating", spellName, "found on unit:", unitFound or "none")
+        local auraData, unitFound = GetChildAuraData(child)
         local auraDuration = GetChildAuraDuration(child, unitFound)
 
         if not auraData then
@@ -209,9 +234,10 @@ local function HookViewerChild(spellID, child)
     -- Debounce OnHide so a same-frame Hide+Show (buff refresh) does not flicker.
     local hideTimer = nil
     child:HookScript("OnHide", function()
-        if currentSpecID ~= hookSpecID then return end
+        if not IsOwner() then return end
         hideTimer = C_Timer.NewTimer(0.1, function()
             hideTimer = nil
+            if not IsOwner() then return end
             _G[activeFlag] = false
             pcall(shmIcons.SetVisible,  shmIcons, ADDON_NAME, key, false)
             pcall(shmIcons.SetGlow,     shmIcons, ADDON_NAME, key, false)
@@ -221,12 +247,12 @@ local function HookViewerChild(spellID, child)
     end)
     child:HookScript("OnShow", function()
         if hideTimer then hideTimer:Cancel() hideTimer = nil end
-        if currentSpecID ~= hookSpecID then return end
+        if not IsOwner() then return end
         UpdateFromChild()
     end)
 
-    -- Register both units: BuffIconCooldownViewer tracks player buffs and target debuffs.
-    -- UpdateFromChild checks both units itself so neither event causes a false clear.
+    -- UNIT_AURA on both units so refresh/expiry is caught regardless of whether
+    -- the buff is on player (HELPFUL) or target (HARMFUL).
     local playerFrame = CreateFrame("Frame")
     playerFrame:RegisterUnitEvent("UNIT_AURA", "player")
     playerFrame:SetScript("OnEvent", UpdateFromChild)
@@ -236,63 +262,90 @@ local function HookViewerChild(spellID, child)
     targetFrame:SetScript("OnEvent", UpdateFromChild)
 
     UpdateFromChild()
-    -- Defer a second update so that aura duration / stack data is correct
-    -- even when the icon is first discovered right at login, before the
-    -- aura system has fully settled.
     C_Timer.After(1.0, function()
         if currentSpecID == hookSpecID then UpdateFromChild() end
     end)
 end
 
 -- ============================================================
--- Viewer child scanning
+-- CDM frame hooking (TellMeWhen approach)
 -- ============================================================
 
--- Texture IDs to ignore (placeholder icons always present in the viewer).
-local IGNORED_TEX_IDS = {
-    [4554359] = true,
-    [6739577] = true,
-}
+-- Forward declaration so HookCDMFrame can call ScanAndSync.
+local ScanAndSync
 
--- Returns the primary non-secret texture file-ID from a viewer child, or nil.
-local function GetChildTexID(child)
-    for j = 1, select("#", child:GetRegions()) do
-        local r = select(j, child:GetRegions())
-        if r:GetObjectType() == "Texture" then
-            local ok, tid = pcall(r.GetTexture, r)
-            if ok and type(tid) == "number" and not issecretvalue(tid) then
-                return tid
-            end
+-- Shared logic: update both CDM mapping tables for a frame's current spell and
+-- call HookViewerChild if the spell is tracked. Safe to call at any time —
+-- HookViewerChild is already guarded against re-hooking the same (spell, child) pair.
+local function ProcessFrameCurrentSpell(frame)
+    local spellID = GetFrameSpellID(frame)
+    if not spellID then return end
+
+    -- Clear stale entries for the spell this frame was previously carrying.
+    -- This must happen before updating cdmFrameToSpell so that any in-flight
+    -- closures for the old spell fail their IsOwner() check immediately.
+    local oldSpellID = cdmFrameToSpell[frame]
+    if oldSpellID and oldSpellID ~= spellID then
+        if cdmSpellToFrame[oldSpellID] == frame then
+            cdmSpellToFrame[oldSpellID] = nil
+        end
+        if hookedChildren[tostring(oldSpellID)] == frame then
+            hookedChildren[tostring(oldSpellID)] = nil
         end
     end
-    for j = 1, child:GetNumChildren() do
-        local gc = select(j, child:GetChildren())
-        for k = 1, select("#", gc:GetRegions()) do
-            local r = select(k, gc:GetRegions())
-            if r:GetObjectType() == "Texture" then
-                local ok, tid = pcall(r.GetTexture, r)
-                if ok and type(tid) == "number" and not issecretvalue(tid) then
-                    return tid
-                end
-            end
-        end
+
+    -- Update both directions of the mapping.
+    cdmSpellToFrame[spellID] = frame
+    cdmFrameToSpell[frame]   = spellID
+
+    -- If we are already tracking this spell, wire up the child immediately.
+    local spellIDStr = tostring(spellID)
+    if trackedSpells[spellIDStr] and hookedChildren[spellIDStr] ~= frame then
+        HookViewerChild(spellID, frame)
     end
-    return nil
 end
 
--- Returns [texID -> child] for all viewer children with a plain texture ID.
-local function GetViewerChildren(viewer)
-    local result = {}
+-- Re-processes the current spell for every frame we have ever hooked.
+-- Call this after trackedSpells is updated so that already-active frames
+-- (whose SetAuraInstanceInfo fired before our hook was installed, e.g. on
+-- login/reload with a buff already active) get their child wired up.
+local function ResyncCDMFrames()
+    for frame in pairs(cdmFrames) do
+        ProcessFrameCurrentSpell(frame)
+    end
+end
+
+-- Hooks SetAuraInstanceInfo on a CDM child frame.
+-- When Blizzard assigns an aura to the frame:
+--   1. frame.cooldownInfo.spellID is read (non-secret, safe in combat).
+--   2. cdmSpellToFrame/cdmFrameToSpell are updated.
+--   3. If the spell is already tracked, HookViewerChild is called immediately.
+-- Also processes the frame's current spell immediately to handle the case where
+-- SetAuraInstanceInfo already fired before this hook was installed.
+local function HookCDMFrame(frame)
+    if not frame or cdmFrames[frame] then return end
+    if not frame.SetAuraInstanceInfo then return end
+
+    cdmFrames[frame] = true
+
+    hooksecurefunc(frame, "SetAuraInstanceInfo", function(f, _)
+        ProcessFrameCurrentSpell(f)
+    end)
+
+    -- Process the frame's current spell right now in case SetAuraInstanceInfo
+    -- already fired before we installed the hook (e.g. buff was already active
+    -- at login/reload when HookViewerChildren iterates existing frames).
+    ProcessFrameCurrentSpell(frame)
+end
+
+-- Iterates all current children of a viewer and hooks any that have
+-- SetAuraInstanceInfo (i.e. are real CDM buff frames, not decorative children).
+local function HookViewerChildren(viewer)
+    if not viewer then return end
     for i = 1, viewer:GetNumChildren() do
         local child = select(i, viewer:GetChildren())
-        if child then
-            local texID = GetChildTexID(child)
-            if texID and not IGNORED_TEX_IDS[texID] then
-                result[texID] = child
-            end
-        end
+        HookCDMFrame(child)
     end
-    return result
 end
 
 -- ============================================================
@@ -305,7 +358,11 @@ local function RegisterIcon(spellID, db)
         onResize = function(sq) db.size = sq end,
         onMove   = function() end,
     })
-    shmIcons:SetIcon(ADDON_NAME, key, db.iconID)
+    spellInfo = C_Spell.GetSpellInfo(spellID)
+    if spellInfo then spellInfo = C_Spell.GetSpellInfo(spellInfo.name) end
+    if not spellInfo then spellInfo = C_Spell.GetSpellInfo(spellID) end
+    print("Registering icon for spellID:", spellID, " iconID:", spellInfo and spellInfo.iconID)
+    shmIcons:SetIcon(ADDON_NAME, key, spellInfo.iconID)
     shmIcons:SetVisible(ADDON_NAME, key, false)
     shmIcons:SetGlow(ADDON_NAME, key, false)
 end
@@ -360,80 +417,10 @@ local function UnloadSpec()
 end
 
 -- ============================================================
--- Spell book scanning
--- ============================================================
-
--- Scans the player's spell book and returns an iconMap:
---   iconMap[iconID] = { spellID = ..., spellName = ... }
--- Used as the authoritative source for spell names before the talent tree.
-local function ScanSpellBook()
-    local iconMap = {}
-    if not C_SpellBook then return iconMap end
-
-    local numLines = C_SpellBook.GetNumSpellBookSkillLines
-                     and C_SpellBook.GetNumSpellBookSkillLines() or 0
-    for i = 1, numLines do
-        local lineInfo = C_SpellBook.GetSpellBookSkillLineInfo
-                         and C_SpellBook.GetSpellBookSkillLineInfo(i)
-        if lineInfo and lineInfo.itemIndexOffset and lineInfo.numSpellBookItems then
-            for slot = lineInfo.itemIndexOffset + 1,
-                       lineInfo.itemIndexOffset + lineInfo.numSpellBookItems do
-                local ok, itemInfo = pcall(C_SpellBook.GetSpellBookItemInfo,
-                                           slot, Enum.SpellBookSpellBank.Player)
-                if ok and itemInfo and itemInfo.spellID and itemInfo.spellID > 0 then
-                    local ok2, spellInfo = pcall(C_Spell.GetSpellInfo, itemInfo.spellID)
-                    if ok2 and spellInfo and spellInfo.name then
-                        local entry = {
-                            spellID   = itemInfo.spellID,
-                            spellName = spellInfo.name,
-                        }
-                        -- Register icons from the spell itself.
-                        if spellInfo.iconID and not iconMap[spellInfo.iconID] then
-                            iconMap[spellInfo.iconID] = entry
-                        end
-                        if spellInfo.originalIconID
-                           and spellInfo.originalIconID ~= spellInfo.iconID
-                           and not iconMap[spellInfo.originalIconID] then
-                            iconMap[spellInfo.originalIconID] = entry
-                        end
-                        -- Also register icons from the base spell, if different.
-                        -- Use a separate entry so we can record displayIconID: the viewer
-                        -- child will show the base spell's texture, but shmIcons should
-                        -- display the override (spell book) spell's icon instead.
-                        local baseID = C_Spell.GetBaseSpell and
-                                       C_Spell.GetBaseSpell(itemInfo.spellID)
-                        if baseID and baseID ~= itemInfo.spellID then
-                            local ok3, baseInfo = pcall(C_Spell.GetSpellInfo, baseID)
-                            if ok3 and baseInfo then
-                                local baseEntry = {
-                                    spellID       = itemInfo.spellID,
-                                    spellName     = spellInfo.name,
-                                    displayIconID = spellInfo.iconID,
-                                }
-                                if baseInfo.iconID and not iconMap[baseInfo.iconID] then
-                                    iconMap[baseInfo.iconID] = baseEntry
-                                end
-                                if baseInfo.originalIconID
-                                   and baseInfo.originalIconID ~= baseInfo.iconID
-                                   and not iconMap[baseInfo.originalIconID] then
-                                    iconMap[baseInfo.originalIconID] = baseEntry
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    return iconMap
-end
-
--- ============================================================
 -- Main scan
 -- ============================================================
 
-local function ScanAndSync()
+ScanAndSync = function()
     if InCombatLockdown() then return end
 
     local viewer = _G["BuffIconCooldownViewer"]
@@ -442,70 +429,82 @@ local function ScanAndSync()
     local specID = currentSpecID
     if specID == 0 then return end
 
-    local buffDB = GetSpecBuffDB(specID)
+    -- Ensure all current CDM children are hooked so cdmSpellToFrame is populated.
+    HookViewerChildren(viewer)
 
-    -- Build iconID -> spell maps; spell book takes priority over talent tree.
-    local sbIconMap        = ScanSpellBook()
-    local _, talentIconMap = ScanTalentTree()
+    local buffDB   = GetSpecBuffDB(specID)
 
-    -- Map each viewer child's plain texture ID to its spell.
-    -- Spell book match wins over talent tree match for name resolution.
-    local viewerKids   = GetViewerChildren(viewer)
-    local viewerSpells = {}   -- [spellID] = { texID, spellName }
-    for texID in pairs(viewerKids) do
-        local sbEntry = sbIconMap[texID]
-        if sbEntry then
-            viewerSpells[sbEntry.spellID] = { texID = texID, spellName = sbEntry.spellName, displayIconID = sbEntry.displayIconID }
-        else
-            local spellID = talentIconMap[texID]
-            if spellID then
-                viewerSpells[spellID] = { texID = texID, spellName = nil }
+    -- Refresh the runtime display icon and SBAS label for every tracked spell.
+    -- GetSpellInfo(baseID) resolves active overrides natively in WoW Midnight:
+    -- GetSpellInfo(immolateID) returns Wither's name/icon when the Wither talent
+    -- is active. We intentionally do NOT mutate the DB entry here so the base
+    -- spell ID remains the permanent canonical key regardless of talent state.
+    for spellIDStr, spellID in pairs(trackedSpells) do
+        local ok, spellInfo = pcall(C_Spell.GetSpellInfo, spellID)
+        if ok and spellInfo then ok, spellInfo = pcall(C_Spell.GetSpellInfo, spellInfo.name) end
+        if ok and spellInfo then
+            if spellInfo.iconID then
+                if not spellInfo then spellInfo = C_Spell.GetSpellInfo(spellID) end
+                print("Updating icon for spellID:", spellID, " iconID:", spellInfo.iconID)
+                shmIcons:SetIcon(ADDON_NAME, MakeKey(spellID), spellInfo.iconID)
+            end
+            if spellInfo.name then
+                RegisterSBASEntry(specID, spellID, spellInfo.name)
             end
         end
     end
+    -- Iterate ALL active CDM frames rather than just the talent spellMap.
+    -- This handles both talent spells and any other spell the user has added
+    -- to the CDM (e.g. base spells, class spells without a talent node).
+    for spellID, child in pairs(cdmSpellToFrame) do
+        -- child.cooldownID is a canary that the frame is actively in use.
+        if child.cooldownID then
+            local spellIDStr = tostring(spellID)
 
-    for spellID, info in pairs(viewerSpells) do
-        local spellIDStr = tostring(spellID)
-        local child      = viewerKids[info.texID]
-
-        -- Create DB entry and register icon for newly-discovered spells.
-        if not trackedSpells[spellIDStr] then
-            local entry = buffDB[spellIDStr]
-            if not entry then
-                local spellName = info.spellName
-                if not spellName then
+            if not trackedSpells[spellIDStr] then
+                local entry = buffDB[spellIDStr]
+                if not entry then
+                    -- GetSpellInfo(spellID) resolves active overrides natively:
+                    -- GetSpellInfo(immolateID) returns Wither's name/icon when
+                    -- the Wither talent is active. No GetOverrideSpell needed.
+                    local spellName, iconID
                     local ok, spellInfo = pcall(C_Spell.GetSpellInfo, spellID)
-                    spellName = (ok and spellInfo and spellInfo.name) or ("Spell " .. spellIDStr)
+                    if ok and spellInfo and spellInfo.name then
+                        spellName = spellInfo.name
+                        iconID    = spellInfo.iconID
+                    end
+
+                    if spellName and iconID then
+                        local count = 0
+                        for _ in pairs(buffDB) do count = count + 1 end
+                        local col  = count % 5
+                        local row  = math.floor(count / 5)
+                        local xOff = (col - 2) * (DEFAULT_SIZE + 4)
+                        local yOff = row > 0 and (-row * (DEFAULT_SIZE + 4)) or 0
+
+                        entry = {
+                            spellID      = spellID,
+                            spellName    = spellName,
+                            iconID       = iconID,
+                            label        = spellName,
+                            x            = xOff,
+                            y            = yOff,
+                            point        = "CENTER",
+                            size         = DEFAULT_SIZE,
+                            enabled      = true,
+                            glow_enabled = false,
+                        }
+                        buffDB[spellIDStr] = entry
+                    end
                 end
-                local count = 0
-                for _ in pairs(buffDB) do count = count + 1 end
-                local col  = count % 5
-                local row  = math.floor(count / 5)
-                local xOff = (col - 2) * (DEFAULT_SIZE + 4)
-                local yOff = row > 0 and (-row * (DEFAULT_SIZE + 4)) or 0
 
-                entry = {
-                    spellID      = spellID,
-                    spellName    = spellName,
-                    iconID       = info.displayIconID or info.texID,
-                    label        = spellName,
-                    x            = xOff,
-                    y            = yOff,
-                    point        = "CENTER",
-                    size         = DEFAULT_SIZE,
-                    enabled      = true,
-                    glow_enabled = false,
-                }
-                buffDB[spellIDStr] = entry
+                if entry then
+                    RegisterIcon(spellID, entry)
+                    trackedSpells[spellIDStr] = spellID
+                    RegisterSBASEntry(specID, spellID, entry.label)
+                end
             end
-            RegisterIcon(spellID, entry)
-            trackedSpells[spellIDStr] = spellID
-            RegisterSBASEntry(specID, spellID, entry.label)
-        end
 
-        -- Hook viewer child for ALL tracked spells (new and existing).
-        -- HookViewerChild guards against re-hooking the same child.
-        if child then
             HookViewerChild(spellID, child)
         end
     end
@@ -555,6 +554,36 @@ local function LoadSpec(specID)
             RegisterSBASEntry(specID, spellID, entry.label)
         end
     end
+    -- Apply runtime display icons. GetSpellInfo(baseID) resolves active overrides
+    -- natively in WoW Midnight (e.g. GetSpellInfo(immolateID) returns Wither's
+    -- name/icon when the Wither talent is taken). We do NOT write this back to the
+    -- DB entry so the base spell ID is permanently the canonical key.
+    for spellIDStr, spellID in pairs(trackedSpells) do
+        --print("Resolved spellID:", spellID, " name:", spellInfo.name, " iconID:", spellInfo.iconID)
+        --print("Loading spellID:", spellID)
+        local ok, spellInfo = pcall(C_Spell.GetSpellInfo, spellID)
+        --print("Resolved spellID:", spellID, " name:", spellInfo.name, " iconID:", spellInfo.iconID)
+        if ok and spellInfo then
+            ok, spellInfo = pcall(C_Spell.GetSpellInfo, spellInfo.name)
+        end
+        --print("Resolved spellID:", spellID, " name:", spellInfo.name, " iconID:", spellInfo.iconID)
+        if ok and spellInfo then
+            if spellInfo.iconID then
+                if not spellInfo then spellInfo = C_Spell.GetSpellInfo(spellID) end
+                print("Setting icon for spellID:", spellID, " iconID:", spellInfo.iconID)
+                shmIcons:SetIcon(ADDON_NAME, MakeKey(spellID), spellInfo.iconID)
+            end
+            if spellInfo.name then
+                print("Setting icon for spellID:", spellID, " iconID:", spellInfo.iconID)
+                RegisterSBASEntry(specID, spellID, spellInfo.name)
+            end
+        end
+    end
+    -- trackedSpells is now populated. Resync all already-hooked CDM frames so that
+    -- any spell whose SetAuraInstanceInfo fired before our hook was installed
+    -- (buff already active at login/reload) gets its child wired up immediately.
+    -- This is what makes non-talent tracked spells work on the first load.
+    ResyncCDMFrames()
     ScanOrRetry()
 end
 
@@ -593,8 +622,18 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
                 end
             end
         end
+        -- Hook OnAcquireItemFrame so new CDM children are wired up as soon as
+        -- Blizzard hands them out from the frame pool.
+        local viewer = _G["BuffIconCooldownViewer"]
+        if viewer and viewer.OnAcquireItemFrame then
+            hooksecurefunc(viewer, "OnAcquireItemFrame", function(_, frame)
+                HookCDMFrame(frame)
+            end)
+        end
 
     elseif event == "PLAYER_ENTERING_WORLD" then
+        -- Hook any children that already exist (e.g. on /reload).
+        HookViewerChildren(_G["BuffIconCooldownViewer"])
         currentSpecID = GetCurrentSpecID()
         LoadSpec(currentSpecID)
 
@@ -652,9 +691,14 @@ SlashCmdList["DYNAMICBUFFTRACKER"] = function(msg)
             count = count + 1
             local spellID = tonumber(spellIDStr)
             local active  = spellID and _G[MakeActiveFlag(currentSpecID, spellID)]
+            local label   = entry.label
+            if spellID then
+                local ok, si = pcall(C_Spell.GetSpellInfo, spellID)
+                if ok and si and si.name then label = si.name end
+            end
             print(string.format(
                 "  |cFFFFFF00%s|r (spell:%s, pluginID:%s) %s",
-                entry.label, spellIDStr,
+                label, spellIDStr,
                 spellID and MakePluginID(currentSpecID, spellID) or "?",
                 active and "|cFF00FF00ACTIVE|r" or "inactive"))
         end
@@ -684,6 +728,8 @@ SlashCmdList["DYNAMICBUFFTRACKER"] = function(msg)
             local spellID = tonumber(spellIDStr)
             if spellID then
                 pcall(function()
+                    if not spellInfo then spellInfo = C_Spell.GetSpellInfo(spellID) end
+                    print("Resetting icon for spellID:", spellID, " iconID:", spellIDStr)
                     shmIcons:ResetIcon(ADDON_NAME, MakeKey(spellID), DEFAULT_SIZE)
                 end)
             end
@@ -765,15 +811,28 @@ if CombatCoach then
                 r:SetSize(540, 22)
                 r:SetPoint("TOPLEFT", listContainer, "TOPLEFT", 0, -(rowCount - 1) * 24)
 
+                -- Resolve display icon/name at render time via GetSpellInfo(baseID).
+                -- In WoW Midnight this natively returns the active override's data
+                -- (e.g. Wither's icon/name when the Wither talent is taken).
+                local spellID = tonumber(spellIDStr)
+                local displayIconID = entry.iconID
+                local displayLabel  = entry.label
+                if spellID then
+                    local ok, spellInfo = pcall(C_Spell.GetSpellInfo, entry.label)
+                    if ok and spellInfo then
+                        if spellInfo.iconID then displayIconID = spellInfo.iconID end
+                        if spellInfo.name   then displayLabel  = spellInfo.name  end
+                    end
+                end
+                print("Resetting: spellID:", spellID, " displayIconID:", displayIconID, " displayLabel:", displayLabel)
                 local icon = r:CreateTexture(nil, "ARTWORK")
                 icon:SetSize(20, 20)
                 icon:SetPoint("LEFT", r, "LEFT", 0, 0)
-                icon:SetTexture(entry.iconID)
+                icon:SetTexture(displayIconID)
 
                 local lbl = r:CreateFontString(nil, "OVERLAY", "GameFontNormal")
                 lbl:SetPoint("LEFT", icon, "RIGHT", 6, 0)
-                local spellID = tonumber(spellIDStr)
-                lbl:SetText(entry.label
+                lbl:SetText(displayLabel
                     .. " |cFF888888(plugin: "
                     .. (spellID and MakePluginID(currentSpecID, spellID) or spellIDStr)
                     .. ")|r")
