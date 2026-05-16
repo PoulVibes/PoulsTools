@@ -1,7 +1,7 @@
 ## Interface: 120005
 ## Title: CombatCoach_DynamicBuffTracker
 ## Notes: Generates shmIcons and SBAS conditions for spells in BuffIconCooldownViewer that match purchased talents.
-## Version: 1.0.26
+## Version: 1.0.28
 ## Author: Poul
 ## SavedVariables: DynamicBuffTrackerDB
 ## Dependencies: CombatCoach_shmIcons

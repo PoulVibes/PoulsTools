@@ -36,6 +36,7 @@ local function ResetStreak()
     shmIcons:SetCooldownRaw(ADDON_NAME, "Hit Combo", 0, 0)
     shmIcons:SetStacks(ADDON_NAME, "Hit Combo", 0)
     shmIcons:SetGlow(ADDON_NAME, "Hit Combo", false)
+    shmIcons:SetReverse(ADDON_NAME, "Hit Combo", true)
 end
 
 local REQUIRED_CLASS = "MONK"

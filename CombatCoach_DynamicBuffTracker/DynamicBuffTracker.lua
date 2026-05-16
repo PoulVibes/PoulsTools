@@ -591,6 +591,15 @@ end
 -- Event handling
 -- ============================================================
 
+-- Applies the saved hideCDMBar preference to BuffIconCooldownViewer.
+-- Called on PLAYER_ENTERING_WORLD (after the viewer exists) and on UI toggle.
+local function ApplyCDMBarVisibility()
+    local viewer = _G["BuffIconCooldownViewer"]
+    if viewer then
+        viewer:SetAlpha(DynamicBuffTrackerDB and DynamicBuffTrackerDB.hideCDMBar and 0 or 1)
+    end
+end
+
 local eventFrame = CreateFrame("Frame")
 eventFrame:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_FOLDER then
@@ -617,6 +626,7 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
     elseif event == "PLAYER_ENTERING_WORLD" then
         -- Hook any children that already exist (e.g. on /reload).
         HookViewerChildren(_G["BuffIconCooldownViewer"])
+        ApplyCDMBarVisibility()
         currentSpecID = GetCurrentSpecID()
         LoadSpec(currentSpecID)
 
@@ -741,6 +751,18 @@ if CombatCoach then
         local div, dy = W:SectionHeader(parent, anchor, y, "Dynamic Buff Tracker")
         anchor = div
         y = dy
+
+        local hideBarChk = W:Checkbox(parent, anchor, y,
+            "Hide Blizzard Buff Icon Bar",
+            "Sets the Blizzard BuffIconCooldownViewer alpha to 0, hiding it while"
+                .. " Dynamic Buff Tracker continues to read it in the background.",
+            function() return DynamicBuffTrackerDB and DynamicBuffTrackerDB.hideCDMBar == true end,
+            function(val)
+                DynamicBuffTrackerDB.hideCDMBar = val
+                ApplyCDMBarVisibility()
+            end)
+        anchor = hideBarChk
+        y = -4
 
         local note = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         note:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, y - 4)
