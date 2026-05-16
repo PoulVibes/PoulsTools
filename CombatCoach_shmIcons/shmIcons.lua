@@ -1541,6 +1541,17 @@ function shmIcons:SetCooldownReverse(addonName, id, reverse)
     if icon then icon.cd:SetReverse(reverse and true or false) end
 end
 
+-- Show or hide the countdown numbers and swipe on the cooldown frame for an icon.
+-- Pass true to hide both the numbers and the swoop, false (default) to show them.
+function shmIcons:SetHideCooldownText(addonName, id, hide)
+    local icon = icons[addonName .. ":" .. tostring(id)]
+    if not icon then return end
+    local show = not (hide and true or false)
+    icon.cd:SetHideCountdownNumbers(not show)
+    icon.cd:SetDrawSwipe(show)
+    icon.cd:SetDrawEdge(show)
+end
+
 function shmIcons:SetGlow(addonName, id, show)
     local icon = icons[addonName .. ":" .. tostring(id)]
     if not icon then return end

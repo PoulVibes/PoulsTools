@@ -360,6 +360,7 @@ local function RegisterIcon(spellID, db)
         onMove   = function() end,
     })
     shmIcons:SetCooldownReverse(ADDON_NAME, key, true)
+    shmIcons:SetHideCooldownText(ADDON_NAME, key, db.hide_cooldown_text or false)
     spellInfo = C_Spell.GetSpellInfo(spellID)
     if spellInfo then spellInfo = C_Spell.GetSpellInfo(spellInfo.name) end
     if not spellInfo then spellInfo = C_Spell.GetSpellInfo(spellID) end
@@ -834,7 +835,38 @@ if CombatCoach then
                         RebuildList()
                     end)
                 end
-                
+
+                -- Cooldown-text toggle: checkbox to the left of the remove button.
+                local cdTextChk = CreateFrame("CheckButton", nil, r, "UICheckButtonTemplate")
+                cdTextChk:SetSize(20, 20)
+                cdTextChk:SetPoint("RIGHT", rmBtn, "LEFT", -6, 0)
+                cdTextChk:SetChecked(not (entry.hide_cooldown_text))
+                cdTextChk:SetScript("OnEnter", function(self)
+                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                    GameTooltip:SetText("Show Cooldown Text", 1, 1, 1)
+                    GameTooltip:AddLine(
+                        "Show or hide the countdown number on this buff icon.",
+                        nil, nil, nil, true)
+                    GameTooltip:Show()
+                end)
+                cdTextChk:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                do
+                    local capturedEntry    = entry
+                    local capturedSpellID2 = spellID
+                    cdTextChk:SetScript("OnClick", function(self)
+                        capturedEntry.hide_cooldown_text = not self:GetChecked()
+                        if capturedSpellID2 then
+                            pcall(shmIcons.SetHideCooldownText, shmIcons, ADDON_NAME,
+                                MakeKey(capturedSpellID2), capturedEntry.hide_cooldown_text)
+                        end
+                    end)
+                end
+
+                local cdTextLbl = r:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+                cdTextLbl:SetPoint("RIGHT", cdTextChk, "LEFT", -2, 0)
+                cdTextLbl:SetText("Timer")
+                cdTextLbl:SetTextColor(0.72, 0.82, 0.92, 1)
+
                 r:Show()
                 rows[spellIDStr] = r
             end
