@@ -7,6 +7,6 @@
 ## IconTexture: Interface\Icons\inv_misc_book_08
 ## Category-enUS: CombatCoach
 ## Group: CombatCoach
-## SavedVariablesPerCharacter: SpellGlowTrackerDB, ProcViewerDB
+## SavedVariables: SpellGlowTrackerDB, ProcViewerDB
 
 SpellGlowTracker.lua
