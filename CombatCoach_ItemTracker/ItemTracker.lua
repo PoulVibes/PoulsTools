@@ -131,17 +131,20 @@ local function UpdateItem(key)
 
     local itemID = entry.itemID
 
-    -- Icon — may be nil if item data not yet loaded
+    -- Icon — only push to shmIcons when the texture actually changes
     local _, _, _, _, _, _, _, _, _, texture = GetItemInfo(itemID)
-    shmIcons:SetIcon(ADDON_NAME, key, texture or 134400)
+    local newIcon = texture or 134400
+    if entry.cachedIcon ~= newIcon then
+        entry.cachedIcon = newIcon
+        shmIcons:SetIcon(ADDON_NAME, key, newIcon)
+    end
 
-    -- Stack count — plain integer, safe to compare in combat
-    -- false, false = bags only (no bank, no equipped)
-
-    
+    -- Stack count — only push to shmIcons when count changes
     local count = GetItemCount(itemID, false, true) or 0
-    
-    shmIcons:SetStacks(ADDON_NAME, key, count)
+    if entry.cachedCount ~= count then
+        entry.cachedCount = count
+        shmIcons:SetStacks(ADDON_NAME, key, count)
+    end
 
     -- Cooldown — only meaningful if we have at least one
     if count > 0 then
@@ -206,7 +209,7 @@ local function AddItem(input, specID)
         end,
     })
 
-    tracked[key] = { itemName = itemName, itemID = itemID }
+    tracked[key] = { itemName = itemName, itemID = itemID, cachedIcon = nil, cachedCount = nil }
     UpdateItem(key)
     -- notify external UIs (CombatCoach) so they can refresh lists
     NotifyChangeListeners()
@@ -246,7 +249,7 @@ local function LoadSpec(specID)
                     GetSpecItems(specID)[key].size = sq
                 end,
             })
-            tracked[key] = { itemName = name, itemID = db.itemID }
+            tracked[key] = { itemName = name, itemID = db.itemID, cachedIcon = nil, cachedCount = nil }
         end
     end
     shmIcons:RestoreSnapGroups()

@@ -46,6 +46,9 @@ local cdmFrames       = {}
 local cdmSpellToFrame = {}
 local cdmFrameToSpell = {}
 
+-- Shared UNIT_AURA listener; wired up after SyncIconFromCDMFrame is defined.
+local unitAuraFrame = CreateFrame("Frame")
+
 -- ============================================================
 -- Utilities
 -- ============================================================
@@ -227,21 +230,31 @@ local function SyncIconFromCDMFrame(spellID, specID)
 
     if not auraData then
         _G[activeFlag] = false
-        pcall(shmIcons.SetVisible,  shmIcons, ADDON_NAME, key, false)
-        pcall(shmIcons.SetGlow,     shmIcons, ADDON_NAME, key, false)
-        pcall(shmIcons.SetStacks,   shmIcons, ADDON_NAME, key, 0)
-        pcall(shmIcons.SetCooldown, shmIcons, ADDON_NAME, key, nil)
+        shmIcons:SetVisible(ADDON_NAME, key, false)
+        shmIcons:SetGlow(ADDON_NAME, key, false)
+        shmIcons:SetStacks(ADDON_NAME, key, 0)
+        shmIcons:SetCooldown(ADDON_NAME, key, nil)
         return
     end
 
     _G[activeFlag] = true
     if isEnabled then
-        pcall(shmIcons.SetVisible,  shmIcons, ADDON_NAME, key, true)
-        pcall(shmIcons.SetGlow,     shmIcons, ADDON_NAME, key, true)
-        pcall(shmIcons.SetStacks,   shmIcons, ADDON_NAME, key, auraData.applications or 0)
-        pcall(shmIcons.SetCooldown, shmIcons, ADDON_NAME, key, auraDuration or nil)
+        shmIcons:SetVisible(ADDON_NAME, key, true)
+        shmIcons:SetGlow(ADDON_NAME, key, true)
+        shmIcons:SetStacks(ADDON_NAME, key, auraData.applications or 0)
+        shmIcons:SetCooldown(ADDON_NAME, key, auraDuration or nil)
     end
 end
+
+-- Wire the shared UNIT_AURA listener now that SyncIconFromCDMFrame is defined.
+-- Fires whenever any aura changes on player or target; syncs all tracked icons.
+unitAuraFrame:RegisterUnitEvent("UNIT_AURA", "player")
+unitAuraFrame:RegisterUnitEvent("UNIT_AURA", "target")
+unitAuraFrame:SetScript("OnEvent", function()
+    for _, spellID in pairs(trackedSpells) do
+        SyncIconFromCDMFrame(spellID)
+    end
+end)
 
 -- ============================================================
 -- Viewer child hook (active-state driver)
@@ -282,10 +295,10 @@ local function HookViewerChild(spellID, child)
             hideTimer = nil
             if not IsOwner() then return end
             _G[activeFlag] = false
-            pcall(shmIcons.SetVisible,  shmIcons, ADDON_NAME, key, false)
-            pcall(shmIcons.SetGlow,     shmIcons, ADDON_NAME, key, false)
-            pcall(shmIcons.SetStacks,   shmIcons, ADDON_NAME, key, 0)
-            pcall(shmIcons.SetCooldown, shmIcons, ADDON_NAME, key, nil)
+            shmIcons:SetVisible(ADDON_NAME, key, false)
+            shmIcons:SetGlow(ADDON_NAME, key, false)
+            shmIcons:SetStacks(ADDON_NAME, key, 0)
+            shmIcons:SetCooldown(ADDON_NAME, key, nil)
         end)
     end)
     child:HookScript("OnShow", function()
@@ -293,16 +306,6 @@ local function HookViewerChild(spellID, child)
         if not IsOwner() then return end
         UpdateFromChild()
     end)
-
-    -- UNIT_AURA on both units so refresh/expiry is caught regardless of whether
-    -- the buff is on player (HELPFUL) or target (HARMFUL).
-    local playerFrame = CreateFrame("Frame")
-    playerFrame:RegisterUnitEvent("UNIT_AURA", "player")
-    playerFrame:SetScript("OnEvent", UpdateFromChild)
-
-    local targetFrame = CreateFrame("Frame")
-    targetFrame:RegisterUnitEvent("UNIT_AURA", "target")
-    targetFrame:SetScript("OnEvent", UpdateFromChild)
 
     UpdateFromChild()
     C_Timer.After(1.0, function()

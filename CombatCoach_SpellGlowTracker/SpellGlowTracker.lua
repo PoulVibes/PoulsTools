@@ -254,7 +254,14 @@ local function MaybeStopTicker()
     tickerFrame:Hide()
 end
 
+local TICKER_INTERVAL = 0.1  -- update globals and timer text at ~10 fps
+local tickerElapsed   = 0
+
 tickerFrame:SetScript("OnUpdate", function(self, elapsed)
+    tickerElapsed = tickerElapsed + elapsed
+    if tickerElapsed < TICKER_INTERVAL then return end
+    tickerElapsed = 0
+
     local now = GetTime()
     local anyActive = false
     for _, entry in pairs(TIMED_ENTRIES) do

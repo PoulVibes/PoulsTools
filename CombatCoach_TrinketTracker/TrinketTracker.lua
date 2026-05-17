@@ -27,6 +27,8 @@ local SLOT_NAMES = {
 
 -- slotID → true for the currently active spec's tracked slots
 local trackedSlots = {}
+-- slotID → cached texture ID; refreshed only on PLAYER_EQUIPMENT_CHANGED and slot add
+local slotIconCache = {}
 
 -- The spec ID we last loaded icons for
 local currentSpecID = nil
@@ -94,19 +96,33 @@ local function GetSlotDB(specID, slotID)
 end
 
 -- ============================================================
--- Cooldown + icon update for one slot
+-- Slot icon refresh (called on equipment changes, not every cooldown update)
+-- ============================================================
+
+local function RefreshSlotIcon(slotID)
+    if not trackedSlots[slotID] then return end
+    local itemID  = GetInventoryItemID("player", slotID)
+    local texture = itemID and select(10, GetItemInfo(itemID))
+    local newIcon = texture or 134400
+    if slotIconCache[slotID] ~= newIcon then
+        slotIconCache[slotID] = newIcon
+        shmIcons:SetIcon(ADDON_NAME, slotID, newIcon)
+    end
+end
+
+local function RefreshAllSlotIcons()
+    for slotID in pairs(trackedSlots) do RefreshSlotIcon(slotID) end
+end
+
+-- ============================================================
+-- Cooldown update for one slot
 -- ============================================================
 
 local function UpdateSlot(slotID)
     if not trackedSlots[slotID] then return end
-
     local itemID = GetInventoryItemID("player", slotID)
-    local texture = itemID and select(10, GetItemInfo(itemID))
-    shmIcons:SetIcon(ADDON_NAME, slotID, texture or 134400)
-
     local start, duration = GetInventoryItemCooldown("player", slotID)
     local onCooldown = start and duration and duration > 1.5
-
     shmIcons:SetCooldownRaw(ADDON_NAME, slotID, start, duration)
     shmIcons:SetGlow(ADDON_NAME, slotID, not onCooldown and itemID ~= nil)
 end
@@ -129,6 +145,7 @@ local function AddSlot(slotID, specID)
     })
     trackedSlots[slotID] = true
     GetSpecSlots(specID)[slotID].enabled = true
+    RefreshSlotIcon(slotID)
     UpdateSlot(slotID)
     NotifyChangeListeners()
 end
@@ -136,6 +153,7 @@ end
 local function RemoveSlot(slotID)
     shmIcons:Unregister(ADDON_NAME, slotID)
     trackedSlots[slotID] = nil
+    slotIconCache[slotID] = nil
     local slots = GetSpecSlots(currentSpecID)
     if slots[slotID] then slots[slotID].enabled = false end
     NotifyChangeListeners()
@@ -147,6 +165,7 @@ local function UnloadSpec()
         shmIcons:Unregister(ADDON_NAME, slotID)
     end
     trackedSlots = {}
+    slotIconCache = {}
     NotifyChangeListeners()
 end
 
@@ -278,9 +297,15 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
     elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
         LoadSpec(GetCurrentSpecID())
 
-    elseif event == "PLAYER_EQUIPMENT_CHANGED"
-        or  event == "ACTIONBAR_UPDATE_COOLDOWN" then
+    elseif event == "PLAYER_EQUIPMENT_CHANGED" then
+        RefreshAllSlotIcons()
         UpdateAllSlots()
+
+    elseif event == "ACTIONBAR_UPDATE_COOLDOWN" then
+        UpdateAllSlots()
+
+    elseif event == "GET_ITEM_INFO_RECEIVED" then
+        RefreshAllSlotIcons()
     end
 end)
 
@@ -289,6 +314,7 @@ eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 eventFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 eventFrame:RegisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
+eventFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 
 -- ============================================================
 -- Public API for CombatCoach UI and other integrations
