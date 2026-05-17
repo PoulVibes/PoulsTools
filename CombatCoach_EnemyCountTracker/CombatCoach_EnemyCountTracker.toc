@@ -3,7 +3,7 @@
 ## Notes: Tracks hostile enemies in combat using nameplates only (Midnight-safe).
 ## Version: 1.1.1
 ## Author: Poul
-## SavedVariablesPerCharacter: EnemyCountTrackerDB
+## SavedVariables: EnemyCountTrackerDB
 ## IconTexture: Interface\Icons\ability_hunter_markedshot
 ## Category-enUS: CombatCoach
 ## Group: CombatCoach
