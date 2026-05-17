@@ -431,7 +431,9 @@ events:SetScript("OnEvent", function(_, event)
                 -- recommended optimized code as the default.
                 local defaultCode = _G.SBAS_GetDefaultOverrideCodeForSpec
                                     and _G.SBAS_GetDefaultOverrideCodeForSpec(GetCurrentSpecID())
-                CompileOverride(defaultCode or nil)
+                -- Fall back to the raw Blizzard SBA suggestion when no
+                -- recommended script exists for this spec.
+                CompileOverride(defaultCode or "return C_AssistedCombat.GetNextCastSpell()")
             else
                 CompileOverride(nil)
             end

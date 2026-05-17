@@ -1571,6 +1571,12 @@ function shmIcons:ToggleGlowEnabled(addonName, id)
     return icon.glowEnabled
 end
 
+function shmIcons:SetDisplayName(addonName, id, displayName)
+    local icon = icons[addonName .. ":" .. tostring(id)]
+    if not icon then return end
+    icon.db.spellName = displayName
+end
+
 function shmIcons:SetStacks(addonName, id, count)
     local icon = icons[addonName .. ":" .. tostring(id)]
     if not icon then return end

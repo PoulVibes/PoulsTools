@@ -419,16 +419,17 @@ end
 
 local function RegisterIcon(spellID, db)
     local key = MakeKey(spellID)
+    spellInfo = C_Spell.GetSpellInfo(spellID)
+    if spellInfo then spellInfo = C_Spell.GetSpellInfo(spellInfo.name) end
+    if not spellInfo then spellInfo = C_Spell.GetSpellInfo(spellID) end
+    db.spellName = spellInfo and spellInfo.name or ("Unknown Spell " .. tostring(spellID))
+    --print("Registering icon for spellID:", spellID, " iconID:", spellInfo and spellInfo.iconID)
     shmIcons:Register(ADDON_NAME, key, db, {
         onResize = function(sq) db.size = sq end,
         onMove   = function() end,
     })
     shmIcons:SetCooldownReverse(ADDON_NAME, key, true)
     shmIcons:SetHideCooldownText(ADDON_NAME, key, db.hide_cooldown_text or false)
-    spellInfo = C_Spell.GetSpellInfo(spellID)
-    if spellInfo then spellInfo = C_Spell.GetSpellInfo(spellInfo.name) end
-    if not spellInfo then spellInfo = C_Spell.GetSpellInfo(spellID) end
-    --print("Registering icon for spellID:", spellID, " iconID:", spellInfo and spellInfo.iconID)
     shmIcons:SetIcon(ADDON_NAME, key, spellInfo.iconID)
     shmIcons:SetVisible(ADDON_NAME, key, false)
     shmIcons:SetGlow(ADDON_NAME, key, false)
@@ -510,8 +511,7 @@ ScanAndSync = function()
 
     -- Refresh the runtime display icon and SBAS label for every tracked spell.
     -- GetSpellInfo(baseID) resolves active overrides natively in WoW Midnight:
-    -- GetSpellInfo(immolateID) returns Wither's name/icon when the Wither talent
-    -- is active. We intentionally do NOT mutate the DB entry here so the base
+    -- We intentionally do NOT mutate the DB entry here so the base
     -- spell ID remains the permanent canonical key regardless of talent state.
     for spellIDStr, spellID in pairs(trackedSpells) do
         local ok, spellInfo = pcall(C_Spell.GetSpellInfo, spellID)
@@ -520,9 +520,11 @@ ScanAndSync = function()
             if spellInfo.iconID then
                 if not spellInfo then spellInfo = C_Spell.GetSpellInfo(spellID) end
                 --print("Updating icon for spellID:", spellID, " iconID:", spellInfo.iconID)
+                shmIcons:SetDisplayName(ADDON_NAME, MakeKey(spellID), spellInfo.name)
                 shmIcons:SetIcon(ADDON_NAME, MakeKey(spellID), spellInfo.iconID)
             end
             if spellInfo.name then
+                --print("Registering Name for spellID:", spellID, " name:", spellInfo.name)
                 RegisterSBASEntry(specID, spellID, spellInfo.name)
             end
         end
@@ -702,6 +704,7 @@ local function LoadSpec(specID)
             if spellInfo.iconID then
                 if not spellInfo then spellInfo = C_Spell.GetSpellInfo(spellID) end
                 --print("Setting icon for spellID:", spellID, " iconID:", spellInfo.iconID)
+                shmIcons:SetDisplayName(ADDON_NAME, MakeKey(spellID), spellInfo.name)
                 shmIcons:SetIcon(ADDON_NAME, MakeKey(spellID), spellInfo.iconID)
             end
             if spellInfo.name then
@@ -847,6 +850,8 @@ SlashCmdList["DYNAMICBUFFTRACKER"] = function(msg)
         local buffDB = GetSpecBuffDB(currentSpecID)
         for spellIDStr in pairs(buffDB) do
             local spellID = tonumber(spellIDStr)
+            local ok, spellInfo = pcall(C_Spell.GetSpellInfo, spellID)
+            if ok and spellInfo then ok, spellInfo = pcall(C_Spell.GetSpellInfo, spellInfo.name) end
             if spellID then
                 pcall(function()
                     if not spellInfo then spellInfo = C_Spell.GetSpellInfo(spellID) end
@@ -902,7 +907,7 @@ if CombatCoach then
         note:SetWordWrap(true)
         note:SetTextColor(0.72, 0.82, 0.92, 1)
         note:SetText(
-            "Discovers spells tracked in Blizzard\xe2\x80\x99s CooldownManager (BuffIconCooldownViewer) "
+            "Discovers spells tracked in Blizzard's CooldownManager (BuffIconCooldownViewer) "
             .. "whose icons match a purchased talent. Add buff icons in the CooldownManager settings, "
             .. "then click Scan Now (or change talents) to update.")
         anchor = note
@@ -929,9 +934,22 @@ if CombatCoach then
             if DynamicBuffTrackerDB and DynamicBuffTrackerDB.specs then
                 DynamicBuffTrackerDB.specs[currentSpecID] = nil
             end
-            print("|cFFFFFF00DynamicBuffTracker: Cleared all tracked talents for this spec.|r")
+            print("|cFFFFFF00DynamicBuffTracker: Cleared all tracked buffs for this spec.|r")
             if rebuildCombatCoachList then rebuildCombatCoachList() end
         end)
+        y = -4
+
+        -- Lock / Unlock button
+        local lockBtn = nil
+        local lockLabel = "Lock Icons"
+        if shmIcons and shmIcons.IsLocked and shmIcons:IsLocked() then lockLabel = "Unlock Icons" end
+        anchor = W:Button(parent, anchor, y, lockLabel, function()
+            if shmIcons and shmIcons.ToggleLock then
+                local locked = shmIcons:ToggleLock()
+                if lockBtn then lockBtn:SetText(locked and "Unlock Icons" or "Lock Icons") end
+            end
+        end)
+        lockBtn = anchor
         y = -4
 
         local div2, dy2 = W:SectionHeader(parent, anchor, y, "Tracked Talents (this spec)")
@@ -966,6 +984,8 @@ if CombatCoach then
                 local displayLabel  = entry.label
                 if spellID then
                     local ok, spellInfo = pcall(C_Spell.GetSpellInfo, spellID)
+                    if ok and spellInfo then ok, spellInfo = pcall(C_Spell.GetSpellInfo, spellInfo.name) end
+                    if not spellInfo then spellInfo = C_Spell.GetSpellInfo(spellID) end
                     if ok and spellInfo then
                         if spellInfo.iconID then displayIconID = spellInfo.iconID end
                         if spellInfo.name   then displayLabel  = spellInfo.name  end
@@ -1104,7 +1124,12 @@ if CombatCoach then
         while canvasFrame:GetParent() and canvasFrame:GetParent() ~= UIParent do
             canvasFrame = canvasFrame:GetParent()
         end
-        canvasFrame:HookScript("OnShow", RebuildList)
+        canvasFrame:HookScript("OnShow", function()
+            RebuildList()
+            if lockBtn and shmIcons and shmIcons.IsLocked then
+                lockBtn:SetText(shmIcons:IsLocked() and "Unlock Icons" or "Lock Icons")
+            end
+        end)
     end
 
     CombatCoach.Menu:RegisterAddon({
