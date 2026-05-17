@@ -56,16 +56,12 @@ local function GetCurrentSpecID()
     return specID or 0
 end
 
--- Return the per-spec sub-table for specials; creates and seeds from
--- the global overrideCode when first created for backward compatibility.
+-- Return the per-spec sub-table; each spec is isolated — no cross-spec seeding.
 local function GetSpecDB(specID)
     specID = specID or GetCurrentSpecID()
     local db = GetDB()
     db.specs = db.specs or {}
     db.specs[specID] = db.specs[specID] or {}
-    if db.specs[specID].overrideCode == nil then
-        db.specs[specID].overrideCode = db.overrideCode or ""
-    end
     return db.specs[specID]
 end
 
@@ -213,7 +209,8 @@ local function UpdateExtraIconsForSpec(specID)
     end
     activeExtraTabCount = newExtra
 
-    -- (Re-)compile override code for each active extra tab
+    -- (Re-)compile override code for each active extra tab.
+    -- Priority: 1) saved code  2) nil  (no Blizzard SBA fallback for extra tabs)
     local specEntry = SBA_SimpleDB.specs and SBA_SimpleDB.specs[specID]
     for i = 2, newExtra + 1 do
         local code = specEntry and specEntry["overrideCode_" .. i] or ""
@@ -421,21 +418,23 @@ events:SetScript("OnEvent", function(_, event)
         C_Timer.After(0, function() UpdateExtraIconsForSpec(GetCurrentSpecID()) end)
         -- Defer override compilation by one frame so spec data is fully available.
         -- GetSpecialization() may return nil during PLAYER_ENTERING_WORLD otherwise.
+        -- Tab 1 ("Rotation") priority: saved code → recommended → Blizzard SBA.
+        -- Extra tabs (2+) use only their saved code; their priority 3 is nil.
+        -- (Extra tab fallback is handled inside UpdateExtraIconsForSpec.)
         C_Timer.After(0, function()
             local specDB = GetSpecDB()
-            local code = specDB.overrideCode or GetDB().overrideCode
+            -- Only use saved code that was explicitly saved for this spec
+            -- (overrideSource is set by the editor/GUI; absent = never saved for this spec)
+            local code = specDB.overrideSource and specDB.overrideCode
             if code and not code:match("^%s*$") then
+                -- 1) Last used override code from saved variable (spec-specific)
                 CompileOverride(code)
-            elseif not specDB.overrideSource then
-                -- No user-saved override yet for this spec; try to use the
-                -- recommended optimized code as the default.
+            else
+                -- 2) Recommended import for spec, if available
                 local defaultCode = _G.SBAS_GetDefaultOverrideCodeForSpec
                                     and _G.SBAS_GetDefaultOverrideCodeForSpec(GetCurrentSpecID())
-                -- Fall back to the raw Blizzard SBA suggestion when no
-                -- recommended script exists for this spec.
+                -- 3) Fall back to the raw Blizzard SBA suggestion (tab 1 only)
                 CompileOverride(defaultCode or "return C_AssistedCombat.GetNextCastSpell()")
-            else
-                CompileOverride(nil)
             end
         end)
     end

@@ -1,9 +1,8 @@
 ## Interface: 120005
-## Title: OnUseTracker
+## Title: CombatCoach_OnUseTracker
 ## Notes: Tracks on-use buff windows (Zenith, Bestial Wrath).
 ## Author: Poul
-## Version: 1.2.15
-
+## Version: 1.2.16
 ## SavedVariables: OnUseTrackerDB
 ## Dependencies: CombatCoach_shmIcons
 ## IconTexture: Interface\Icons\inv_ability_monk_weaponsoforder
