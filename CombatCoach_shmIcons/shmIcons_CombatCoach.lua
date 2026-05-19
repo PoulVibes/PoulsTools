@@ -98,6 +98,10 @@ local function OnBuildUI(parent)
         for _, entry in ipairs(allIcons) do
             local addonName = entry.addonName
             local localID   = entry.localID
+
+            -- Skip NP-clone icons (suffix "_np"): their enabled/glow state is
+            -- driven each frame by the main icon and should not be user-editable.
+            if localID:sub(-3) ~= "_np" then
             local icon      = entry.icon
             local db        = icon and icon.db
 
@@ -243,11 +247,41 @@ local function OnBuildUI(parent)
                         if capturedDB then capturedDB.glow_enabled = enabled end
                     end
                 end)
+
+                -- Failure Sound toggle: only for the Hit Combo icon
+                if capturedAddon == "Combo Tracker" and capturedID == "Hit Combo" then
+                    local sndChk = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+                    sndChk:SetSize(22, 22)
+                    sndChk:SetPoint("LEFT", glowBtn, "RIGHT", 6, 0)
+                    sndChk:SetChecked(ComboTrackerDB and ComboTrackerDB.failureSound or false)
+                    sndChk:SetScript("OnClick", function(self)
+                        if ComboTrackerDB then ComboTrackerDB.failureSound = self:GetChecked() end
+                    end)
+
+                    local sndLbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+                    sndLbl:SetPoint("LEFT", sndChk, "RIGHT", 2, 0)
+                    sndLbl:SetText("Sound")
+                    sndLbl:SetTextColor(unpack(W.colors.textMuted))
+
+                    sndChk:SetScript("OnEnter", function(self)
+                        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                        GameTooltip:SetText("Failure Sound", 1, 1, 1)
+                        GameTooltip:AddLine("Play the Quest Failed sound when the same ability breaks your Combo Strike streak.", nil, nil, nil, true)
+                        GameTooltip:Show()
+                    end)
+                    sndChk:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+                    -- Keep in sync each time the panel is shown
+                    parent:HookScript("OnShow", function()
+                        sndChk:SetChecked(ComboTrackerDB and ComboTrackerDB.failureSound or false)
+                    end)
+                end
             end
 
             row:Show()
             table.insert(activeRows, row)
             rowY = rowY + 26
+            end -- if localID:sub(-3) ~= "_np"
         end
 
         -- Empty-state message when nothing is registered yet

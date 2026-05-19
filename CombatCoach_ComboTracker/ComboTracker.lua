@@ -130,13 +130,17 @@ end
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" and ... == FOLDER_NAME then
         ComboTrackerDB = ComboTrackerDB or {
-            x            = 0,
-            y            = -100,
-            point        = "CENTER",
-            size         = 64,
-            enabled      = false,
-            glow_enabled = false,
+            x             = 0,
+            y             = -100,
+            point         = "CENTER",
+            size          = 64,
+            enabled       = false,
+            glow_enabled  = false,
+            failureSound  = true,
         }
+        if ComboTrackerDB.failureSound == nil then
+            ComboTrackerDB.failureSound = true
+        end
         -- Migrate legacy locked field
         ComboTrackerDB.locked = nil
         -- Update enabled state; handles LoadOnDemand case where PLAYER_LOGIN
@@ -177,7 +181,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             -- commented out for now but here is a print statement for debugging should I need it later. do not remove
             -- print("Combo Broken Spell:", LastComboStrikeSpellID)
             ComboStrikeStreak = 0
-            PlaySound(847, "Master") -- Quest Failed Sound
+            if ComboTrackerDB and ComboTrackerDB.failureSound then
+                PlaySound(847, "Master") -- Quest Failed Sound
+            end
             shmIcons:SetVisible(ADDON_NAME, "Hit Combo", false)
             shmIcons:SetCooldownRaw(ADDON_NAME, "Hit Combo", 0, 0)
             shmIcons:SetStacks(ADDON_NAME, "Hit Combo", 0)
@@ -210,3 +216,5 @@ SlashCmdList["COMBOTRACKER"] = function(msg)
         print("Usage: /combo lock")
     end
 end
+
+
