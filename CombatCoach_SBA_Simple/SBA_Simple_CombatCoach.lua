@@ -333,14 +333,6 @@ local function OnBuildUI(parent)
         return rec.importText
     end
 
-    anchor = W:Checkbox(parent, anchor, y,
-        "Enabled",
-        "Enable the SBA Simple icon.",
-        function() return (SBA_SimpleDB and SBA_SimpleDB.enabled) ~= false end,
-        function(val) SBA_SimpleDB = SBA_SimpleDB or {}; SBA_SimpleDB.enabled = val; if SBA_Simple_SetEnabled then SBA_Simple_SetEnabled(val) end end
-    )
-    y = -6
-
     local sliderRow = W:Slider(parent, anchor, y,
         "Icon Size", 16, 128, 1,
         function() return (SBA_SimpleDB and SBA_SimpleDB.size) or 64 end,
@@ -453,14 +445,126 @@ local function OnBuildUI(parent)
     anchor = debugToggleBtn
     y = -8
 
-    y = -8
-    local hdr, dy2 = W:SectionHeader(parent, anchor, y, "Single-Button Suggestion Overrides (by Class / Spec)")
+    -- ── Dynamic icon settings (rebuilt on each panel open) ──────────────────
+    -- iconSectionsTailMarker is a 1x1 frame that gets repositioned at the
+    -- bottom of the last dynamic section.  The "Single-Button Suggestion
+    -- Overrides" header is anchored to it, so it reflows automatically.
+    local iconSectionsTailMarker = CreateFrame("Frame", nil, parent)
+    iconSectionsTailMarker:SetSize(1, 1)
+    iconSectionsTailMarker:SetPoint("TOPLEFT", debugToggleBtn, "BOTTOMLEFT", 0, -8)
+
+    local dynamicIconFrames = {}
+
+    local function RebuildDynamicIconSections()
+        -- Hide (not destroy) frames from the previous build; WoW cannot GC frames.
+        for _, f in ipairs(dynamicIconFrames) do
+            if f and f.Hide then f:Hide() end
+        end
+        dynamicIconFrames = {}
+
+        local tracked = type(SBA_Simple_GetTrackedIconInfo) == "function"
+                        and SBA_Simple_GetTrackedIconInfo() or {}
+        if #tracked == 0 then
+            tracked = {{ key = "Suggested_Spell", label = "Rotation", db = SBA_SimpleDB }}
+        end
+
+        local a  = debugToggleBtn
+        local iy = -8
+
+        -- ── Icon Display Mode ────────────────────────────────────────────────
+        -- One dropdown per tracked icon; controls Disabled / Movable / Nameplate / Both.
+        local modeHdr, modeDy = W:SectionHeader(parent, a, iy, "Icon Display")
+        table.insert(dynamicIconFrames, modeHdr)
+        a  = modeHdr
+        iy = modeDy
+
+        local DISPLAY_MODES = {
+            { text = "Disabled",       value = "disabled"  },
+            { text = "Movable Icon",   value = "movable"   },
+            { text = "Nameplate Icon", value = "nameplate" },
+            { text = "Both",           value = "both"      },
+        }
+
+        for _, info in ipairs(tracked) do
+            local capturedDB = info.db
+            local dd = W:Dropdown(parent, a, iy,
+                info.label or "Icon",
+                DISPLAY_MODES,
+                function() return capturedDB.display_mode or "movable" end,
+                function(val) capturedDB.display_mode = val end
+            )
+            table.insert(dynamicIconFrames, dd)
+            a  = dd
+            iy = -4
+        end
+
+        -- ── Shared Nameplate Settings ────────────────────────────────────────
+        -- Single set of sliders applies to ALL icons in "Nameplate" or "Both" mode.
+        local npHdr, npDy = W:SectionHeader(parent, a, iy, "Nameplate Settings")
+        table.insert(dynamicIconFrames, npHdr)
+        a  = npHdr
+        iy = npDy
+
+        local function getNPS()
+            SBA_SimpleDB = SBA_SimpleDB or {}
+            return SBA_SimpleDB
+        end
+
+        local opRow = W:Slider(parent, a, iy,
+            "Opacity", 0, 100, 1,
+            function() return math.floor(((getNPS()).np_opacity or 1) * 100) end,
+            function(val) (getNPS()).np_opacity = val / 100 end,
+            "%d%%"
+        )
+        table.insert(dynamicIconFrames, opRow)
+        a  = opRow
+        iy = -8
+
+        local scRow = W:Slider(parent, a, iy,
+            "Scale", 25, 200, 5,
+            function() return math.floor(((getNPS()).np_scale or 1) * 100) end,
+            function(val) (getNPS()).np_scale = val / 100 end,
+            "%d%%"
+        )
+        table.insert(dynamicIconFrames, scRow)
+        a  = scRow
+        iy = -8
+
+        local xRow = W:Slider(parent, a, iy,
+            "X Offset", -100, 100, 1,
+            function() return (getNPS()).np_x or 0 end,
+            function(val) (getNPS()).np_x = val end,
+            "%d"
+        )
+        table.insert(dynamicIconFrames, xRow)
+        a  = xRow
+        iy = -8
+
+        local yRow = W:Slider(parent, a, iy,
+            "Y Offset", -100, 100, 1,
+            function() return (getNPS()).np_y or 0 end,
+            function(val) (getNPS()).np_y = val end,
+            "%d"
+        )
+        table.insert(dynamicIconFrames, yRow)
+        a  = yRow
+        iy = -16
+
+        -- Reposition tail marker so the downstream section header reflows.
+        iconSectionsTailMarker:ClearAllPoints()
+        iconSectionsTailMarker:SetPoint("TOPLEFT", a, "BOTTOMLEFT", 0, iy)
+    end
+
+    RebuildDynamicIconSections()  -- initial build (tab 1 only at login)
+
+    local hdr, dy2 = W:SectionHeader(parent, iconSectionsTailMarker, 0, "Single-Button Suggestion Overrides (by Class / Spec)")
     local listAnchor = hdr
     y = dy2
 
     -- Keep slider in sync when the settings panel is shown (reflect manual resizes)
     if sliderRow and sliderRow.slider and sliderRow.valText then
         parent:HookScript("OnShow", function()
+            RebuildDynamicIconSections()
             local sz = (SBA_SimpleDB and SBA_SimpleDB.size) or 64
             sliderRow.slider:SetValue(sz)
             sliderRow.valText:SetText(string.format("%d", sz))

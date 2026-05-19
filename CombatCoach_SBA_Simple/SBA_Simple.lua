@@ -13,6 +13,15 @@ local spellGCDState = {}
 -- The spellID currently shown in the icon; used by SPELL_UPDATE_CHARGES.
 local currentDisplayedSpellID = nil
 
+-- shmIcon objects by icon key; populated on Register, cleared on Unregister.
+-- Used by the per-frame nameplate repositioner.
+local registeredIconObjects = {}
+
+-- Suffix for nameplate-clone icon keys used in "Both" display mode.
+local NP_KEY_SUFFIX = "_np"
+-- In-memory DBs for NP-clone icons (not persisted in SavedVariables).
+local npIconDBs = {}
+
 -- Extra-tab tracking (tabs 2-5)
 local activeExtraTabCount  = 0    -- how many extra icons are currently registered
 local extraDisplayedSpell  = {}   -- [tabIdx] -> currently displayed spellID
@@ -28,6 +37,7 @@ local function GetExtraIconDB(tabIdx)
         SBA_SimpleDB.extraIcons[key] = {
             x = 0, y = 0, point = "CENTER",
             size = 64, enabled = true, glow_enabled = false,
+            display_mode = "movable",  -- "disabled"|"movable"|"nameplate"|"both"
         }
     end
     return SBA_SimpleDB.extraIcons[key]
@@ -41,11 +51,32 @@ local function GetDB()
     if db.y            == nil then db.y             = 0        end
     if db.point        == nil then db.point         = "CENTER" end
     if db.size         == nil then db.size          = 64       end
-    if db.enabled      == nil then db.enabled       = true     end
-    if db.glow_enabled == nil then db.glow_enabled  = false    end
-    if db.overrideCode == nil then db.overrideCode  = ""       end
-    if db.overrideDebug == nil then db.overrideDebug = true     end
+    if db.enabled          == nil then db.enabled          = true  end
+    if db.glow_enabled     == nil then db.glow_enabled     = false end
+    if db.overrideCode     == nil then db.overrideCode     = ""    end
+    if db.overrideDebug    == nil then db.overrideDebug    = true  end
+    if db.display_mode == nil then db.display_mode = "movable" end
     return db
+end
+
+-- Shared nameplate appearance settings stored at the SBA_SimpleDB root level.
+-- A single set of sliders controls opacity/scale/offset for ALL nameplate icons.
+local function GetNPSettings()
+    local db = SBA_SimpleDB
+    if db.np_opacity == nil then db.np_opacity = 1 end
+    if db.np_scale   == nil then db.np_scale   = 1 end
+    if db.np_x       == nil then db.np_x       = 0 end
+    if db.np_y       == nil then db.np_y       = 0 end
+    return db
+end
+
+-- In-memory DB for a nameplate-clone icon.  Not persisted.
+local function GetNPIconDB(mainKey)
+    if not npIconDBs[mainKey] then
+        npIconDBs[mainKey] = { size = 64, enabled = true, glow_enabled = false,
+                               x = 0, y = 0, point = "CENTER" }
+    end
+    return npIconDBs[mainKey]
 end
 
 -- Return the current specialization ID (0 when not set)
@@ -151,20 +182,39 @@ function SBA_Simple_SetOverrideCode(code)
     CompileOverride(code or "")
 end
 
+-- ── NP-clone icon helpers ───────────────────────────────────────────────
+local function RegisterNPIcon(mainKey)
+    local npKey  = mainKey .. NP_KEY_SUFFIX
+    local mainDB = (mainKey == ICON_KEY) and GetDB()
+                   or GetExtraIconDB(tonumber(mainKey:match("_(%d+)$")))
+    local npDB   = GetNPIconDB(mainKey)
+    npDB.size    = (mainDB and mainDB.size) or 64
+    registeredIconObjects[npKey] = shmIcons:Register(ADDON_NAME, npKey, npDB, {
+        onResize = function(sq) npDB.size = sq end,
+        onMove   = function() end,
+    })
+    shmIcons:SetVisible(ADDON_NAME, npKey, false)
+end
+
+local function UnregisterNPIcon(mainKey)
+    local npKey = mainKey .. NP_KEY_SUFFIX
+    registeredIconObjects[npKey] = nil
+    shmIcons:Unregister(ADDON_NAME, npKey)
+end
+
 -- ── Registration ──────────────────────────────────────────────────────────
 local function RegisterIcon()
     local db = GetDB()
     db.spellName = "Rotation"
-    shmIcons:Register(ADDON_NAME, ICON_KEY, db, {
+    registeredIconObjects[ICON_KEY] = shmIcons:Register(ADDON_NAME, ICON_KEY, db, {
         onResize = function(sq) db.size = sq end,
         onMove   = function()   end,
     })
     shmIcons:RestoreSnapGroups()
     shmIcons:SetDisplayHotkey(ADDON_NAME, ICON_KEY, true)
-    -- Ensure the icon visibility follows the DB setting
-    if shmIcons and shmIcons.SetVisible then
-        shmIcons:SetVisible(ADDON_NAME, ICON_KEY, (db.enabled ~= false))
-    end
+    local mode = db.display_mode or "movable"
+    shmIcons:SetVisible(ADDON_NAME, ICON_KEY, mode ~= "disabled")
+    RegisterNPIcon(ICON_KEY)
 end
 
 local function RegisterExtraIcon(tabIdx)
@@ -177,16 +227,21 @@ local function RegisterExtraIcon(tabIdx)
         local names  = SBA_SimpleDB.tabNames[specID] or {}
         db.spellName = names[tabIdx] or ("Tab " .. tabIdx)
     end
-    shmIcons:Register(ADDON_NAME, key, db, {
+    registeredIconObjects[key] = shmIcons:Register(ADDON_NAME, key, db, {
         onResize = function(sq) db.size = sq end,
         onMove   = function()   end,
     })
     shmIcons:SetDisplayHotkey(ADDON_NAME, key, true)
-    shmIcons:SetVisible(ADDON_NAME, key, db.enabled ~= false)
+    local mode = db.display_mode or "movable"
+    shmIcons:SetVisible(ADDON_NAME, key, mode ~= "disabled")
+    RegisterNPIcon(key)
 end
 
 local function UnregisterExtraIcon(tabIdx)
-    shmIcons:Unregister(ADDON_NAME, ICON_KEY .. "_" .. tabIdx)
+    local key = ICON_KEY .. "_" .. tabIdx
+    registeredIconObjects[key] = nil
+    shmIcons:Unregister(ADDON_NAME, key)
+    UnregisterNPIcon(key)
 end
 
 -- Adjust the set of registered extra icons and (re-)compile their overrides.
@@ -273,13 +328,63 @@ function SBA_Simple_SetEnabled(enabled)
     end
 end
 
+-- Public: enable/disable any registered icon by its key.
+-- Maps to display_mode: false -> "disabled", true -> restore to "movable" if was disabled.
+function SBA_Simple_SetIconEnabled(key, enabled)
+    local db
+    if key == ICON_KEY then
+        db = GetDB()
+    else
+        local tabIdx = tonumber(key:match("_(%d+)$"))
+        if tabIdx then db = GetExtraIconDB(tabIdx) end
+    end
+    if db then
+        if enabled then
+            if db.display_mode == "disabled" or db.display_mode == nil then
+                db.display_mode = "movable"
+            end
+        else
+            db.display_mode = "disabled"
+        end
+    end
+    if shmIcons and shmIcons.SetVisible then
+        shmIcons:SetVisible(ADDON_NAME, key, enabled)
+        shmIcons:SetVisible(ADDON_NAME, key .. NP_KEY_SUFFIX, false)
+    end
+end
+
+-- Public: returns info for all currently registered SBAS icons.
+-- Each entry: { key, label, db }.  Used by the CombatCoach UI to build
+-- the per-icon nameplate settings panel.
+-- Uses the saved tab count as a fallback so the UI is correct on the
+-- first panel open (before the async UpdateExtraIconsForSpec timer fires).
+function SBA_Simple_GetTrackedIconInfo()
+    local result = {}
+    local mainDB = GetDB()
+    result[1] = { key = ICON_KEY, label = mainDB.spellName or "Tab 1", db = mainDB }
+    local specID     = GetCurrentSpecID()
+    local savedCount = SBA_SimpleDB.tabCount and SBA_SimpleDB.tabCount[specID] or 1
+    local tabTotal   = math.max(activeExtraTabCount + 1, savedCount)
+    for tabIdx = 2, tabTotal do
+        local tabDB = GetExtraIconDB(tabIdx)
+        result[#result + 1] = {
+            key   = ICON_KEY .. "_" .. tabIdx,
+            label = tabDB.spellName or ("Tab " .. tabIdx),
+            db    = tabDB,
+        }
+    end
+    return result
+end
+
 function SBA_Simple_SetSize(size)
     local db = GetDB()
     db.size = tonumber(size) or db.size
     if shmIcons and shmIcons.Unregister then
         shmIcons:Unregister(ADDON_NAME, ICON_KEY)
+        shmIcons:Unregister(ADDON_NAME, ICON_KEY .. NP_KEY_SUFFIX)
+        registeredIconObjects[ICON_KEY .. NP_KEY_SUFFIX] = nil
     end
-    -- Recreate the icon with the updated size
+    -- Recreate the icon (and its NP clone) with the updated size.
     RegisterIcon()
 end
 
@@ -358,17 +463,110 @@ end
 -- ── Per-frame update ──────────────────────────────────────────────────────
 local ticker = CreateFrame("Frame")
 ticker:SetScript("OnUpdate", function()
-    -- Tab 1: main icon
-    local spellID = Override()
-    currentDisplayedSpellID = UpdateShmIcon(ICON_KEY, spellID, currentDisplayedSpellID)
+    -- ── Tab 1 ────────────────────────────────────────────────────────────
+    local mainDB   = GetDB()
+    local mainMode = mainDB.display_mode or "movable"
+    local spellID  = (mainMode ~= "disabled") and Override() or nil
 
-    -- Extra tabs (tabs 2+)
+    -- Main icon: visible for movable/both; hidden for nameplate/disabled.
+    if mainMode == "movable" or mainMode == "both" then
+        currentDisplayedSpellID = UpdateShmIcon(ICON_KEY, spellID, currentDisplayedSpellID)
+    else
+        UpdateShmIcon(ICON_KEY, nil, currentDisplayedSpellID)
+        currentDisplayedSpellID = spellID  -- keep for nameplate block check
+    end
+    -- NP-clone: update spell data when nameplate/both; suppress shmIcons visibility.
+    -- The nameplate block below controls frame:Show()/Hide() directly.
+    if mainMode == "nameplate" or mainMode == "both" then
+        UpdateShmIcon(ICON_KEY .. NP_KEY_SUFFIX, spellID, nil)
+    end
+    shmIcons:SetVisible(ADDON_NAME, ICON_KEY .. NP_KEY_SUFFIX, false)
+
+    -- ── Extra tabs (tabs 2+) ──────────────────────────────────────────────
     for tabIdx = 2, activeExtraTabCount + 1 do
-        local db = GetExtraIconDB(tabIdx)
-        if db.enabled ~= false then
-            local extraSpell = RunExtraOverride(tabIdx)
-            extraDisplayedSpell[tabIdx] = UpdateShmIcon(
-                ICON_KEY .. "_" .. tabIdx, extraSpell, extraDisplayedSpell[tabIdx])
+        local tabDB  = GetExtraIconDB(tabIdx)
+        local mode   = tabDB.display_mode or "movable"
+        local eSpell = (mode ~= "disabled") and RunExtraOverride(tabIdx) or nil
+        local key    = ICON_KEY .. "_" .. tabIdx
+        local npKey  = key .. NP_KEY_SUFFIX
+
+        if mode == "movable" or mode == "both" then
+            extraDisplayedSpell[tabIdx] = UpdateShmIcon(key, eSpell, extraDisplayedSpell[tabIdx])
+        else
+            UpdateShmIcon(key, nil, extraDisplayedSpell[tabIdx])
+            extraDisplayedSpell[tabIdx] = eSpell
+        end
+        if mode == "nameplate" or mode == "both" then
+            UpdateShmIcon(npKey, eSpell, nil)
+        end
+        shmIcons:SetVisible(ADDON_NAME, npKey, false)
+    end
+
+    -- ── Nameplate positioning ─────────────────────────────────────────────
+    -- Both "nameplate" and "both" modes use the NP-clone (_np) frame so that
+    -- the shmIcons-managed main frame is never repositioned externally.
+    -- Visibility of NP-clone frames is driven directly via frame:Show/Hide;
+    -- shmIcons visibility is suppressed above for all NP-clones.
+    -- SetSize (not SetScale) is used so WoW coordinate-system maths stay clean.
+    do
+        local np        = C_NamePlate.GetNamePlateForUnit("target")
+        local reaction  = UnitReaction("player", "target")
+        local npVisible = np and np:IsShown() and reaction and reaction <= 4
+        local nps       = GetNPSettings()
+
+        -- Collect NP-clone frames that have an active spell to display.
+        local npIcons = {}
+
+        if (mainMode == "nameplate" or mainMode == "both") and currentDisplayedSpellID then
+            local obj = registeredIconObjects[ICON_KEY .. NP_KEY_SUFFIX]
+            if obj and obj.frame then
+                npIcons[#npIcons + 1] = { frame = obj.frame, db = mainDB }
+            end
+        end
+
+        for tabIdx = 2, activeExtraTabCount + 1 do
+            local tabDB = GetExtraIconDB(tabIdx)
+            local mode  = tabDB.display_mode or "movable"
+            if (mode == "nameplate" or mode == "both") and extraDisplayedSpell[tabIdx] then
+                local obj = registeredIconObjects[ICON_KEY .. "_" .. tabIdx .. NP_KEY_SUFFIX]
+                if obj and obj.frame then
+                    npIcons[#npIcons + 1] = { frame = obj.frame, db = tabDB }
+                end
+            end
+        end
+
+        -- No valid nameplate: ensure all NP-clone frames are hidden.
+        if not npVisible then
+            for _, e in ipairs(npIcons) do
+                e.frame:Hide()
+            end
+            return
+        end
+
+        if #npIcons == 0 then return end
+
+        -- Lay out NP-clone icons in a centred row below the nameplate.
+        -- SetSize is used (not SetScale) to avoid conflicts with the frame's
+        -- own coordinate system and with shmIcons' internal scale management.
+        local GAP    = 4
+        local sc     = nps.np_scale or 1
+        local totalW = -GAP
+        for _, e in ipairs(npIcons) do
+            totalW = totalW + (e.db.size or 64) * sc + GAP
+        end
+
+        local curX = -totalW / 2
+        for _, e in ipairs(npIcons) do
+            local sz   = e.db.size or 64
+            local visW = math.floor(sz * sc + 0.5)
+            e.frame:SetSize(visW, visW)
+            e.frame:ClearAllPoints()
+            e.frame:SetPoint("CENTER", np, "BOTTOM",
+                curX + visW / 2 + (nps.np_x or 0),
+                -4 - (nps.np_y or 0))
+            e.frame:SetAlpha(nps.np_opacity or 1)
+            e.frame:Show()
+            curX = curX + visW + GAP
         end
     end
 end)
