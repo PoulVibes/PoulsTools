@@ -548,17 +548,16 @@ ticker:SetScript("OnUpdate", function()
         -- Lay out NP-clone icons in a centred row below the nameplate.
         -- SetSize is used (not SetScale) to avoid conflicts with the frame's
         -- own coordinate system and with shmIcons' internal scale management.
-        local GAP    = 4
-        local sc     = nps.np_scale or 1
-        local totalW = -GAP
-        for _, e in ipairs(npIcons) do
-            totalW = totalW + (e.db.size or 64) * sc + GAP
-        end
+        -- All NP icons use a uniform base size of 64px so icons with different
+        -- movable-mode sizes still render identically on the nameplate.
+        local BASE_NP_SIZE = 64
+        local GAP  = 4
+        local sc   = nps.np_scale or 1
+        local visW = math.floor(BASE_NP_SIZE * sc + 0.5)
+        local totalW = #npIcons * visW + (#npIcons - 1) * GAP
 
         local curX = -totalW / 2
         for _, e in ipairs(npIcons) do
-            local sz   = e.db.size or 64
-            local visW = math.floor(sz * sc + 0.5)
             e.frame:SetSize(visW, visW)
             e.frame:ClearAllPoints()
             e.frame:SetPoint("CENTER", np, "BOTTOM",
