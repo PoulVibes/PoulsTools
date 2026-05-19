@@ -14,7 +14,7 @@
 local FOLDER_NAME  = "CombatCoach_CooldownTracker"
 local ADDON_NAME   = "Cooldown Tracker"
 local DEFAULT_SIZE = 64
-local POLL_INTERVAL_SECONDS = 0.20
+local POLL_INTERVAL_SECONDS = 0.10
 
 -- spellKey → { spellName, spellID } for the currently active specialization.
 local tracked = {}
@@ -73,14 +73,39 @@ local function GetSpellDB(specID, key)
     if not spells[key] then
         local n = CountTracked()
         spells[key] = {
-            x            = (n % 5) * (DEFAULT_SIZE + 4) - (2 * (DEFAULT_SIZE + 4)),
-            y            = -math.floor(n / 5) * (DEFAULT_SIZE + 4),
-            point        = "CENTER",
-            size         = DEFAULT_SIZE,
+            x     = (n % 5) * (DEFAULT_SIZE + 4) - (2 * (DEFAULT_SIZE + 4)),
+            y     = -math.floor(n / 5) * (DEFAULT_SIZE + 4),
+            point = "CENTER",
+            size  = DEFAULT_SIZE,
             enabled      = true,
             glow_enabled = false,
-            -- Sound to play when this spell first becomes available (nil for none).
-            ready_sound  = nil,
+            sound_enabled = false,
+            -- Glow trigger conditions (AND gate; none checked = always glow when available)
+            glow_cond_reactive = false,
+            glow_cond_usable   = false,
+            glow_cond_charges  = false,
+            glow_cond_offcd    = false,
+            -- Audio alert conditions (AND gate; none checked = no sound)
+            sound_cond_reactive = false,
+            sound_cond_usable   = false,
+            sound_cond_charges  = false,
+            sound_cond_offcd    = false,
+            ready_sound         = nil,
+            -- Show/Hide conditions (master switch; none checked = always show)
+            show_enabled = false,
+            show_cond_reactive = false,
+            show_cond_usable   = false,
+            show_cond_charges  = false,
+            show_cond_offcd    = false,
+            show_cond_reactive_not = false,
+            show_cond_usable_not   = false,
+            show_cond_charges_not  = false,
+            show_cond_offcd_not    = false,
+            show_join_usable  = "and",  -- junction before Usable row
+            show_join_charges = "and",  -- junction before Charges row
+            show_join_offcd   = "and",  -- junction before OffCd row
+            -- Hotkey display
+            show_hotkey = false,
         }
     end
     return spells[key]
@@ -107,17 +132,19 @@ end
 local function UpdateTracker(key, updateStacks)
     local entry = tracked[key]
     if not entry then return end
-    if entry.dormant or not entry.spellID then return end  -- talent-gated; waiting for remap
-    local spellInfo = C_Spell.GetSpellInfo(entry.spellID)
+    if entry.dormant or not entry.spellID then return end
+    local spellInfo  = C_Spell.GetSpellInfo(entry.spellID)
     shmIcons:SetIcon(ADDON_NAME, key, spellInfo and spellInfo.iconID or 134400)
-    local cdInfo            = C_Spell.GetSpellCooldown(entry.spellID)
-    local durationObject    = C_Spell.GetSpellCooldownDuration(entry.spellID)
-    local chargeInfo        = C_Spell.GetSpellCharges(entry.spellID)
-    local isChargeSpell     = chargeInfo and chargeInfo.maxCharges and chargeInfo.maxCharges > 1
-    local chargeDuration    = C_Spell.GetSpellChargeDuration(entry.spellID)
+
+    local cdInfo         = C_Spell.GetSpellCooldown(entry.spellID)
+    local durationObject = C_Spell.GetSpellCooldownDuration(entry.spellID)
+    local chargeInfo     = C_Spell.GetSpellCharges(entry.spellID)
+    local isChargeSpell  = chargeInfo and chargeInfo.maxCharges and chargeInfo.maxCharges > 1
+    local chargeDuration = C_Spell.GetSpellChargeDuration(entry.spellID)
+    local db             = GetSpecSpells(currentSpecID)[key]
+
+    -- ---- Cooldown sweep display ----
     if isChargeSpell then
-        local curCharges = (chargeInfo and chargeInfo.currentCharges)
-        -- Show recharge timer for the next charge when available
         if durationObject and cdInfo and cdInfo.isActive then
             shmIcons:SetCooldown(ADDON_NAME, key, durationObject)
         elseif chargeDuration and chargeInfo and chargeInfo.isActive then
@@ -125,69 +152,155 @@ local function UpdateTracker(key, updateStacks)
         else
             shmIcons:SetCooldown(ADDON_NAME, key, nil)
         end
-
-        -- Glow should reflect availability. Guard against secret values.
-        local glowWanted
-        if issecretvalue(curCharges) then
-            -- Fallback: if no active cooldown, assume available
-            glowWanted = not (cdInfo and cdInfo.isActive)
+        if cdInfo and (not cdInfo.isActive or cdInfo.isOnGCD) then
+            shmIcons:SetStacks(ADDON_NAME, key, chargeInfo.currentCharges)
         else
-            glowWanted = (curCharges or 0) > 0
-        end
-        shmIcons:SetGlow(ADDON_NAME, key, glowWanted)
-
-        --if updateStacks then
-            if cdInfo and (not cdInfo.isActive or cdInfo.isOnGCD) then
-                shmIcons:SetStacks(ADDON_NAME, key, chargeInfo.currentCharges)
-            else
-                shmIcons:SetStacks(ADDON_NAME, key, 0)
-            end
-        --end
-    else
-        --shmIcons:SetChargeCooldown(ADDON_NAME, key, nil)
-        if durationObject and cdInfo and cdInfo.isActive then
-            shmIcons:SetCooldown(ADDON_NAME, key, durationObject)
-            shmIcons:SetGlow(ADDON_NAME, key, false)
-        else
-            shmIcons:SetCooldown(ADDON_NAME, key, nil)
-            shmIcons:SetGlow(ADDON_NAME, key, true)
-        end
-        if updateStacks then
             shmIcons:SetStacks(ADDON_NAME, key, 0)
         end
+    else
+        if durationObject and cdInfo and cdInfo.isActive then
+            shmIcons:SetCooldown(ADDON_NAME, key, durationObject)
+        else
+            shmIcons:SetCooldown(ADDON_NAME, key, nil)
+        end
+        if updateStacks then shmIcons:SetStacks(ADDON_NAME, key, 0) end
     end
+
+    -- ---- Evaluate the 4 conditions ----
+    -- Condition 1: reactive (isEnabled is not a secret value)
+    local condReactive = cdInfo and cdInfo.isEnabled == true
+    -- Condition 2: usable (secret bool — only used inside if/then)
+    local condUsable = C_Spell.IsSpellUsable(entry.spellID)
+    -- Condition 3: has 1+ charges ready
+    local condCharges = false
+    if chargeInfo and not chargeInfo.isActive then
+        condCharges = true
+    elseif cdInfo and (not cdInfo.isActive or cdInfo.isOnGCD) then
+        condCharges = true
+    end
+    -- Condition 4: fully off cooldown / max charges
+    local condOffCd = false
+    if chargeInfo then
+        if not chargeInfo.isActive then condOffCd = true end
+    elseif cdInfo and not cdInfo.isActive then
+        condOffCd = true
+    end
+
+    -- CondGate: returns true/false when any condition box is checked (AND logic),
+    -- or nil when no boxes are checked (caller uses default behaviour).
+    local function CondGate(prefix)
+        local anyChecked = db[prefix.."reactive"] or db[prefix.."usable"]
+                        or db[prefix.."charges"]  or db[prefix.."offcd"]
+        if not anyChecked then return nil end
+        if db[prefix.."reactive"] and not condReactive then return false end
+        if db[prefix.."charges"]  and not condCharges  then return false end
+        if db[prefix.."offcd"]    and not condOffCd    then return false end
+        if db[prefix.."usable"] then
+            if condUsable then
+                -- usable condition met, continue
+            else
+                return false
+            end
+        end
+        return true
+    end
+
+    -- ---- Glow ----
+    local glowResult = db and CondGate("glow_cond_")
+    if glowResult == nil then
+        glowResult = isChargeSpell and condCharges or condOffCd
+    end
+    shmIcons:SetGlow(ADDON_NAME, key, glowResult)
+
+    -- ---- Range + usable tint ----
     if UnitExists("target") then
         shmIcons:SetRange(ADDON_NAME, key, C_Spell.IsSpellInRange(entry.spellID, "target"))
     else
         shmIcons:SetRange(ADDON_NAME, key, nil)
     end
     shmIcons:SetUsable(ADDON_NAME, key, C_Spell.IsSpellUsable(entry.spellID))
-    -- For charge spells, watch the charge `isActive` flag and play when it
-    -- transitions from true -> false (i.e. fully charged / max stacks).
-    -- For non-charge spells, play when cooldown becomes inactive (available).
+
+    -- ---- Visibility (Conditional Hide with AND/OR junctions) ----
+    if db and db.show_enabled then
+        local anyChecked = db.show_cond_reactive or db.show_cond_usable
+                        or db.show_cond_charges  or db.show_cond_offcd
+        if anyChecked then
+            local result = nil  -- nil = no active conditions evaluated yet
+            if db.show_cond_reactive then
+                local v = condReactive
+                if db.show_cond_reactive_not then v = not condReactive end
+                result = v
+            end
+            if db.show_cond_usable then
+                local uVal = false
+                if condUsable then uVal = true end
+                if db.show_cond_usable_not then uVal = not uVal end
+                if result == nil then
+                    result = uVal
+                elseif (db.show_join_usable or "and") == "or" then
+                    result = result or uVal
+                else
+                    result = result and uVal
+                end
+            end
+            if db.show_cond_charges then
+                local v = condCharges
+                if db.show_cond_charges_not then v = not condCharges end
+                if result == nil then
+                    result = v
+                elseif (db.show_join_charges or "and") == "or" then
+                    result = result or v
+                else
+                    result = result and v
+                end
+            end
+            if db.show_cond_offcd then
+                local v = condOffCd
+                if db.show_cond_offcd_not then v = not condOffCd end
+                if result == nil then
+                    result = v
+                elseif (db.show_join_offcd or "and") == "or" then
+                    result = result or v
+                else
+                    result = result and v
+                end
+            end
+            if result ~= nil then
+                shmIcons:SetVisible(ADDON_NAME, key, not result)
+            end
+        end
+    end
+
+    -- ---- Sound (fire on transition only) ----
+    local soundGate = false
+    if db and db.sound_enabled then
+        local gate = CondGate("sound_cond_")
+        soundGate = (gate ~= nil) and gate or false
+    end
     if isChargeSpell then
-        local chargeActive = nil
-        if chargeInfo and chargeInfo.isActive ~= nil then chargeActive = chargeInfo.isActive end
+        local chargeActive = chargeInfo and chargeInfo.isActive
         if tracked[key].lastChargeActive == nil then
             tracked[key].lastChargeActive = chargeActive
         else
-            if tracked[key].lastChargeActive and (chargeActive == false) then
-                local db = GetSpecSpells(currentSpecID)[key]
+            if tracked[key].lastChargeActive and (chargeActive == false) and soundGate then
                 if db and db.ready_sound then PlayReadySound(db) end
             end
             tracked[key].lastChargeActive = chargeActive
         end
     else
-        local available = not (cdInfo and cdInfo.isActive)
         if tracked[key].lastAvailable == nil then
-            tracked[key].lastAvailable = available
+            tracked[key].lastAvailable = condOffCd
         else
-            if not tracked[key].lastAvailable and available then
-                local db = GetSpecSpells(currentSpecID)[key]
+            if not tracked[key].lastAvailable and condOffCd and soundGate then
                 if db and db.ready_sound then PlayReadySound(db) end
             end
-            tracked[key].lastAvailable = available
+            tracked[key].lastAvailable = condOffCd
         end
+    end
+
+    -- ---- Hotkey ----
+    if db then
+        shmIcons:SetDisplayHotkey(ADDON_NAME, key, db.show_hotkey == true)
     end
 end
 
@@ -224,6 +337,7 @@ local function AddTracker(spellName, specID)
             GetSpecSpells(specID)[key].size = sq
         end,
     })
+    shmIcons:SetDisplayHotkey(ADDON_NAME, key, db.show_hotkey == true)
 
     if spellID then
         tracked[key] = { spellName = spellName, spellID = spellID }
@@ -457,8 +571,10 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
             if not entry.dormant and entry.spellID then
                 local cd = C_Spell.GetSpellCooldown(entry.spellID)
                 tracked[key].isOnGCD = cd and cd.isOnGCD or false
+                UpdateTracker(key)
             end
         end
+    elseif event == "SPELL_UPDATE_USABLE" then
         UpdateAllTrackers()
     elseif event == "PLAYER_TARGET_CHANGED" then
         UpdateAllTrackers()
@@ -474,6 +590,8 @@ eventFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
 eventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
 eventFrame:RegisterEvent("SPELL_UPDATE_CHARGES")
+eventFrame:RegisterEvent("SPELL_UPDATE_USABLE")
+
 
 -- Public API wrappers for CombatCoach UI and other integrations
 function CooldownTracker_Add(spellName, specID)

@@ -196,7 +196,7 @@ local function OnBuildUI(parent)
     anchor = div3
     y = dy3
 
-    btn = W:Button(parent, anchor, y, "Reset Selected (use input box)", function()
+    btn = W:Button(parent, anchor, y, "Reset Position", function()
         local val = input
         if edit and edit.box then
             val = edit.box:GetText()

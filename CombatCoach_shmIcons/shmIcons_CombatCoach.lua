@@ -220,17 +220,30 @@ local function OnBuildUI(parent)
             nameLbl:SetText(displayName)
             nameLbl:SetTextColor(unpack(W.colors.text))
 
-            -- Right-side action: Glow button (toggles glow for this icon)
-            local glowBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-            glowBtn:SetSize(80, 20)
-            glowBtn:SetPoint("RIGHT", row, "RIGHT", -120, 0)
-            glowBtn:SetText("Glow")
-            glowBtn:SetScript("OnClick", function()
-                if shmIcons and shmIcons.ToggleGlowEnabled then
-                    local enabled = shmIcons:ToggleGlowEnabled(capturedAddon, capturedID)
-                    if capturedDB then capturedDB.glow_enabled = enabled end
-                end
-            end)
+            -- Right-side action: Options button for Cooldown Tracker (glow managed
+            -- in its own Look & Feel popup); Glow button for all other addons.
+            if capturedAddon == "Cooldown Tracker" then
+                local optBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                optBtn:SetSize(70, 20)
+                optBtn:SetPoint("RIGHT", row, "RIGHT", -120, 0)
+                optBtn:SetText("Options")
+                optBtn:SetScript("OnClick", function()
+                    if type(CooldownTracker_OpenLookAndFeel) == "function" then
+                        CooldownTracker_OpenLookAndFeel(capturedID)
+                    end
+                end)
+            else
+                local glowBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                glowBtn:SetSize(80, 20)
+                glowBtn:SetPoint("RIGHT", row, "RIGHT", -120, 0)
+                glowBtn:SetText("Glow")
+                glowBtn:SetScript("OnClick", function()
+                    if shmIcons and shmIcons.ToggleGlowEnabled then
+                        local enabled = shmIcons:ToggleGlowEnabled(capturedAddon, capturedID)
+                        if capturedDB then capturedDB.glow_enabled = enabled end
+                    end
+                end)
+            end
 
             row:Show()
             table.insert(activeRows, row)

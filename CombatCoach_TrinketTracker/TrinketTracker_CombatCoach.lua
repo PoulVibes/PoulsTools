@@ -209,7 +209,7 @@ local function OnBuildUI(parent)
     anchor = div3
     y = dy3
 
-    btn = W:Button(parent, anchor, y, "Reset Selected (use dropdown)", function()
+    btn = W:Button(parent, anchor, y, "Reset Position", function()
         local slotID = selectedSlot
         if not slotID then
             print("|cFFFF0000TrinketTracker: select a slot.|r")

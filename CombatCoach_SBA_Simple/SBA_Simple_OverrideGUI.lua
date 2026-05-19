@@ -3887,6 +3887,8 @@ local function GetClassSpells()
     table.sort(spells, function(a, b) return a.name < b.name end)
     return spells
 end
+-- Expose for other modules (e.g. CooldownTracker spell picker)
+SBAS_GetClassSpells = GetClassSpells
 
 EnsureDragIcon = function()
     if dragIconFrame then return end
