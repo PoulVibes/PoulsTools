@@ -160,6 +160,7 @@ local function RegisterIcon()
         onMove   = function()   end,
     })
     shmIcons:RestoreSnapGroups()
+    shmIcons:SetDisplayHotkey(ADDON_NAME, ICON_KEY, true)
     -- Ensure the icon visibility follows the DB setting
     if shmIcons and shmIcons.SetVisible then
         shmIcons:SetVisible(ADDON_NAME, ICON_KEY, (db.enabled ~= false))
@@ -180,6 +181,7 @@ local function RegisterExtraIcon(tabIdx)
         onResize = function(sq) db.size = sq end,
         onMove   = function()   end,
     })
+    shmIcons:SetDisplayHotkey(ADDON_NAME, key, true)
     shmIcons:SetVisible(ADDON_NAME, key, db.enabled ~= false)
 end
 

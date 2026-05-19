@@ -66,6 +66,9 @@ local lockCallbacks       = {}  -- functions called when lock state changes: fn(
 local isInEditMode        = false  -- true while WoW Edit Mode is active
 local editModeGroupFrames = {}  -- group overlay frames built on Edit Mode enter
 
+local hotkeyCache    = {}     -- [textureID] = shortened key string (populated by BuildHotkeyMap)
+local hotkeyMapBuilt = false  -- true once the first full action-bar scan has completed
+
 function shmIcons:RegisterLockCallback(fn)
     if type(fn) ~= "function" then return end
     table.insert(lockCallbacks, fn)
@@ -210,6 +213,113 @@ local function SaveSnapGroups() end
 local function LinkSnap(a, b) end
 local function UnlinkSnap(id) end
 local function GetSnapGroup(startID) return { startID } end
+
+-- ============================================================
+-- Hotkey helpers
+-- ============================================================
+
+-- Returns the WoW binding action name for a given action bar slot number.
+-- Covers the five standard action bars (slots 1-60).
+local function GetBindingActionForActionSlot(slot)
+    if slot >= 1  and slot <= 12 then return "ACTIONBUTTON"          .. slot        end
+    if slot >= 13 and slot <= 24 then return "MULTIACTIONBAR5BUTTON" .. (slot - 12) end
+    if slot >= 25 and slot <= 36 then return "MULTIACTIONBAR4BUTTON" .. (slot - 24) end
+    if slot >= 37 and slot <= 48 then return "MULTIACTIONBAR3BUTTON" .. (slot - 36) end
+    if slot >= 49 and slot <= 60 then return "MULTIACTIONBAR2BUTTON" .. (slot - 48) end
+    if slot >= 61 and slot <= 72 then return "MULTIACTIONBAR1BUTTON" .. (slot - 60) end
+    if slot >= 73 and slot <= 84 then return "MULTIACTIONBAR6BUTTON" .. (slot - 72) end
+    if slot >= 85 and slot <= 96 then return "MULTIACTIONBAR7BUTTON" .. (slot - 84) end
+    return nil
+end
+
+-- Shorten a WoW binding key string for compact display on icons.
+-- Modifier abbreviations: CTRL→C, ALT→A, SHIFT→S  (combined in that order).
+-- Examples: "SHIFT-1" → "(S)1",  "CTRL-ALT-F" → "(CA)F",  "F1" → "F1".
+local function ShortenHotkey(key)
+    if not key then return nil end
+    local hasCtrl  = key:find("CTRL%-")  ~= nil
+    local hasAlt   = key:find("ALT%-")   ~= nil
+    local hasShift = key:find("SHIFT%-") ~= nil
+    local base = key:gsub("CTRL%-", ""):gsub("ALT%-", ""):gsub("SHIFT%-", ""):gsub("BUTTON", "B")
+    local mods = (hasCtrl and "C+" or "") .. (hasAlt and "A+" or "") .. (hasShift and "S+" or "")
+    return mods ~= "" and (mods .. base) or base
+end
+
+-- Look up the hotkey for a texture ID from the pre-built map.
+-- Falls back to a live scan before the map is ready (pre-login edge case).
+local function LookupHotkeyForTexture(textureID)
+    if not textureID then return nil end
+    if hotkeyMapBuilt then
+        return hotkeyCache[textureID] or nil
+    end
+    -- Pre-login fallback: scan slots for a matching texture.
+    local cached = hotkeyCache[textureID]
+    if cached ~= nil then return cached or nil end
+    for slot = 1, 60 do
+        if C_ActionBar.HasAction(slot) then
+            local tex = (C_ActionBar.GetActionTexture and C_ActionBar.GetActionTexture(slot))
+                     or (GetActionTexture and GetActionTexture(slot))
+            if tex == textureID then
+                local bindingAction = GetBindingActionForActionSlot(slot)
+                if bindingAction then
+                    local key = GetBindingKey(bindingAction)
+                    if key then
+                        local short = ShortenHotkey(key)
+                        hotkeyCache[textureID] = short
+                        return short
+                    end
+                end
+            end
+        end
+    end
+    hotkeyCache[textureID] = false
+    return nil
+end
+
+-- Scan all 60 action bar slots and build the complete textureID→hotkey map.
+-- Works for spells, macros, and items alike — anything with a texture on the bar.
+-- Called on login and whenever bars or bindings change.
+local function BuildHotkeyMap()
+    hotkeyCache    = {}
+    hotkeyMapBuilt = false
+    for slot = 1, 96 do
+        if C_ActionBar.HasAction(slot) then
+            local tex = (C_ActionBar.GetActionTexture and C_ActionBar.GetActionTexture(slot))
+                     or (GetActionTexture and GetActionTexture(slot))
+            if tex and not hotkeyCache[tex] then
+                local bindingAction = GetBindingActionForActionSlot(slot)
+                if bindingAction then
+                    local key = GetBindingKey(bindingAction)
+                    if key then
+                        hotkeyCache[tex] = ShortenHotkey(key)
+                    end
+                end
+            end
+        end
+    end
+    hotkeyMapBuilt = true
+    -- Refresh all currently-displayed hotkey labels.
+    for _, icon in pairs(icons) do
+        if icon.displayHotkey and icon.hotkeyLabel and icon.currentTextureID then
+            local key = hotkeyCache[icon.currentTextureID]
+            if key then
+                icon.hotkeyLabel:SetText(key)
+                icon.hotkeyLabel:Show()
+            else
+                icon.hotkeyLabel:SetText("")
+                icon.hotkeyLabel:Hide()
+            end
+        end
+    end
+end
+
+-- Event frame: rebuild the hotkey map on login and whenever bars or bindings change.
+local hotkeyEventFrame = CreateFrame("Frame")
+hotkeyEventFrame:RegisterEvent("PLAYER_LOGIN")
+hotkeyEventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+hotkeyEventFrame:RegisterEvent("UPDATE_BINDINGS")
+hotkeyEventFrame:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
+hotkeyEventFrame:SetScript("OnEvent", function() BuildHotkeyMap() end)
 
 -- ============================================================
 -- Internal UI helpers
@@ -919,6 +1029,14 @@ local function BuildIconFrame(globalID, db)
     stackLabel:SetJustifyH("RIGHT")
     stackLabel:Hide()
 
+    -- Hotkey label: top-left corner, shown when displayHotkey is enabled
+    local hotkeyLabel = labelFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    hotkeyLabel:SetFont(FONT_PATH, math.max(FONT_MIN_PT, math.floor(db.size * FONT_RATIO * 0.4)), FONT_FLAGS)
+    hotkeyLabel:SetTextColor(1, 1, 1, 1)
+    hotkeyLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -2)
+    hotkeyLabel:SetJustifyH("LEFT")
+    hotkeyLabel:Hide()
+
     local glow = BuildGlow(frame, db.size)
 
     -- Usability overlay: a solid black-ish texture that sits above the icon
@@ -947,7 +1065,10 @@ local function BuildIconFrame(globalID, db)
         cd             = cd,
         cd2            = cd2,
         stackLabel     = stackLabel,
-        glow           = glow,
+        hotkeyLabel      = hotkeyLabel,
+        displayHotkey    = false,
+        currentTextureID = nil,
+        glow             = glow,
         usableOverlay  = usableOverlay,
         resizeHandle   = resizeHandle,
         glowEnabled    = db.glow_enabled,
@@ -965,6 +1086,9 @@ local function BuildIconFrame(globalID, db)
         ScaleText(cd, stackLabel, sq)
         ResizeGlow(icon.glow, frame, sq)
         resizeHandle:SetSize(math.max(10, math.floor(sq * 0.25)), math.max(10, math.floor(sq * 0.25)))
+        if icon.hotkeyLabel then
+            icon.hotkeyLabel:SetFont(FONT_PATH, math.max(FONT_MIN_PT, math.floor(sq * FONT_RATIO * 0.4)), FONT_FLAGS)
+        end
         db.size = sq
         if icon.onResize then icon.onResize(sq) end
     end)
@@ -1493,7 +1617,24 @@ end
 
 function shmIcons:SetIcon(addonName, id, textureID)
     local icon = icons[addonName .. ":" .. tostring(id)]
-    if icon then icon.iconTex:SetTexture(textureID or 134400) end
+    if not icon then return end
+    icon.iconTex:SetTexture(textureID or 134400)
+    if icon.displayHotkey and icon.hotkeyLabel then
+        icon.currentTextureID = textureID
+        if textureID then
+            local key = LookupHotkeyForTexture(textureID)
+            if key then
+                icon.hotkeyLabel:SetText(key)
+                icon.hotkeyLabel:Show()
+            else
+                icon.hotkeyLabel:SetText("")
+                icon.hotkeyLabel:Hide()
+            end
+        else
+            icon.hotkeyLabel:SetText("")
+            icon.hotkeyLabel:Hide()
+        end
+    end
 end
 
 function shmIcons:SetCooldown(addonName, id, durationObject)
@@ -1575,6 +1716,20 @@ function shmIcons:SetDisplayName(addonName, id, displayName)
     local icon = icons[addonName .. ":" .. tostring(id)]
     if not icon then return end
     icon.db.spellName = displayName
+end
+
+-- Enable or disable hotkey display for a specific icon.
+-- When enabled, SetIcon calls will look up and display the first action-bar
+-- keybinding found for that icon's texture in its top-left corner.
+-- Disabled by default; each addon opts individual icons in.
+function shmIcons:SetDisplayHotkey(addonName, id, enabled)
+    local icon = icons[addonName .. ":" .. tostring(id)]
+    if not icon then return end
+    icon.displayHotkey = (enabled == true)
+    if not icon.displayHotkey and icon.hotkeyLabel then
+        icon.hotkeyLabel:SetText("")
+        icon.hotkeyLabel:Hide()
+    end
 end
 
 function shmIcons:SetStacks(addonName, id, count)
