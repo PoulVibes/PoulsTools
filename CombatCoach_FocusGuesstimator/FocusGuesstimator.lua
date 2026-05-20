@@ -397,7 +397,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
             if cost and cost > 0 then
                 currentFocus = math.max(0, currentFocus - cost)
             end
-            print ("FG detected SV cast: " .. spellID .. " gaining focus: " .. gain)
+            --print ("FG detected SV cast: " .. spellID .. " gaining focus: " .. gain)
             return  -- skip BM focus-cost logic below
         end
 

@@ -103,10 +103,16 @@ local function RefreshSlotIcon(slotID)
     if not trackedSlots[slotID] then return end
     local itemID  = GetInventoryItemID("player", slotID)
     local texture = itemID and select(10, GetItemInfo(itemID))
-    local newIcon = texture or 134400
-    if slotIconCache[slotID] ~= newIcon then
-        slotIconCache[slotID] = newIcon
-        shmIcons:SetIcon(ADDON_NAME, slotID, newIcon)
+    if not texture then
+        -- Item info not yet in client cache; clear the cache entry so the
+        -- next GET_ITEM_INFO_RECEIVED will always push the real texture through.
+        slotIconCache[slotID] = nil
+        shmIcons:SetIcon(ADDON_NAME, slotID, 134400)
+        return
+    end
+    if slotIconCache[slotID] ~= texture then
+        slotIconCache[slotID] = texture
+        shmIcons:SetIcon(ADDON_NAME, slotID, texture)
     end
 end
 
