@@ -2,9 +2,10 @@ local frame = CreateFrame("Frame", "FocusGuesstimatorLogicFrame")
 
 -- ── 1. Configuration & Constants ──────────────────────────────────────────────
 
--- BM Hunter: class token and spec ID 253
+-- Hunter class token; Beast Mastery (spec 253) and Survival (spec 255) are both supported.
 local REQUIRED_CLASS   = "HUNTER"
-local REQUIRED_SPEC_ID = 253
+local REQUIRED_SPEC_ID = 253   -- Beast Mastery
+local SV_SPEC_ID       = 255   -- Survival
 
 -- Focus is Power Type 2 (Enum.PowerType.Focus).
 local FOCUS_POWER_TYPE = 2
@@ -23,7 +24,6 @@ local BARBED_SHOT_DURATION    = 8      -- seconds per stack
 local BARBED_SHOT_REGEN_RATE  = BARBED_SHOT_REGEN_TOTAL / BARBED_SHOT_DURATION  -- 2.5/sec
 
 -- Cobra Senses talent: reduces Cobra Shot focus cost by 5 (35 → 30).
--- TODO: replace 0 with the verified passive spell ID granted by the talent node.
 --       In-game: /script print(C_Spell.GetSpellName(XXXXXX)) until you find it.
 local COBRA_SENSES_SPELL_ID = 378244
 local COBRA_SHOT_ID         = 193455
@@ -38,7 +38,7 @@ local ABILITY_COSTS = {
     -- ── Core rotation ──────────────────────────────────────────────────────
     [34026]          = 30,  -- Kill Command
     [COBRA_SHOT_ID]  = COBRA_SHOT_BASE_COST, -- Cobra Shot (modified by Cobra Senses)
-    [BARBED_SHOT_ID] = 0,  -- Barbed Shot (also triggers focus regen buff; see above)
+    [BARBED_SHOT_ID] = 217200,  -- Barbed Shot (also triggers focus regen buff; see above)
     [1264359]        = 35, -- Wild Thrash
     -- ── Proc / free abilities (no focus cost; listed for completeness) ─────
     [466930] = 0,    -- Black Arrow proc   – verify if a hidden cost exists
@@ -47,6 +47,51 @@ local ABILITY_COSTS = {
     -- ── Possible future entry: Dire Beast hits may restore 10 focus each ──
     -- [120679] = -10,  -- Dire Beast (negative = focus gained; uncomment if confirmed)
 }
+
+-- ── Survival Hunter: focus generators ───────────────────────────────────────
+-- Kill Command (SV): generates focus on cast instead of spending it.
+-- Spell ID 34026 is shared with BM; the per-spec handler chooses the path.
+local SV_KILL_COMMAND_GAIN = 15
+
+-- Flanker's Advantage (SV talent): Kill Command generates +5 additional focus.
+local FLANKERS_ADVANTAGE_SPELL_ID = 459964 
+
+-- Invigorating Pulse (SV talent): Kill Command generates +5 additional focus
+-- and raises max focus to 125 (captured automatically via UnitPowerMax).
+local INVIGORATING_PULSE_SPELL_ID = 450379
+
+-- Takedown (SV): generates 50 focus on cast.
+local SV_TAKEDOWN_ID   = 1250646 
+local SV_TAKEDOWN_GAIN = 50
+
+-- Muzzle (SV): generates 30 focus on cast.
+local SV_MUZZLE_ID   = 187707
+local SV_MUZZLE_GAIN = 30
+
+-- ── Survival Hunter: focus spenders ─────────────────────────────────────────
+-- Positive value = focus spent on cast.
+-- Spell IDs marked (unverified) were sourced from best available knowledge;
+-- load the addon and check the |cff00ff00[FocusGuesstimator]|r chat output to confirm.
+local SV_ABILITY_COSTS = {
+    [259495] = 10,  -- Wildfire Bomb
+    [1261193] = 50,  -- Boomstick        (unverified)
+    [193265] = 30,  -- Hatchet Toss     (unverified)
+    [186270] = 30,  -- Raptor Strike
+    [1262343] = 30,  -- Raptor Swipe
+    [195645] = 20,  -- Wing Clip
+    [1251592] = 20,  -- Flamefang Pitch  (unverified)
+}
+
+-- Shrapnel Bomb (SV talent): Wildfire Bomb generates 15 focus over 3 seconds.
+local SHRAPNEL_BOMB_SPELL_ID    = 1253172
+local SHRAPNEL_BOMB_DURATION    = 3
+local SHRAPNEL_BOMB_REGEN_TOTAL = 15
+local SHRAPNEL_BOMB_REGEN_RATE  = SHRAPNEL_BOMB_REGEN_TOTAL / SHRAPNEL_BOMB_DURATION  -- 5/sec
+
+-- Survival melee weapon speed for Lethal Barbs auto-attack focus gain.
+-- SV dual-wields two 1.8 attacks-per-second weapons; Lethal Barbs grants +1 focus
+-- per auto attack from each weapon, so each timer cycle generates +2 focus total.
+local SV_MELEE_WEAPON_BASE_INTERVAL = 1 / 1.8   -- seconds per auto attack per weapon
 
 -- Haste multiplier shared with CombatCoach_GuesstimatorHaste.
 -- Falls back to 21 % until that addon updates the global.
@@ -66,6 +111,11 @@ local baseRangedWeaponSpeed     = 0          -- base (un-hasted) weapon speed in
 local autoShotTimer             = 0          -- accumulates elapsed time toward next auto-shot
 local playerInCombat            = false      -- true between PLAYER_REGEN_DISABLED/ENABLED
 local bardedShotRegenExpiry     = {}         -- expiry timestamps for each active Barbed Shot stack
+local currentSpec               = 0          -- active spec ID (253 = BM, 255 = SV); 0 = neither
+local flankersAdvantageActive   = false      -- SV: Kill Command +5 focus (set by RefreshTalents)
+local invPulseActive            = false      -- SV: Kill Command +5 focus + 125 max (set by RefreshTalents)
+local shrapnelBombActive        = false      -- SV: Wildfire Bomb triggers 15 focus regen over 3s
+local shrapnelBombExpiry        = {}         -- expiry timestamps for active Shrapnel Bomb regen windows
 local ui                                     -- forward declaration; assigned after CreateFrame
 
 -- ── 3. Class / Spec Helpers ───────────────────────────────────────────────────
@@ -83,7 +133,7 @@ end
 
 -- ── 4. Talent Scan ────────────────────────────────────────────────────────────
 -- Run on login and whenever the talent loadout changes.
--- Add IsSpellKnown() checks here as focus-affecting talents are confirmed.
+-- Add IsPlayerSpell() checks here as focus-affecting talents are confirmed.
 --
 -- Focus-affecting BM Hunter talent notes (Interface 120005):
 --   • UnitPowerMax("player", 2) is read to pick up any max-focus bonuses from
@@ -106,10 +156,7 @@ local function RefreshTalents()
     end
 
     -- ── Cobra Senses: reduces Cobra Shot cost by 5 ────────────────────────
-    cobraSensesActive = (COBRA_SENSES_SPELL_ID > 0) and IsSpellKnown(COBRA_SENSES_SPELL_ID) or false
-
-    -- ── Lethal Barbs: Auto Shot generates 1 focus per shot ────────────────
-    lethalBarbsActive = IsSpellKnown(LETHAL_BARBS_SPELL_ID)
+    cobraSensesActive = IsPlayerSpell(COBRA_SENSES_SPELL_ID)
 
     -- ── Cobra Shot crit refund: expected +10 focus per crit ──────────────
     -- GetRangedCritChance() is a secret value in combat.  Save the raw value
@@ -130,7 +177,26 @@ local function RefreshTalents()
     --   • Aspect of the Wild (if it still grants focus regen in current tree)
     --
     -- Example pattern:
-    --   if IsSpellKnown(XXXXXX) then regenMultiplier = regenMultiplier * 1.10 end
+    --   if IsPlayerSpell(XXXXXX) then regenMultiplier = regenMultiplier * 1.10 end
+
+    -- ── Survival Hunter talents ────────────────────────────────────────────
+    if currentSpec == SV_SPEC_ID then
+        -- Flanker's Advantage: Kill Command generates +5 additional focus.
+        flankersAdvantageActive = IsPlayerSpell(FLANKERS_ADVANTAGE_SPELL_ID)
+
+        -- Invigorating Pulse: Kill Command generates +5 additional focus.
+        -- Max focus raised to 125 is already handled above via UnitPowerMax.
+        invPulseActive = IsPlayerSpell(INVIGORATING_PULSE_SPELL_ID)
+
+        -- Shrapnel Bomb: Wildfire Bomb generates 15 focus over 3 seconds.
+        shrapnelBombActive = IsPlayerSpell(SHRAPNEL_BOMB_SPELL_ID)
+    else
+        flankersAdvantageActive = false
+        invPulseActive          = false
+        shrapnelBombActive      = false
+    end
+    -- Lethal Barbs applies to both BM and SV (same talent node).
+    lethalBarbsActive = IsPlayerSpell(LETHAL_BARBS_SPELL_ID)
 
     if currentFocus > maxFocus then currentFocus = maxFocus end
 end
@@ -166,10 +232,15 @@ end
 
 local function DisableAddon()
     if not addonEnabled then return end
-    addonEnabled   = false
-    autoShotTimer  = 0
-    playerInCombat = false
+    addonEnabled            = false
+    autoShotTimer           = 0
+    playerInCombat          = false
+    currentSpec             = 0
+    flankersAdvantageActive = false
+    invPulseActive          = false
+    shrapnelBombActive      = false
     wipe(bardedShotRegenExpiry)
+    wipe(shrapnelBombExpiry)
     frame:UnregisterEvent("UNIT_SPELLCAST_SUCCEEDED")
     frame:UnregisterEvent("PLAYER_REGEN_ENABLED")
     frame:UnregisterEvent("PLAYER_REGEN_DISABLED")
@@ -187,10 +258,17 @@ local function UpdateEnabledState()
         return
     end
     if IsPlayerSpec(REQUIRED_SPEC_ID) then
+        currentSpec = REQUIRED_SPEC_ID
         RefreshTalents()      -- always re-scan on spec/talent changes
         RefreshWeaponSpeed()  -- cache weapon speed for auto-shot interval
         EnableAddon()
+    elseif IsPlayerSpec(SV_SPEC_ID) then
+        currentSpec = SV_SPEC_ID
+        RefreshTalents()      -- scan SV talents (Flanker's Advantage, Invigorating Pulse, Lethal Barbs)
+        RefreshWeaponSpeed()  -- cache weapon speed for Lethal Barbs auto-shot tracking
+        EnableAddon()
     else
+        currentSpec = 0
         DisableAddon()
     end
 end
@@ -292,6 +370,38 @@ frame:SetScript("OnEvent", function(self, event, ...)
 
     if event == "UNIT_SPELLCAST_SUCCEEDED" then
         local spellID = select(3, ...)
+
+        -- ── Survival Hunter: focus generators ─────────────────────────────
+        if currentSpec == SV_SPEC_ID then
+            local gain = 0
+            if spellID == 259489 then  -- Kill Command
+                gain = SV_KILL_COMMAND_GAIN
+                if flankersAdvantageActive then gain = gain + 5 end
+                if invPulseActive          then gain = gain + 5 end
+            elseif SV_TAKEDOWN_ID > 0 and spellID == SV_TAKEDOWN_ID then
+                gain = SV_TAKEDOWN_GAIN
+            elseif spellID == SV_MUZZLE_ID then
+                gain = SV_MUZZLE_GAIN
+            end
+            if gain > 0 then
+                currentFocus = math.min(maxFocus, currentFocus + gain)
+            end
+
+            -- Shrapnel Bomb: register a focus regen window on Wildfire Bomb cast.
+            if shrapnelBombActive and spellID == 259495 then  -- Wildfire Bomb
+                shrapnelBombExpiry[#shrapnelBombExpiry + 1] = GetTime() + SHRAPNEL_BOMB_DURATION
+            end
+
+            -- ── SV spenders ──────────────────────────────────────────────
+            local cost = SV_ABILITY_COSTS[spellID]
+            if cost and cost > 0 then
+                currentFocus = math.max(0, currentFocus - cost)
+            end
+            print ("FG detected SV cast: " .. spellID .. " gaining focus: " .. gain)
+            return  -- skip BM focus-cost logic below
+        end
+
+        -- ── Beast Mastery: focus costs ─────────────────────────────────────
         local cost = ABILITY_COSTS[spellID]
 
         -- Cobra Senses talent: reduce Cobra Shot cost by 5
@@ -314,13 +424,15 @@ frame:SetScript("OnEvent", function(self, event, ...)
         end
 
     elseif event == "UNIT_POWER_UPDATE" then
-        -- Floor the estimate using ability usability as a hint.
-        -- If Kill Command (costs 30) is castable, we must have at least 30 focus.
-        local powerType = select(2, ...)
-        if powerType == "FOCUS" then
-            local kcUsable = C_Spell.IsSpellUsable(34026)
-            if not issecretvalue(kcUsable) and kcUsable then
-                if currentFocus < 30 then currentFocus = 30 end
+        -- BM only: Kill Command costs 30 focus so its usability implies >= 30.
+        -- Skipped for SV where Kill Command is a focus generator, not a spender.
+        if currentSpec == REQUIRED_SPEC_ID then
+            local powerType = select(2, ...)
+            if powerType == "FOCUS" then
+                local kcUsable = C_Spell.IsSpellUsable(34026)
+                if not issecretvalue(kcUsable) and kcUsable then
+                    if currentFocus < 30 then currentFocus = 30 end
+                end
             end
         end
 
@@ -365,15 +477,42 @@ frame:SetScript("OnUpdate", function(self, elapsed)
         currentFocus = math.min(maxFocus, currentFocus + (regenRate * elapsed))
     end
 
-    -- Lethal Barbs: each Auto Shot generates 1 focus.
-    -- Auto-shot interval = base weapon speed / (1 + haste); accumulate time
-    -- and fire discrete +1 ticks.  Only active during combat.
-    if lethalBarbsActive and playerInCombat and baseRangedWeaponSpeed > 0 then
-        local currentInterval = baseRangedWeaponSpeed / (1 + (_G.GuesstimatedHaste or 0))
-        autoShotTimer = autoShotTimer + elapsed
-        while autoShotTimer >= currentInterval do
-            autoShotTimer = autoShotTimer - currentInterval
-            currentFocus  = math.min(maxFocus, currentFocus + 1)
+    -- Lethal Barbs: each auto attack generates 1 focus.
+    -- BM: single ranged weapon using actual weapon speed → +1 focus per tick.
+    -- SV: dual-wield two weapons at 1.8 atk/sec each → +2 focus per tick cycle.
+    if lethalBarbsActive and playerInCombat then
+        local focusPerTick, interval
+        if currentSpec == SV_SPEC_ID then
+            focusPerTick = 2
+            interval     = SV_MELEE_WEAPON_BASE_INTERVAL / (1 + (_G.GuesstimatedHaste or 0))
+        elseif baseRangedWeaponSpeed > 0 then
+            focusPerTick = 1
+            interval     = baseRangedWeaponSpeed / (1 + (_G.GuesstimatedHaste or 0))
+        end
+        if interval then
+            autoShotTimer = autoShotTimer + elapsed
+            while autoShotTimer >= interval do
+                autoShotTimer = autoShotTimer - interval
+                currentFocus  = math.min(maxFocus, currentFocus + focusPerTick)
+            end
+        end
+    end
+
+    -- Shrapnel Bomb (SV talent): Wildfire Bomb generates 15 focus over 3 seconds.
+    if currentSpec == SV_SPEC_ID and shrapnelBombActive then
+        local activeBombs = 0
+        local wIdx = 0
+        for i = 1, #shrapnelBombExpiry do
+            local expiry = shrapnelBombExpiry[i]
+            if expiry > now then
+                wIdx = wIdx + 1
+                shrapnelBombExpiry[wIdx] = expiry
+                activeBombs = activeBombs + 1
+            end
+        end
+        for i = wIdx + 1, #shrapnelBombExpiry do shrapnelBombExpiry[i] = nil end
+        if activeBombs > 0 then
+            currentFocus = math.min(maxFocus, currentFocus + activeBombs * SHRAPNEL_BOMB_REGEN_RATE * elapsed)
         end
     end
 
@@ -389,6 +528,6 @@ end)
 SLASH_FOCUSGUESSTIMATE1 = "/fg"
 SlashCmdList["FOCUSGUESSTIMATE"] = function()
     if not IsPlayerClass(REQUIRED_CLASS) then return end
-    if not IsPlayerSpec(REQUIRED_SPEC_ID) then return end
+    if not IsPlayerSpec(REQUIRED_SPEC_ID) and not IsPlayerSpec(SV_SPEC_ID) then return end
     if ui:IsShown() then ui:Hide() else ui:Show() end
 end
