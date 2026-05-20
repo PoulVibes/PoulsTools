@@ -7,7 +7,7 @@
 ## Category-enUS: CombatCoach
 ## Group: CombatCoach
 ## RequiredDeps: CombatCoach_shmIcons, CombatCoach
-## SavedVariables: SBA_SimpleDB
+## SavedVariablesPerCharacter: SBA_SimpleDB
 
 SBA_Simple.lua
 SBA_Simple_OverrideGUI.lua
