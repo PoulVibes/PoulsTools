@@ -1365,16 +1365,16 @@ local function GenerateCode(rules)
                     expr = expr .. " " .. (junctions[pi] or "and") .. " " .. parts[pi]
                 end
                 if rule.spellID == SBA_BUTTON_SPELL_ID then
-                    L[#L+1] = ("if %s then return C_AssistedCombat.GetNextCastSpell() end"):format(expr)
+                    L[#L+1] = ("if %s then return C_AssistedCombat.GetNextCastSpell(), %d end"):format(expr, i)
                 else
-                    L[#L+1] = ("if %s then return %d end"):format(expr, rule.spellID)
+                    L[#L+1] = ("if %s then return %d, %d end"):format(expr, rule.spellID, i)
                 end
             else
                 -- No conditions: unconditional (this blocks everything below it)
                 if rule.spellID == SBA_BUTTON_SPELL_ID then
-                    L[#L+1] = "return C_AssistedCombat.GetNextCastSpell()  -- unconditional"
+                    L[#L+1] = ("return C_AssistedCombat.GetNextCastSpell(), %d  -- unconditional"):format(i)
                 else
-                    L[#L+1] = ("return %d  -- unconditional"):format(rule.spellID)
+                    L[#L+1] = ("return %d, %d  -- unconditional"):format(rule.spellID, i)
                 end
                 hasUnconditional = true
             end

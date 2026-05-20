@@ -111,6 +111,7 @@ local overrideEditorPreviewCode = nil
 local overrideEditorPreviewMode = false
 local lastOverrideRuntimeError = nil
 local lastOverrideRuntimeErrorAt = 0
+local lastOverridePriority = nil  -- priority index returned by the last Override() call; nil when not available
 
 local function ReportOverrideRuntimeError(err)
     local db = GetDB()
@@ -140,18 +141,25 @@ local function CompileOverride(code)
 end
 
 local function Override()
-    if not overrideChunk then return nil end
-    local ok, result = pcall(overrideChunk)
+    if not overrideChunk then return nil, nil end
+    local ok, result, priority = pcall(overrideChunk)
     if not ok then
         ReportOverrideRuntimeError(result)
-        return nil
+        return nil, nil
     end
-    if result == nil then return nil end
+    if result == nil then return nil, nil end
     if type(result) ~= "number" then
         ReportOverrideRuntimeError("override returned non-number: " .. type(result))
-        return nil
+        return nil, nil
     end
-    return result
+    local pri = (type(priority) == "number") and priority or nil
+    return result, pri
+end
+
+-- Returns the priority index (1-based rule number) from the most recent Override() call,
+-- or nil when the override did not return one (e.g. hand-written raw code).
+function SBA_Simple_GetLastOverridePriority()
+    return lastOverridePriority
 end
 
 -- ── Extra-tab override compile/run ──────────────────────────────────────
@@ -190,8 +198,9 @@ local function RegisterNPIcon(mainKey)
     local npDB   = GetNPIconDB(mainKey)
     npDB.size    = (mainDB and mainDB.size) or 64
     registeredIconObjects[npKey] = shmIcons:Register(ADDON_NAME, npKey, npDB, {
-        onResize = function(sq) npDB.size = sq end,
-        onMove   = function() end,
+        onResize           = function(sq) npDB.size = sq end,
+        onMove             = function() end,
+        isNameplateManaged = true,
     })
     shmIcons:SetVisible(ADDON_NAME, npKey, false)
 end
@@ -466,7 +475,11 @@ ticker:SetScript("OnUpdate", function()
     -- ── Tab 1 ────────────────────────────────────────────────────────────
     local mainDB   = GetDB()
     local mainMode = mainDB.display_mode or "movable"
-    local spellID  = (mainMode ~= "disabled") and Override() or nil
+    local spellID, overridePri
+    if mainMode ~= "disabled" then
+        spellID, overridePri = Override()
+    end
+    lastOverridePriority = overridePri
 
     -- Main icon: visible for movable/both; hidden for nameplate/disabled.
     if mainMode == "movable" or mainMode == "both" then

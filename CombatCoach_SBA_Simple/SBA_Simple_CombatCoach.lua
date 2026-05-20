@@ -243,13 +243,27 @@ local function CreateOverrideAnalyzerWindow(specID, specName)
     ticker:SetAllPoints(f)
     ticker:SetScript("OnUpdate", function()
         if not f:IsShown() then return end
-        local suggested = C_AssistedCombat and C_AssistedCombat.GetNextCastSpell
-                          and C_AssistedCombat.GetNextCastSpell()
-        for _, r in ipairs(rows) do
-            if suggested and r.spellID == suggested then
-                r.highlight:Show()
-            else
-                r.highlight:Hide()
+        -- Prefer priority-based highlighting when the override returns a priority index.
+        -- Fall back to spellID matching when no priority is available (e.g. raw code overrides).
+        local activePri = type(SBA_Simple_GetLastOverridePriority) == "function"
+                          and SBA_Simple_GetLastOverridePriority()
+        if activePri then
+            for i, r in ipairs(rows) do
+                if i == activePri then
+                    r.highlight:Show()
+                else
+                    r.highlight:Hide()
+                end
+            end
+        else
+            local suggested = C_AssistedCombat and C_AssistedCombat.GetNextCastSpell
+                              and C_AssistedCombat.GetNextCastSpell()
+            for _, r in ipairs(rows) do
+                if suggested and r.spellID == suggested then
+                    r.highlight:Show()
+                else
+                    r.highlight:Hide()
+                end
             end
         end
     end)

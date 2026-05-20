@@ -388,6 +388,13 @@ end
 
 local function ApplyLockState(icon)
     local frame = icon.frame
+    -- Nameplate-managed icons are never interactive; skip lock/unlock logic entirely.
+    if icon.isNameplateManaged then
+        frame:EnableMouse(false)
+        frame:SetBackdrop(nil)
+        icon.resizeHandle:Hide()
+        return
+    end
     if isLocked then
         frame:EnableMouse(false)
         frame:SetBackdrop(nil)
@@ -453,7 +460,8 @@ local function ComputeIconGroups()
     local visited = {}
     local groups  = {}
     for startID, startIcon in pairs(icons) do
-        if not visited[startID] and startIcon.frame:IsShown() then
+        if not visited[startID] and startIcon.frame:IsShown()
+           and not startIcon.isNameplateManaged then
             local mySize        = math.floor(startIcon.frame:GetWidth() + 0.5)
             local startCX, startCY = startIcon.frame:GetCenter()
             visited[startID]    = true
@@ -464,6 +472,7 @@ local function ComputeIconGroups()
                 local curr = table.remove(queue, 1)
                 for otherID, other in pairs(icons) do
                     if not visited[otherID] and other.frame:IsShown()
+                       and not other.isNameplateManaged
                        and math.abs(other.frame:GetHeight() - mySize) < 0.5 then
                         local ocx, ocy = other.frame:GetCenter()
                         local adx = math.abs(ocx - curr.cx)
@@ -1149,7 +1158,8 @@ local function BuildIconFrame(globalID, db)
             changed = false
             iters = iters + 1
             for otherID, other in pairs(icons) do
-                if otherID ~= globalID and other.frame:IsShown() then
+                if otherID ~= globalID and other.frame:IsShown()
+                   and not other.isNameplateManaged then
                     local oCX, oCY = other.frame:GetCenter()
                     local oHalf = other.frame:GetHeight() * 0.5
                     local absDX = math.abs(myCX - oCX)
@@ -1224,7 +1234,8 @@ local function BuildIconFrame(globalID, db)
 
             -- Pass 1: cursor is inside this icon's bounding box
             for otherID, other in pairs(icons) do
-                if otherID ~= globalID and other.frame:IsShown() then
+                if otherID ~= globalID and other.frame:IsShown()
+                   and not other.isNameplateManaged then
                     local oH = other.frame:GetHeight()
                     local oCX, oCY = other.frame:GetCenter()
                     local oHalf = oH * 0.5
@@ -1239,7 +1250,8 @@ local function BuildIconFrame(globalID, db)
             local bestDist = math.huge
             local best = nil
             for otherID, other in pairs(icons) do
-                if otherID ~= globalID and other.frame:IsShown() then
+                if otherID ~= globalID and other.frame:IsShown()
+                   and not other.isNameplateManaged then
                     local c = nearestCornerOf(otherID, other)
                     if c and c.dist < bestDist then
                         bestDist = c.dist
@@ -1258,6 +1270,7 @@ local function BuildIconFrame(globalID, db)
         local best = nil
         for otherID, other in pairs(icons) do
             if otherID ~= globalID and other.frame:IsShown()
+               and not other.isNameplateManaged
                and not other.db.ctrlAttachedTo
                and math.abs(other.frame:GetHeight() - mySize) < 0.5 then
                 local oCX, oCY = other.frame:GetCenter()
@@ -1319,7 +1332,8 @@ local function BuildIconFrame(globalID, db)
                     local nearestDist = math.huge
                     local nearestSize = nil
                     for otherID, other in pairs(icons) do
-                        if otherID ~= globalID and other.frame:IsShown() then
+                        if otherID ~= globalID and other.frame:IsShown()
+                           and not other.isNameplateManaged then
                             local oCX, oCY = other.frame:GetCenter()
                             local d = math.sqrt((myCX - oCX)^2 + (myCY - oCY)^2)
                             if d < nearestDist then
@@ -1583,8 +1597,9 @@ function shmIcons:Register(addonName, id, db, callbacks)
     local icon = BuildIconFrame(globalID, db)
     -- Mirror enabled state on the runtime icon object
     icon.enabled = (db.enabled == true)
-    icon.onMove   = callbacks and callbacks.onMove
-    icon.onResize = callbacks and callbacks.onResize
+    icon.onMove              = callbacks and callbacks.onMove
+    icon.onResize             = callbacks and callbacks.onResize
+    icon.isNameplateManaged   = callbacks and callbacks.isNameplateManaged == true
     icons[globalID] = icon
     -- Apply current lock state now that `icon.enabled` is known so the
     -- frame visibility matches whether icons are locked or unlocked.
@@ -1756,6 +1771,13 @@ function shmIcons:SetVisible(addonName, id, visible)
     -- Do not allow showing if the icon is disabled
     if not icon.enabled then
         icon.frame:Hide()
+        return
+    end
+    -- Nameplate-managed icons are positioned and shown/hidden exclusively by the
+    -- consumer addon (SBA_Simple nameplate OnUpdate). Never force-show them when
+    -- unlocked — they must remain hidden until a valid target nameplate exists.
+    if icon.isNameplateManaged then
+        if visible then icon.frame:Show() else icon.frame:Hide() end
         return
     end
     -- When unlocked for positioning or during WoW Edit Mode, keep all enabled
