@@ -1,21 +1,14 @@
 -- CombatCoach.lua
--- Main addon file for CombatCoach - Addon Management Menu System
--- WoW API: 12.0.1 (The War Within)
+-- Main addon file; manages sub-addon registration and settings menu.
 
 CombatCoach = CombatCoach or {}
 local CC = CombatCoach
 
--- ============================================================
--- Saved Variables defaults
--- ============================================================
 CC.defaults = {
     enabled = true,
     submenus = {},
 }
 
--- ============================================================
--- Core frame and event handling
--- ============================================================
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
@@ -31,17 +24,12 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     end
 end)
 
--- ============================================================
--- OnLoad: initialize saved variables
--- ============================================================
 function CC:OnLoad()
-    -- Initialize saved variables
     if not CombatCoachDB then
         CombatCoachDB = CopyTable(self.defaults)
     end
     self.db = CombatCoachDB
 
-    -- Merge any new defaults
     for k, v in pairs(self.defaults) do
         if self.db[k] == nil then
             self.db[k] = v
@@ -51,9 +39,6 @@ function CC:OnLoad()
     print("|cFF00CCFFCombatCoach|r loaded. Type |cFFFFFF00/coach|r or |cFFFFFF00/CombatCoach|r for options.")
 end
 
--- ============================================================
--- OnLogin: register settings panel after all addons are loaded
--- ============================================================
 function CC:OnLogin()
     CC.Menu:BuildSettingsPanel()
     if CC.Profiles then
@@ -61,9 +46,6 @@ function CC:OnLogin()
     end
 end
 
--- ============================================================
--- Slash commands
--- ============================================================
 SLASH_CombatCoach1 = "/coach"
 SLASH_CombatCoach2 = "/CombatCoach"
 SLASH_CombatCoach3 = "/pt" -- alias for coach based on former tool name PoulsTools

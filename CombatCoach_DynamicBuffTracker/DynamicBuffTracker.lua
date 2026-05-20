@@ -1,21 +1,4 @@
--- DynamicBuffTracker.lua
--- Dynamically generates shmIcons and SBAS plugin conditions for every
--- selected talent in the player's active talent tree.
---
--- Discovery uses C_Traits / C_ClassTalents plus CDM child frame hooks
--- (same approach as TellMeWhen) to identify spells from cooldownInfo.spellID
--- rather than texture IDs, which works correctly even when aura data is
--- secret/tainted in combat.
---
--- Triggers a scan on: login, reload, spec change, and talent/trait update.
--- Per-spec discovered spells are persisted in DynamicBuffTrackerDB so icons
--- and conditions survive reloads.
---
--- SBAS integration: populates _G.SBAS_DynBuffRegistry[pluginID] for each
--- discovered spell. SBA_Simple_OverrideGUI reads this table to expose the
--- spell as a selectable Plugin/Proc condition for any spec.
---
--- Slash command: /dbt
+-- DynamicBuffTracker.lua: auto-discovers buff/cooldown spells from the player's active talents.
 
 local ADDON_FOLDER   = "CombatCoach_DynamicBuffTracker"
 local ADDON_NAME     = "Dynamic Buff Tracker"
@@ -23,35 +6,19 @@ local DEFAULT_SIZE   = 64
 local SCAN_INTERVAL  = 5.0   -- seconds between periodic viewer polls
 local MAX_RETRIES    = 6     -- retry attempts when viewer/config isn't ready yet
 
--- ============================================================
--- Runtime state
--- ============================================================
-
 local currentSpecID   = 0
-local trackedSpells   = {}   -- [spellIDStr (string)] = spellID (number)
-local hookedChildren  = {}   -- [spellIDStr (string)] = viewer child frame; prevents double-hook
+local trackedSpells   = {}
+local hookedChildren  = {}
 local retryCount      = 0
 local retryPending    = false
-local rebuildCombatCoachList  -- set by OnBuildUI when the CombatCoach panel is constructed
+local rebuildCombatCoachList
 
--- CDM frame tracking (TellMeWhen approach)
--- cdmFrames[frame]        = true    (all frames we have hooked SetAuraInstanceInfo on)
--- cdmSpellToFrame[spellID] = frame  (most-recently-assigned frame for a spell ID)
--- cdmFrameToSpell[frame]  = spellID (reverse: current spell assigned to a frame)
---
--- cdmFrameToSpell is the key guard against stale hooks: HookScript accumulates
--- permanently, so when a frame is reassigned to a different spell, every old
--- closure checks cdmFrameToSpell[child] ~= spellID and returns immediately.
 local cdmFrames       = {}
 local cdmSpellToFrame = {}
 local cdmFrameToSpell = {}
 
 -- Shared UNIT_AURA listener; wired up after SyncIconFromCDMFrame is defined.
 local unitAuraFrame = CreateFrame("Frame")
-
--- ============================================================
--- Utilities
--- ============================================================
 
 local function GetCurrentSpecID()
     local si = GetSpecialization()
@@ -71,8 +38,6 @@ local function GetSpecBuffDB(specID)
 end
 
 -- Returns the removed-spells deny-list for a spec.
--- Spells added here are never auto-discovered by ScanAndSync again.
--- The list is cleared when the user runs /dbt clear (which wipes the whole spec entry).
 local function GetSpecRemovedDB(specID)
     DynamicBuffTrackerDB.specs = DynamicBuffTrackerDB.specs or {}
     if not DynamicBuffTrackerDB.specs[specID] then

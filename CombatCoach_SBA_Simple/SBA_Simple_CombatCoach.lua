@@ -40,7 +40,6 @@ local function CreateOverrideAnalyzerWindow(specID, specName)
         })
     end
 
-    -- Title bar — also the drag handle; dragging here moves the window
     local titleBar = CreateFrame("Frame", nil, f)
     titleBar:SetPoint("TOPLEFT",  f, "TOPLEFT",  4, -4)
     titleBar:SetPoint("TOPRIGHT", f, "TOPRIGHT", -4, -4)
@@ -53,7 +52,6 @@ local function CreateOverrideAnalyzerWindow(specID, specName)
     titleTxt:SetPoint("LEFT", titleBar, "LEFT", 4, 0)
     titleTxt:SetText("Priority Analyzer — " .. (specName or ""))
 
-    -- Close [X]
     local closeBtn = CreateFrame("Button", nil, f, "UIPanelCloseButton")
     closeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
     closeBtn:SetScript("OnClick", function() f:Hide() end)

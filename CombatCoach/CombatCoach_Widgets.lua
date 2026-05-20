@@ -1,14 +1,10 @@
 -- CombatCoach_Widgets.lua
--- Reusable UI widget helpers for sub-addons to use in their OnBuildUI callbacks
--- WoW API: 12.0.1 (The War Within)
+-- Reusable UI widget helpers for sub-addon OnBuildUI callbacks.
 
 CombatCoach = CombatCoach or {}
 CombatCoach.Widgets = CombatCoach.Widgets or {}
 local W = CombatCoach.Widgets
 
--- ============================================================
--- Color constants
--- ============================================================
 W.colors = {
     accent      = {0.0, 0.8, 1.0, 1.0},
     headerBg    = {0.04, 0.08, 0.15, 0.85},
@@ -22,15 +18,9 @@ W.colors = {
     warning     = {1.0, 0.75, 0.1, 1.0},
 }
 
--- ============================================================
--- Section header
--- Creates a styled section label with a divider line.
--- Returns: fontString, yBottom (relative offset after the element)
--- ============================================================
+-- Creates a styled section label with a divider line; returns (fontString, yOffset).
 function W:SectionHeader(parent, anchor, yOffset, text)
     local label = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    -- If the anchor is the parent (first element), anchor to the parent's TOPLEFT;
-    -- otherwise anchor below the previous element's bottom-left.
     local anchorPoint = (anchor == parent) and "TOPLEFT" or "BOTTOMLEFT"
     label:SetPoint("TOPLEFT", anchor, anchorPoint, 0, yOffset - 12)
     label:SetText(text:upper())
@@ -45,19 +35,7 @@ function W:SectionHeader(parent, anchor, yOffset, text)
     return line, -28
 end
 
--- ============================================================
--- Checkbox row
 -- Creates a labeled checkbox with optional tooltip.
--- Parameters:
---   parent   - parent frame
---   anchor   - anchor region (previous element)
---   yOffset  - vertical offset from anchor
---   label    - display label text
---   tooltip  - (optional) tooltip text
---   getValue - function() returning current boolean value
---   setValue - function(bool) called when toggled
--- Returns: checkFrame
--- ============================================================
 function W:Checkbox(parent, anchor, yOffset, label, tooltip, getValue, setValue)
     local row = CreateFrame("Frame", nil, parent)
     row:SetSize(540, 26)
@@ -132,7 +110,6 @@ function W:Slider(parent, anchor, yOffset, label, min, max, step, getValue, setV
     slider:SetObeyStepOnDrag(true)
     slider:SetValue(getValue())
 
-    -- Hide default slider labels
     slider.Low:SetText("")
     slider.High:SetText("")
     if slider.Text then slider.Text:SetText("") end
@@ -143,26 +120,13 @@ function W:Slider(parent, anchor, yOffset, label, min, max, step, getValue, setV
         valText:SetText(string.format(fmt, value))
     end)
 
-    -- expose inner elements so callers can update them later if needed
     row.slider = slider
     row.valText = valText
 
     return row
 end
 
--- ============================================================
--- Dropdown row
 -- Creates a simple dropdown (uses UIDropDownMenu).
--- Parameters:
---   parent    - parent frame
---   anchor    - anchor region
---   yOffset   - vertical offset
---   label     - display label
---   items     - array of {text=string, value=any}
---   getValue  - function() returning current value
---   setValue  - function(value) called on selection
--- Returns: dropdownFrame
--- ============================================================
 function W:Dropdown(parent, anchor, yOffset, label, items, getValue, setValue)
     local row = CreateFrame("Frame", nil, parent)
     row:SetSize(540, 46)
@@ -186,7 +150,6 @@ function W:Dropdown(parent, anchor, yOffset, label, items, getValue, setValue)
             info.func = function(btn)
                 setValue(btn.value)
                 UIDropDownMenu_SetSelectedValue(dropdown, btn.value)
-                -- Update displayed text
                 for _, it in ipairs(items) do
                     if it.value == btn.value then
                         UIDropDownMenu_SetText(dropdown, it.text)
@@ -198,7 +161,6 @@ function W:Dropdown(parent, anchor, yOffset, label, items, getValue, setValue)
         end
     end)
 
-    -- Set initial display text
     local currentVal = getValue()
     for _, item in ipairs(items) do
         if item.value == currentVal then
@@ -208,25 +170,12 @@ function W:Dropdown(parent, anchor, yOffset, label, items, getValue, setValue)
         end
     end
 
-    -- expose inner dropdown for callers who need to update it later
     row.dropdown = dropdown
     row.items = items
     return row
 end
 
--- ============================================================
--- Text input row
 -- Creates a labeled single-line edit box.
--- Parameters:
---   parent    - parent frame
---   anchor    - anchor region
---   yOffset   - vertical offset
---   label     - display label
---   placeholder - placeholder text
---   getValue  - function() returning current string
---   setValue  - function(str) called on change
--- Returns: editFrame
--- ============================================================
 function W:EditBox(parent, anchor, yOffset, label, placeholder, getValue, setValue)
     local row = CreateFrame("Frame", nil, parent)
     row:SetSize(540, 46)
@@ -279,16 +228,12 @@ function W:EditBox(parent, anchor, yOffset, label, placeholder, getValue, setVal
         self:ClearFocus()
     end)
 
-    -- expose inner box and placeholder for callers who need immediate access
     row.box = box
     row.placeholder = placeholder
     return row
 end
 
--- ============================================================
--- Status indicator
 -- Creates a colored dot + text status label.
--- ============================================================
 function W:StatusLabel(parent, anchor, yOffset, label, status, statusText)
     local row = CreateFrame("Frame", nil, parent)
     row:SetSize(540, 20)
@@ -319,10 +264,7 @@ function W:StatusLabel(parent, anchor, yOffset, label, status, statusText)
     return row
 end
 
--- ============================================================
--- Button row
 -- Creates a styled action button.
--- ============================================================
 function W:Button(parent, anchor, yOffset, label, onClick)
     local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     btn:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, yOffset - 8)

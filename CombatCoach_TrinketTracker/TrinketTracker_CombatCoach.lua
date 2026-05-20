@@ -32,7 +32,6 @@ local function OnBuildUI(parent)
     anchor = div
     y = dy
 
-    -- Dropdown selector for equipment slots (1-19)
     local selectedSlot = nil
     local slotItems = {}
     for i = 1, 19 do
@@ -89,7 +88,6 @@ local function OnBuildUI(parent)
         local specID = 0
         if specIndex then specID = select(1, GetSpecializationInfo(specIndex)) end
 
-        -- Prefer the public API; fallback to reading DB directly
         local slots = nil
         local trackedList = nil
         if type(TrinketTracker_GetTrackedSlots) == "function" then
@@ -128,23 +126,19 @@ local function OnBuildUI(parent)
                     row = CreateFrame("Frame", nil, trackedContainer)
                     row:SetSize(540, 26)
 
-                    -- Glow toggle checkbox
                     row.removeLeft = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
                     row.removeLeft:SetPoint("LEFT", row, "LEFT", 0, 0)
                     row.removeLeft:SetSize(26, 20)
                     row.removeLeft:SetText("X")
 
-                    -- Equipment slot icon
                     row.icon = row:CreateTexture(nil, "ARTWORK")
                     row.icon:SetSize(20, 20)
                     row.icon:SetPoint("LEFT", row.removeLeft, "RIGHT", 6, 0)
 
-                    -- Slot name label
                     row.name = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
                     row.name:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
                     row.name:SetTextColor(unpack(W.colors.text))
 
-                    -- Per-row Remove button
                     row.glowBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
                     row.glowBtn:SetSize(80, 20)
                     row.glowBtn:SetPoint("RIGHT", row, "RIGHT", -120, 0)
@@ -159,7 +153,6 @@ local function OnBuildUI(parent)
                     end)
                 end
 
-                -- Update values
                 row.slotID = db.slotID
                 row.removeLeft:SetScript("OnClick", function(self)
                     local id = row.slotID
@@ -169,7 +162,6 @@ local function OnBuildUI(parent)
                     end
                 end)
 
-                -- Try to get the item icon from the equipment slot
                 local itemID = GetInventoryItemID("player", db.slotID or 0)
                 local texture = itemID and select(10, GetItemInfo(itemID))
                 row.icon:SetTexture(texture or 134400)
@@ -182,7 +174,6 @@ local function OnBuildUI(parent)
             end
         end
 
-        -- Hide rows no longer present
         for k, r in pairs(trackedRows) do
             if not used[k] then
                 r:Hide()
@@ -259,7 +250,6 @@ local function OnBuildUI(parent)
         if lockBtn and shmIcons and shmIcons.IsLocked then
             lockBtn:SetText(shmIcons:IsLocked() and "Unlock Icons" or "Lock Icons")
         end
-        -- Refresh dropdown icons (in case equipped items changed)
         for i = 1, 19 do
             local it = slotItems[i]
             if it then
@@ -269,7 +259,6 @@ local function OnBuildUI(parent)
                 it.text = "|T" .. tex .. ":16:16|t " .. (SLOT_NAMES[it.value] or ("Slot " .. it.value))
             end
         end
-        -- Update displayed text for the dropdown if present
         if dd and dd.dropdown then
             if selectedSlot then
                 for _, it in ipairs(slotItems) do

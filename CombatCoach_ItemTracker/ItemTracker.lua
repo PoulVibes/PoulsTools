@@ -1,19 +1,4 @@
--- ============================================================
--- ItemTracker.lua  (WoW Midnight 12.0.1)
--- Tracks inventory items by name or itemID — shows icon,
--- cooldown, and stack count (number of that item in your bags).
--- Items do NOT need to be in your inventory to be tracked;
--- they will show with a zero stack count until acquired.
--- Per-specialization: each spec has its own set of tracked items.
--- Delegates all icon/glow/snap/drag UI to shmIcons.
---
--- /it <item name or itemID>       → add tracker (toggle to remove)
--- /it glow <item name>            → toggle ready glow
--- /it lock                        → toggle lock/unlock all frames
--- /it reset <item name>           → reset position/size
--- /it reset all                   → reset all frames
--- /it list                        → list tracked items with counts
--- ============================================================
+-- ItemTracker.lua: tracks inventory items by name or itemID; delegates UI to shmIcons.
 
 local FOLDER_NAME  = "CombatCoach_ItemTracker"
 local ADDON_NAME   = "Item Tracker"
@@ -34,20 +19,12 @@ local function NotifyChangeListeners()
     end
 end
 
--- ============================================================
--- Spec helper
--- ============================================================
-
 local function GetCurrentSpecID()
     local specIndex = GetSpecialization()
     if not specIndex then return 0 end
     local specID = select(1, GetSpecializationInfo(specIndex))
     return specID or 0
 end
-
--- ============================================================
--- Saved variable helpers
--- ============================================================
 
 local function KeyFor(name)
     return tostring(name):lower():gsub("%s+", "_")

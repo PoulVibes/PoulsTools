@@ -1,7 +1,6 @@
 local Guesstimator = {}
 local frame = CreateFrame("Frame", "EnergyGuesstimatorLogicFrame")
 
--- 1. Configuration & Constants
 local TIGER_PALM_ID = 100780
 local VIVIFY_ID = 116670
 local CJL_ID = 117952
@@ -71,11 +70,9 @@ local function UpdateEnabledState()
     end
 end
 
--- 2. Internal "Clean" State
 local maxEnergy = UnitPowerMax("player", 3) or 120
 currentEnergy = maxEnergy
 
--- 3. UI Setup
 ui = CreateFrame("Frame", "EnergyGuesstimatorUI", UIParent, "BackdropTemplate")
 ui:SetSize(160, 40) -- Increased width for comparison text
 ui:SetPoint("CENTER", 0, 0)
@@ -97,7 +94,6 @@ ui.text = ui:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 ui.text:SetPoint("CENTER", 0, 0)
 ui.text:SetTextColor(1, 0.8, 0)
 
--- 4. VivifyProc Callback
 _G.VivifyProc_OnEvent = function(event)
     if event == "VIVIFY_PROC_CONSUMED" then
         currentEnergy = math.max(0, currentEnergy - ENERGY_COST_VIVIFY_PROC)
@@ -110,8 +106,6 @@ local function OnInitialize()
     ui:Hide()
 end
 
--- 5. Standard Event Logic
--- Runtime events are registered only when the addon is enabled
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")

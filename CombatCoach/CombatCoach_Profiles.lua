@@ -1,17 +1,15 @@
 -- CombatCoach_Profiles.lua
--- Profile export / import system for CombatCoach
--- Serializes all known addon SavedVariables into a portable string
+-- Profile export/import system for CombatCoach.
 
 CombatCoach          = CombatCoach or {}
 CombatCoach.Profiles = CombatCoach.Profiles or {}
 local CC       = CombatCoach
 local Profiles = CombatCoach.Profiles
 
--- Profile schema version — bump if the format changes incompatibly
+-- Profile schema version; bump if the format changes incompatibly.
 Profiles.VERSION = 1
 
 -- Known addon SavedVariable globals included in a profile.
--- Add new entries here as more CombatCoach addons gain saved variables.
 Profiles.knownDBs = {
     { dbName = "ComboTrackerDB",      label = "CombatCoach_ComboTracker"      },
     { dbName = "CooldownTrackerDB",   label = "CombatCoach_CooldownTracker"   },
@@ -34,11 +32,7 @@ StaticPopupDialogs["CombatCoach_PROFILE_RELOAD"] = {
     hideOnEscape = true,
 }
 
--- ============================================================
--- Serialization
--- Converts a Lua value to a valid Lua-syntax string.
--- Only booleans, numbers, strings, and tables are preserved.
--- ============================================================
+-- Converts a Lua value to a valid Lua-syntax string (booleans, numbers, strings, tables).
 local function serializeValue(val, depth)
     depth = depth or 0
     local vt = type(val)
@@ -71,18 +65,13 @@ local function serializeValue(val, depth)
             end
         end
         if #parts == 0 then return "{}" end
-        table.sort(parts)   -- deterministic key order across exports
+        table.sort(parts)
         return "{\n" .. table.concat(parts, ",\n") .. "\n" .. clos .. "}"
     end
     return "nil"
 end
 
--- ============================================================
--- Profiles:Serialize()
--- Snapshots all currently-loaded addon DBs.
--- Returns: serializedString, includedLabelList   (success)
---          nil,              errorMessage        (failure)
--- ============================================================
+-- Snapshots all currently-loaded addon DBs; returns (serializedString, labelList) or (nil, error).
 function Profiles:Serialize()
     local profile = {
         _addon   = "CombatCoach",
@@ -103,17 +92,11 @@ function Profiles:Serialize()
     return serializeValue(profile), included
 end
 
--- ============================================================
--- Profiles:Deserialize(str)
--- Parses a profile string back into a Lua table.
--- Returns: table, nil   (success)
---          nil,  errMsg (failure)
--- ============================================================
+-- Parses a profile string back into a Lua table; returns (table, nil) or (nil, errMsg).
 function Profiles:Deserialize(str)
     if type(str) ~= "string" or #str == 0 then
         return nil, "Profile string is empty."
     end
-    -- Reject strings that contain executable / dangerous patterns
     local forbidden = {
         "function%s*%(",
         "loadstring%s*%(",
@@ -149,11 +132,7 @@ function Profiles:Deserialize(str)
     return result
 end
 
--- ============================================================
--- Profiles:Apply(profileData)
--- Copies each known DB from the profile into the matching global.
--- Returns: list of updated addon display labels
--- ============================================================
+-- Copies each known DB from the profile into the matching global; returns label list.
 function Profiles:Apply(profileData)
     local applied = {}
     for _, entry in ipairs(self.knownDBs) do
@@ -165,11 +144,7 @@ function Profiles:Apply(profileData)
     return applied
 end
 
--- ============================================================
--- Internal helpers
--- ============================================================
-
--- Shared dialog frame factory (matches CombatCoach dark aesthetic)
+-- Shared dialog frame factory.
 local function makeDialogFrame(globalName, w, h)
     local f = CreateFrame("Frame", globalName, UIParent, "BackdropTemplate")
     f:SetSize(w, h)

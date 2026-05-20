@@ -1,13 +1,11 @@
 -- CooldownTracker_CombatCoach.lua
--- CombatCoach integration for CooldownTracker
+-- CombatCoach integration for CooldownTracker.
 
 if not CombatCoach then return end
 
 CooldownTrackerDB = CooldownTrackerDB or {}
 
--- ============================================================
--- Shared sound choices (module-level; used by Options popup)
--- ============================================================
+-- Sound IDs and names for the ready-sound dropdown.
 local SOUND_CHOICES = {
     { id = 3081,   text = "Tell Message" },
     { id = 120,    text = "Loot Window Coin Sound" },
@@ -37,11 +35,9 @@ local function PlaySoundPreview(id)
     else pcall(PlaySound, id, "Master") end
 end
 
--- ============================================================
--- Look & Feel popup (single shared frame, re-populated per spell)
--- ============================================================
 local lafPopup = nil
 
+-- Builds the shared Look & Feel popup frame.
 local function BuildLookAndFeelPopup()
     local f = CreateFrame("Frame", "CDT_LookAndFeelPopup", UIParent, "BackdropTemplate")
     f:SetSize(400, 536)
@@ -67,7 +63,6 @@ local function BuildLookAndFeelPopup()
     hdr:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
     hdr:SetTextColor(0.4, 0.6, 0.8, 1.0)
 
-    -- UIDropDownMenuTemplate has a -16px internal x offset; x=0 → visual x=16
     local spellDrop = CreateFrame("Frame", "CDT_LookAndFeelSpellDrop", f, "UIDropDownMenuTemplate")
     spellDrop:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -20)
     UIDropDownMenu_SetWidth(spellDrop, 280)

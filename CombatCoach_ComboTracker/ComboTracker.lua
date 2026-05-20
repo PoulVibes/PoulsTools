@@ -72,7 +72,6 @@ local function RegisterComboIcons()
     })
     shmIcons:SetIcon(ADDON_NAME, "Hit Combo", TRACKER_ICON)
     shmIcons:SetVisible(ADDON_NAME, "Hit Combo", false)
-    -- Register lock callback only once across spec swaps
     if not lockCallbackRegistered and shmIcons and shmIcons.RegisterLockCallback then
         lockCallbackRegistered = true
         shmIcons:RegisterLockCallback(function(locked)
@@ -99,7 +98,6 @@ end
 local function DisableAddon()
     if not addonEnabled then return end
     addonEnabled = false
-    -- Keep UNIT_SPELLCAST_SUCCEEDED registered for LastAbilityUsedSpellID tracking
     if timerHandle then timerHandle:Cancel(); timerHandle = nil end
     ComboStrikeStreak = 0
     LastComboStrikeSpellID = 0
@@ -112,13 +110,10 @@ end
 
 local function UpdateEnabledState()
     if not IsPlayerMonk() then
-        -- Not a Monk: keep UNIT_SPELLCAST_SUCCEEDED registered to track LastAbilityUsedSpellID
         eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
-        -- Ensure the combo icon addon is disabled for non-Monks
         DisableAddon()
         return
     end
-    -- Always track last ability used for all Monk specs
     eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
     if IsPlayerWindwalkerSpec() then
         EnableAddon()
@@ -141,22 +136,15 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         if ComboTrackerDB.failureSound == nil then
             ComboTrackerDB.failureSound = true
         end
-        -- Migrate legacy locked field
         ComboTrackerDB.locked = nil
-        -- Update enabled state; handles LoadOnDemand case where PLAYER_LOGIN
-        -- has already fired. Spec may be nil here on first load -- PLAYER_LOGIN
-        -- will correct it if so.
         UpdateEnabledState()
 
     elseif event == "PLAYER_LOGIN" then
         local _, classToken = UnitClass("player")
-        -- Always track last ability used for all classes
         eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
-        -- If not a Monk, keep only LastAbilityUsedSpellID tracking
         if classToken ~= "MONK" then
             return
         end
-        -- Enable combo icon only if Windwalker
         if IsPlayerWindwalkerSpec() then
             EnableAddon()
         else

@@ -1,7 +1,5 @@
 -- shmIcons_CombatCoach.lua
--- CombatCoach integration for shmIcons
--- Provides a hub page listing every icon registered with shmIcons,
--- grouped by source addon, with per-icon glow toggle and remove controls.
+-- CombatCoach integration for shmIcons.
 
 if not CombatCoach then return end
 if not shmIcons   then return end
@@ -30,12 +28,10 @@ local function OnBuildUI(parent)
     local anchor = parent
     local y = 0
 
-    -- ---- Section: Controls ----
     local div, dy = W:SectionHeader(parent, anchor, y, "shmIcons Controls")
     anchor = div
     y = dy
 
-    -- Lock / Unlock — operates on ALL shmIcons-managed icons globally
     local lockBtn = nil
     local function UpdateLockLabel()
         if lockBtn then
@@ -53,7 +49,6 @@ local function OnBuildUI(parent)
     lockBtn = anchor
     y = -8
 
-    -- Reset All — recenters every registered icon
     anchor = W:Button(parent, anchor, y, "Reset All Icons", function()
         local all = shmIcons:GetAll()
         for _, entry in ipairs(all) do
@@ -63,22 +58,17 @@ local function OnBuildUI(parent)
     end)
     y = -8
 
-    -- ---- Section: All Tracked Icons ----
     local div2, dy2 = W:SectionHeader(parent, anchor, y, "All Tracked Icons")
     anchor = div2
     y = dy2
 
-    -- Container that grows/shrinks as the list rebuilds
     local listContainer = CreateFrame("Frame", nil, parent)
     listContainer:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, 0)
     listContainer:SetSize(540, 0)
 
-    -- Flat array of every frame created during a BuildIconList pass.
-    -- On each rebuild we hide the stale frames and build fresh ones.
     local activeRows = {}
 
     local function BuildIconList()
-        -- Hide all frames from the previous build
         for _, f in ipairs(activeRows) do
             f:Hide()
         end
@@ -86,7 +76,6 @@ local function OnBuildUI(parent)
 
         local allIcons = (shmIcons and shmIcons.GetAll) and shmIcons:GetAll() or {}
 
-        -- Sort: group by addon, then sort by localID within each addon
         table.sort(allIcons, function(a, b)
             if a.addonName ~= b.addonName then return a.addonName < b.addonName end
             return a.localID < b.localID
@@ -105,7 +94,6 @@ local function OnBuildUI(parent)
             local icon      = entry.icon
             local db        = icon and icon.db
 
-            -- Addon group header row
             if addonName ~= lastAddon then
                 lastAddon = addonName
 
@@ -122,8 +110,6 @@ local function OnBuildUI(parent)
                 rowY = rowY + 20
             end
 
-            -- Derive a human-readable display name from the saved DB.
-            -- For TrinketTracker the localID is the numeric slot ID; map it to a name.
             local displayName = db and (db.spellName or db.itemName)
             if not displayName then
                 local slotNum = tonumber(localID)
@@ -134,11 +120,6 @@ local function OnBuildUI(parent)
                 end
             end
 
-            -- Display name derived from DB/localID; individual addons
-            -- should control the localID they register with so that
-            -- shmIcons simply shows what the registering addon provides.
-
-            -- ---- Icon entry row ----
             local row = CreateFrame("Frame", nil, listContainer)
             row:SetSize(540, 26)
             row:SetPoint("TOPLEFT", listContainer, "TOPLEFT", 0, -rowY)
@@ -151,15 +132,12 @@ local function OnBuildUI(parent)
             local capturedDB    = db
 
             local leftControl = nil
-            -- These are the shmIcons ADDON_NAMEs (not the CombatCoach registry IDs) for
-            -- trackers whose icons can be individually removed via an X button.
             local TRACKER_ADDON_NAMES = {
                 ["Cooldown Tracker"] = true,
                 ["Item Tracker"]     = true,
                 ["Trinket Tracker"]  = true,
             }
             if TRACKER_ADDON_NAMES[capturedAddon] then
-                -- Registered addon: show a small X remove button on the left
                 local rem = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
                 rem:SetPoint("LEFT", row, "LEFT", 10, 0)
                 rem:SetSize(26, 20)
@@ -181,7 +159,6 @@ local function OnBuildUI(parent)
                             TrinketTracker_Remove(slotNum)
                         end
                     else
-                        -- Generic fallback: unregister from shmIcons
                         if shmIcons and shmIcons.Unregister then
                             shmIcons:Unregister(capturedAddon, capturedID)
                         end
@@ -190,8 +167,6 @@ local function OnBuildUI(parent)
                 end)
                 leftControl = rem
             else
-                -- External addon OR SBA_Simple special case: show an enabled checkbox
-                -- that toggles visibility / enabled state.
                 local chk = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
                 chk:SetPoint("LEFT", row, "LEFT", 10, 0)
                 chk:SetSize(22, 22)
@@ -211,21 +186,17 @@ local function OnBuildUI(parent)
                 leftControl = chk
             end
 
-            -- Spell / item icon texture
             local iconTex = row:CreateTexture(nil, "ARTWORK")
             iconTex:SetSize(20, 20)
             iconTex:SetPoint("LEFT", leftControl, "RIGHT", 6, 0)
             iconTex:SetTexture(
                 (icon and icon.iconTex and icon.iconTex:GetTexture()) or 134400)
 
-            -- Display name label
             local nameLbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             nameLbl:SetPoint("LEFT", iconTex, "RIGHT", 6, 0)
             nameLbl:SetText(displayName)
             nameLbl:SetTextColor(unpack(W.colors.text))
 
-            -- Right-side action: Options button for Cooldown Tracker (glow managed
-            -- in its own Look & Feel popup); Glow button for all other addons.
             if capturedAddon == "Cooldown Tracker" then
                 local optBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
                 optBtn:SetSize(70, 20)
@@ -271,7 +242,6 @@ local function OnBuildUI(parent)
                     end)
                     sndChk:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-                    -- Keep in sync each time the panel is shown
                     parent:HookScript("OnShow", function()
                         sndChk:SetChecked(ComboTrackerDB and ComboTrackerDB.failureSound or false)
                     end)
@@ -284,7 +254,6 @@ local function OnBuildUI(parent)
             end -- if localID:sub(-3) ~= "_np"
         end
 
-        -- Empty-state message when nothing is registered yet
         if #allIcons == 0 then
             local emptyRow = CreateFrame("Frame", nil, listContainer)
             emptyRow:SetSize(540, 26)
@@ -300,10 +269,8 @@ local function OnBuildUI(parent)
         listContainer:SetHeight(rowY)
     end
 
-    -- Initial populate
     BuildIconList()
 
-    -- Auto-refresh whenever CooldownTracker, ItemTracker, or TrinketTracker add/remove trackers
     if type(CooldownTracker_RegisterChangeListener) == "function" then
         CooldownTracker_RegisterChangeListener(BuildIconList)
     end
@@ -314,7 +281,6 @@ local function OnBuildUI(parent)
         TrinketTracker_RegisterChangeListener(BuildIconList)
     end
 
-    -- Refresh list and sync lock label each time the panel is opened
     parent:HookScript("OnShow", function()
         BuildIconList()
         UpdateLockLabel()

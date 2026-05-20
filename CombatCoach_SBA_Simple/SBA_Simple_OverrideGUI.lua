@@ -1,48 +1,17 @@
 -- SBA_Simple_OverrideGUI.lua
 -- Graphical priority-list override builder for SBA_Simple.
---
--- Usage:   /sbas override_gui     → open for the current spec
---
--- Rules are stored in SBA_SimpleDB.gui[specID] and compiled to
--- SBA_SimpleDB.specs[specID].overrideCode when saved.
--- The text-editor (/sbas override) still works independently.
 
--------------------------------------------------------------------------------
--- 1.  Condition type registry
---     Each entry defines one kind of condition that can be added to a rule.
---     Fields:
---       id            key stored in saved data
---       label         displayed in the picker
---       needsValue    (opt) true → show a numeric input field
---       valueLabel    (opt) label for the value field
---       default       (opt) default numeric value
---       needsSpell    (opt) true → show This Spell / Other Spell toggle
---       needsResource (opt) true → show resource type + operator selectors + value input
---       needsCompareValue (opt) true → show operator selector + value input
---       needsLua      (opt) true → show a free-text Lua expression input
---       generate(cond, ruleSpellID) → Lua fragment string
--------------------------------------------------------------------------------
--- Resolves which spell ID to use: "this"/nil → rule's spell; number → that ID.
--- Also handles old saved data that used the targetID field.
+-- Condition type registry: each entry defines one condition kind for rule building.
 local function ResolveSpell(c, s)
     if not c.spell or c.spell == "this" then return s end
     if type(c.spell) == "number"        then return c.spell end
     return c.targetID or s
 end
 
--- Forward declaration: allows closures defined below (COND_TYPES, CondSummaryText, etc.)
--- to read the currently-edited spec without a circular dependency on section 11.
 local editSpecID = 0
 
--- Per-spec secondary (non-energy) resource. The "resource" condition type uses this
--- to emit the correct Lua variable in both generated code and the summary display.
--- Specs not listed have no secondary resource queryable in the Secret Value System
--- (e.g. Warriors, Balance Druid, Brewmaster) and fall through to the default, which
--- emits chi for backwards-compatibility with Windwalker data from before specID was known.
 local SPEC_SECONDARY_DEFAULT = { varName = "chi",         powerType = "Chi",         label = "Chi"        }
 local SPEC_SECONDARY = {
-    -- Monk: only Windwalker uses Chi as a secondary resource.
-    -- Brewmaster uses Energy (primary — not SVS-queryable); no secondary.
     [269] = { varName = "chi",         powerType = "Chi",         label = "Chi"        },  -- Windwalker
     -- Rogue (all specs: Combo Points are secondary)
     [259] = { varName = "comboPoints", powerType = "ComboPoints", label = "Combo Pts"  },  -- Assassination

@@ -1,15 +1,4 @@
--- ============================================================
--- TrinketTracker.lua  (WoW Midnight 12.0.1)
--- Tracks any equipment slot cooldown on demand, per specialization.
--- Delegates all icon/glow/snap/drag UI to shmIcons.
---
--- /tt                  → toggle lock/unlock all frames
--- /tt slot <1-19>      → add or remove a slot tracker
--- /tt glow <#>         → toggle ready glow for a slot
--- /tt reset <#>        → reset one slot's position/size
--- /tt reset all        → reset all positions/sizes
--- /tt list             → list tracked slots
--- ============================================================
+-- TrinketTracker: tracks equipment slot cooldowns per spec; delegates UI to shmIcons.
 
 local FOLDER_NAME  = "CombatCoach_TrinketTracker"
 local ADDON_NAME   = "Trinket Tracker"
@@ -27,13 +16,11 @@ local SLOT_NAMES = {
 
 -- slotID → true for the currently active spec's tracked slots
 local trackedSlots = {}
--- slotID → cached texture ID; refreshed only on PLAYER_EQUIPMENT_CHANGED and slot add
+-- slotID → cached texture ID
 local slotIconCache = {}
-
--- The spec ID we last loaded icons for
+-- the spec ID we last loaded icons for
 local currentSpecID = nil
-
--- Change listeners for UI integrations (called when trackers change)
+-- change listeners for UI integrations
 local changeListeners = {}
 
 local function NotifyChangeListeners()
@@ -43,20 +30,12 @@ local function NotifyChangeListeners()
     end
 end
 
--- ============================================================
--- Spec helper
--- ============================================================
-
 local function GetCurrentSpecID()
     local specIndex = GetSpecialization()
     if not specIndex then return 0 end
     local specID = select(1, GetSpecializationInfo(specIndex))
     return specID or 0
 end
-
--- ============================================================
--- Saved variable helpers
--- ============================================================
 
 -- Return the slots table for the given specID, creating it if needed.
 local function GetSpecSlots(specID)
@@ -85,7 +64,6 @@ local function GetSlotDB(specID, slotID)
             glow_enabled = false,
         }
     end
-    -- Migrate old width/height schema to size
     local db = slots[slotID]
     if not db.size and (db.width or db.height) then
         db.size   = db.width or db.height or DEFAULT_SIZE
@@ -95,17 +73,12 @@ local function GetSlotDB(specID, slotID)
     return db
 end
 
--- ============================================================
--- Slot icon refresh (called on equipment changes, not every cooldown update)
--- ============================================================
-
+-- Refresh the icon for a slot; defers until GET_ITEM_INFO_RECEIVED if not cached.
 local function RefreshSlotIcon(slotID)
     if not trackedSlots[slotID] then return end
     local itemID  = GetInventoryItemID("player", slotID)
     local texture = itemID and select(10, GetItemInfo(itemID))
     if not texture then
-        -- Item info not yet in client cache; clear the cache entry so the
-        -- next GET_ITEM_INFO_RECEIVED will always push the real texture through.
         slotIconCache[slotID] = nil
         shmIcons:SetIcon(ADDON_NAME, slotID, 134400)
         return
@@ -120,10 +93,7 @@ local function RefreshAllSlotIcons()
     for slotID in pairs(trackedSlots) do RefreshSlotIcon(slotID) end
 end
 
--- ============================================================
--- Cooldown update for one slot
--- ============================================================
-
+-- Update cooldown and glow state for a single tracked slot.
 local function UpdateSlot(slotID)
     if not trackedSlots[slotID] then return end
     local itemID = GetInventoryItemID("player", slotID)
@@ -136,10 +106,6 @@ end
 local function UpdateAllSlots()
     for slotID in pairs(trackedSlots) do UpdateSlot(slotID) end
 end
-
--- ============================================================
--- Add / remove slot
--- ============================================================
 
 local function AddSlot(slotID, specID)
     specID = specID or currentSpecID
@@ -165,7 +131,7 @@ local function RemoveSlot(slotID)
     NotifyChangeListeners()
 end
 
--- Unregister all current icons and clear trackedSlots.
+-- Unregister all current icons and clear tracking state.
 local function UnloadSpec()
     for slotID in pairs(trackedSlots) do
         shmIcons:Unregister(ADDON_NAME, slotID)
@@ -175,7 +141,7 @@ local function UnloadSpec()
     NotifyChangeListeners()
 end
 
--- Load all enabled slots for the given specID.
+-- Load all enabled slots for the given spec.
 local function LoadSpec(specID)
     UnloadSpec()
     currentSpecID = specID
@@ -189,10 +155,6 @@ local function LoadSpec(specID)
     UpdateAllSlots()
     NotifyChangeListeners()
 end
-
--- ============================================================
--- Slash Commands
--- ============================================================
 
 SLASH_TRINKETTRACKER1 = "/tt"
 SlashCmdList["TRINKETTRACKER"] = function(msg)
@@ -281,16 +243,11 @@ SlashCmdList["TRINKETTRACKER"] = function(msg)
     print("  /tt list             - list tracked slots")
 end
 
--- ============================================================
--- Event Handling
--- ============================================================
-
 local eventFrame = CreateFrame("Frame")
 eventFrame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == FOLDER_NAME then
         TrinketTrackerDB = TrinketTrackerDB or { specs = {} }
         TrinketTrackerDB.specs = TrinketTrackerDB.specs or {}
-        -- Spec data not available until PLAYER_ENTERING_WORLD; wait.
 
     elseif event == "PLAYER_ENTERING_WORLD" then
         local specID = GetCurrentSpecID()
@@ -322,10 +279,7 @@ eventFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 eventFrame:RegisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
 eventFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 
--- ============================================================
--- Public API for CombatCoach UI and other integrations
--- ============================================================
-
+-- Public API
 function TrinketTracker_Add(slotID, specID)
     local id = tonumber(slotID)
     if not id or id < 1 or id > 19 then return end
@@ -390,13 +344,12 @@ function TrinketTracker_List()
     if not found then print("|cFFFFFF00TrinketTracker: no slots tracked yet.|r") end
 end
 
--- Allow external UI to register a callback to be notified when the tracked
--- slots for the current spec change (add/remove/spec switch).
+-- Register a callback fired when tracked slots change.
 function TrinketTracker_RegisterChangeListener(fn)
     changeListeners[#changeListeners + 1] = fn
 end
 
--- Return an array of tracked slot entries for the given specID.
+-- Return an array of enabled slot entries for the given spec.
 function TrinketTracker_GetTrackedSlots(specID)
     local slots = GetSpecSlots(specID or currentSpecID or 0)
     local out = {}

@@ -6,7 +6,6 @@ local KILL_COMMAND_SPELL_ID = 34026
 local KILL_COMMAND_MAX_CHARGES = 1
 
 -- Wildfire Bomb (Survival Hunter) spell id
--- Max charges is 1 baseline; 2 with Guerrilla Tactics talent
 local WILDFIRE_BOMB_SPELL_ID = 259495
 
 local frame = CreateFrame("Frame")

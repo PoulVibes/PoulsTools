@@ -1,6 +1,5 @@
 -- OnUseTracker_Hunter.lua
 -- Beast Mastery Hunter module for OnUseTracker.
--- Registered with OnUseTracker_RegisterModule() so the main file can delegate to it.
 
 local ADDON_NAME = "On Use Tracker"
 

@@ -2,14 +2,10 @@ local ADDON_NAME = "CombatCoach_EnemyCountTracker"
 
 EnemyCountTrackerDB = EnemyCountTrackerDB or {}
 
--- Midnight SecretValue guard: issecretvalue is a Blizzard global in Midnight.
--- If it doesn't exist (older clients) treat everything as non-secret.
+-- Midnight SecretValue guard; treat everything as non-secret if issecretvalue is absent.
 local issecretvalue = issecretvalue or function() return false end
 
 local frame = CreateFrame("Frame")
--- trackedUnits: set of unit tokens (plain strings) currently counted.
--- Using unit tokens instead of GUIDs makes tracking SecretValue-safe —
--- UnitGUID() returns a SecretValue in Midnight and cannot be used as a table key.
 local trackedUnits = {}
 local enemyCount = 0
 local initialized = false

@@ -1,30 +1,8 @@
--- SpellGlowTracker.lua
--- Centered HUD proc icons using shmIcons for frame management.
---
--- Slots:
---   bok  : Blackout Kick       (glow event spell ID 100784)
---   sck  : Spinning Crane Kick (glow event spell ID 101546, Dance of Chi-Ji proc)
---   tod  : Touch of Death      (glow event spell ID 322109)
---   rwk  : Rushing Wind Kick   (glow event spell ID 107428 / RSK base)
---
--- Slash commands:
---   /sgt       -- show help
---   /shm lock  -- lock/unlock all shmIcons (move/resize)
---
--- Version: 0.1.8
--- Compatible with WoW API 12.0.1 (Midnight)
+-- SpellGlowTracker.lua: centered HUD proc icons managed via shmIcons.
 
-------------------------------------------------------------------------
--- Saved variables
--- shmIcons writes position/size back into each db entry in-place.
--- Schema per slot: { x, y, point, size, enabled, glow_enabled, spellID }
-------------------------------------------------------------------------
 SpellGlowTrackerDB = SpellGlowTrackerDB or ProcViewerDB or {}
 ProcViewerDB = SpellGlowTrackerDB
 
-------------------------------------------------------------------------
--- Constants
-------------------------------------------------------------------------
 local FOLDER_NAME       = "CombatCoach_SpellGlowTracker"
 local ADDON             = "Spell Glow Tracker"
 local VERSION           = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata("CombatCoach_SpellGlowTracker", "Version")) or "0.1.8"
@@ -39,9 +17,6 @@ local addonEnabled = false
 local lockCallbackRegistered = false
 local spellGlowTrackerInitialized = false
 
-------------------------------------------------------------------------
--- Global proc-active booleans (readable by other addons)
-------------------------------------------------------------------------
 _G["bok_proc_active"]  = false
 _G["docj_proc_active"] = false
 _G["tod_proc_active"]  = false

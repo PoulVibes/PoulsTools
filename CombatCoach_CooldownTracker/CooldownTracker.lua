@@ -1,15 +1,4 @@
--- ============================================================
--- CooldownTracker.lua  (WoW Midnight 12.0.1)
--- Tracks any ability cooldown by spell name, per specialization.
--- Delegates all icon/glow/snap/drag UI to shmIcons.
---
--- /cdt <ability name>       → add tracker (or remove if already tracked)
--- /cdt glow <ability name>  → toggle ready glow for that ability
--- /cdt lock                 → toggle lock/unlock all frames
--- /cdt reset <ability name> → reset that ability's frame to default pos/size
--- /cdt reset all            → reset all frames
--- /cdt list                 → list all tracked abilities
--- ============================================================
+-- CooldownTracker.lua: tracks ability cooldowns by spell name per spec; delegates UI to shmIcons.
 
 local FOLDER_NAME  = "CombatCoach_CooldownTracker"
 local ADDON_NAME   = "Cooldown Tracker"
@@ -35,20 +24,12 @@ end
 -- The spec ID we last loaded icons for
 local currentSpecID = nil
 
--- ============================================================
--- Spec helper
--- ============================================================
-
 local function GetCurrentSpecID()
     local specIndex = GetSpecialization()
     if not specIndex then return 0 end
     local specID = select(1, GetSpecializationInfo(specIndex))
     return specID or 0
 end
-
--- ============================================================
--- Saved variable helpers
--- ============================================================
 
 local function KeyFor(spellName)
     return spellName:lower():gsub("%s+", "_")
@@ -125,10 +106,6 @@ local function PlayReadySound(db)
     end
 end
 
--- ============================================================
--- Cooldown + icon update for one spell
--- ============================================================
-
 local function UpdateTracker(key, updateStacks)
     local entry = tracked[key]
     if not entry then return end
@@ -143,7 +120,6 @@ local function UpdateTracker(key, updateStacks)
     local chargeDuration = C_Spell.GetSpellChargeDuration(entry.spellID)
     local db             = GetSpecSpells(currentSpecID)[key]
 
-    -- ---- Cooldown sweep display ----
     if isChargeSpell then
         if durationObject and cdInfo and cdInfo.isActive then
             shmIcons:SetCooldown(ADDON_NAME, key, durationObject)
@@ -166,19 +142,14 @@ local function UpdateTracker(key, updateStacks)
         if updateStacks then shmIcons:SetStacks(ADDON_NAME, key, 0) end
     end
 
-    -- ---- Evaluate the 4 conditions ----
-    -- Condition 1: reactive (isEnabled is not a secret value)
     local condReactive = cdInfo and cdInfo.isEnabled == true
-    -- Condition 2: usable (secret bool — only used inside if/then)
     local condUsable = C_Spell.IsSpellUsable(entry.spellID)
-    -- Condition 3: has 1+ charges ready
     local condCharges = false
     if chargeInfo and not chargeInfo.isActive then
         condCharges = true
     elseif cdInfo and (not cdInfo.isActive or cdInfo.isOnGCD) then
         condCharges = true
     end
-    -- Condition 4: fully off cooldown / max charges
     local condOffCd = false
     if chargeInfo then
         if not chargeInfo.isActive then condOffCd = true end
@@ -186,8 +157,7 @@ local function UpdateTracker(key, updateStacks)
         condOffCd = true
     end
 
-    -- CondGate: returns true/false when any condition box is checked (AND logic),
-    -- or nil when no boxes are checked (caller uses default behaviour).
+-- Evaluates AND-gated conditions for glow/sound/show; returns nil when no boxes checked.
     local function CondGate(prefix)
         local anyChecked = db[prefix.."reactive"] or db[prefix.."usable"]
                         or db[prefix.."charges"]  or db[prefix.."offcd"]
@@ -197,7 +167,6 @@ local function UpdateTracker(key, updateStacks)
         if db[prefix.."offcd"]    and not condOffCd    then return false end
         if db[prefix.."usable"] then
             if condUsable then
-                -- usable condition met, continue
             else
                 return false
             end
@@ -412,11 +381,10 @@ ticker:Hide()
 local function RemoveTracker(key)
     shmIcons:Unregister(ADDON_NAME, key)
     tracked[key] = nil
-    warnedDormant[key] = nil  -- allow the dormant message again if re-added
+    warnedDormant[key] = nil
     local spells = GetSpecSpells(currentSpecID)
     if spells[key] then spells[key].enabled = false end
     EnsureTickerState()
-    -- notify UI listeners
     NotifyChangeListeners()
 end
 
@@ -427,7 +395,6 @@ local function UnloadSpec()
     end
     tracked = {}
     EnsureTickerState()
-    -- notify UI listeners that the tracked list changed (cleared)
     NotifyChangeListeners()
 end
 
@@ -444,7 +411,6 @@ local function LoadSpec(specID)
     shmIcons:RestoreSnapGroups()
     UpdateAllTrackers()
     EnsureTickerState()
-    -- Notify listeners so UI (CombatCoach) can refresh when specialization changes
     NotifyChangeListeners()
 end
 
@@ -539,16 +505,11 @@ SlashCmdList["COOLDOWNTRACKER"] = function(msg)
     CooldownTracker_HandleCommand(msg)
 end
 
--- ============================================================
--- Event Handling
--- ============================================================
-
 local eventFrame = CreateFrame("Frame")
 eventFrame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == FOLDER_NAME then
         CooldownTrackerDB = CooldownTrackerDB or { specs = {} }
         CooldownTrackerDB.specs = CooldownTrackerDB.specs or {}
-        -- Spec data not available until PLAYER_ENTERING_WORLD; wait.
 
     elseif event == "PLAYER_ENTERING_WORLD" then
         local specID = GetCurrentSpecID()
@@ -562,8 +523,6 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
         LoadSpec(GetCurrentSpecID())
 
     elseif event == "TRAIT_CONFIG_UPDATED" then
-        -- Fires when the player commits talent changes. Try to activate any
-        -- dormant trackers whose spell is now in the talent loadout.
         TryRemapDormant()
 
     elseif event == "SPELL_UPDATE_COOLDOWN" then

@@ -1,6 +1,5 @@
 -- CombatCoach_Menu.lua
--- Handles the Settings panel registration and submenu system
--- WoW API: 12.0.1 (The War Within) - Uses Settings API
+-- Settings panel registration and submenu system.
 
 CombatCoach = CombatCoach or {}
 CombatCoach.Menu = CombatCoach.Menu or {}
@@ -13,21 +12,7 @@ Menu.mainPanelContentFns    = {}    -- fns injected inline onto the main panel
 Menu.mainPanelExtraFrames   = {}    -- frames built by those fns (rebuilt on refresh)
 Menu.mainPanelContentPending = false
 
--- ============================================================
--- Public API: Register a sub-addon into CombatCoach
---
--- Usage (from your other addon):
---   CombatCoach.Menu:RegisterAddon({
---       name    = "MyAddon",          -- Display name
---       id      = "MyAddon",          -- Unique ID (usually addon folder name)
---       icon    = "Interface\\Icons\\INV_Misc_Gear_01",  -- optional
---       desc    = "Short description",
---       version = "1.0.0",            -- optional
---       OnBuildUI = function(parent)  -- Called to populate the submenu panel
---           -- Add your widgets to `parent` here
---       end,
---   })
--- ============================================================
+-- Registers a sub-addon into CombatCoach.
 function Menu:RegisterAddon(info)
     assert(type(info) == "table", "CombatCoach.Menu:RegisterAddon - info must be a table")
     assert(type(info.id) == "string" and info.id ~= "", "CombatCoach.Menu:RegisterAddon - info.id is required")
@@ -46,10 +31,7 @@ function Menu:RegisterAddon(info)
     end
 end
 
--- ============================================================
--- Public API: Register content to appear inline on the main panel
--- fn(parent) will be called with a frame inside the main scroll area
--- ============================================================
+-- Registers content to appear inline on the main panel.
 function Menu:RegisterMainPanelContent(fn)
     assert(type(fn) == "function", "CombatCoach.Menu:RegisterMainPanelContent - fn must be a function")
     table.insert(self.mainPanelContentFns, fn)
@@ -58,26 +40,20 @@ function Menu:RegisterMainPanelContent(fn)
     end
 end
 
--- ============================================================
--- Build the main CombatCoach Settings panel
--- ============================================================
+-- Builds the main CombatCoach Settings panel.
 function Menu:BuildSettingsPanel()
-    -- Create the main content frame (shown in the right pane)
     local mainPanel = self:CreateMainPanel()
 
-    -- Register main category with the Settings API
     local category, layout = Settings.RegisterCanvasLayoutCategory(mainPanel, "CombatCoach")
     Settings.RegisterAddOnCategory(category)
     self.mainCategory = category
 
-    -- First pass: addons without a parentId (register directly under CombatCoach)
     for id, info in pairs(self.registry) do
         if not info.parentId then
             self:AddSubcategory(info)
         end
     end
 
-    -- Second pass: addons that nest under another registered addon
     for id, info in pairs(self.registry) do
         if info.parentId then
             self:AddSubcategory(info)
@@ -85,9 +61,7 @@ function Menu:BuildSettingsPanel()
     end
 end
 
--- ============================================================
--- Create the main panel canvas
--- ============================================================
+-- Creates the main panel canvas frame.
 function Menu:CreateMainPanel()
     local frame = CreateFrame("Frame")
     frame.name = "CombatCoach"
@@ -98,31 +72,26 @@ function Menu:CreateMainPanel()
     banner:SetSize(580, 80)
     banner:SetColorTexture(0.04, 0.08, 0.15, 0.85)
 
-    -- Decorative accent line
     local accentLine = frame:CreateTexture(nil, "OVERLAY")
     accentLine:SetPoint("BOTTOMLEFT", banner, "BOTTOMLEFT", 0, 0)
     accentLine:SetSize(580, 2)
     accentLine:SetColorTexture(0.0, 0.8, 1.0, 1.0)
 
-    -- Title text
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", banner, "TOPLEFT", 16, -16)
     title:SetText("|cFF00CCFFCombat|r|cFFFFFFFFCoach|r")
     title:SetFont("Fonts\\FRIZQT__.TTF", 22, "OUTLINE")
 
-    -- Subtitle
     local subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
     subtitle:SetText("Addon Management Hub")
     subtitle:SetTextColor(0.6, 0.85, 1.0, 1.0)
 
-    -- Version label (top right)
     local version = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     version:SetPoint("TOPRIGHT", banner, "TOPRIGHT", -16, -16)
     version:SetText("v" .. (CC.version or "1.0.0"))
     version:SetTextColor(0.5, 0.6, 0.7, 1.0)
 
-    -- Description area
     local descBg = frame:CreateTexture(nil, "BACKGROUND")
     descBg:SetPoint("TOPLEFT", banner, "BOTTOMLEFT", 0, -12)
     descBg:SetSize(580, 55)
@@ -138,13 +107,11 @@ function Menu:CreateMainPanel()
     )
     desc:SetTextColor(0.85, 0.90, 0.95, 1.0)
 
-    -- Divider
     local divider = frame:CreateTexture(nil, "OVERLAY")
     divider:SetPoint("TOPLEFT", descBg, "BOTTOMLEFT", 0, -12)
     divider:SetSize(580, 1)
     divider:SetColorTexture(0.15, 0.25, 0.35, 0.8)
 
-    -- Scroll frame containing the addon list and any inline panel content
     local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -8)
     scroll:SetSize(580, 420)
@@ -155,19 +122,16 @@ function Menu:CreateMainPanel()
     contentFrame:SetPoint("TOPLEFT", scroll, "TOPLEFT", 0, 0)
     scroll:SetScrollChild(contentFrame)
 
-    -- Registered addons section header (inside scroll content)
     local sectionHeader = contentFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     sectionHeader:SetPoint("TOPLEFT", contentFrame, "TOPLEFT", 0, -8)
     sectionHeader:SetText("REGISTERED SUB-ADDONS")
     sectionHeader:SetTextColor(0.4, 0.6, 0.8, 1.0)
     sectionHeader:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
 
-    -- Dynamic addon list (populated at runtime)
     self.addonListFrame = contentFrame
     self.addonEntries = {}
     self.addonListAnchor = sectionHeader
 
-    -- Footer (pinned below the scroll frame)
     local footer = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     footer:SetPoint("TOPLEFT", scroll, "BOTTOMLEFT", 0, -8)
     footer:SetText("Use |cFFFFFF00/coach|r to open this panel quickly.")
@@ -176,20 +140,16 @@ function Menu:CreateMainPanel()
     return frame
 end
 
--- ============================================================
--- Refresh the addon list displayed on the main panel
--- ============================================================
+-- Refreshes the addon list displayed on the main panel.
 function Menu:RefreshAddonList()
     if not self.addonListFrame then return end
 
-    -- Clear old entries
     for _, entry in ipairs(self.addonEntries) do
         entry:Hide()
         entry:SetParent(nil)
     end
     self.addonEntries = {}
 
-    -- Build ordered list: top-level addons (sorted by name), each followed by their children
     local topLevel = {}
     for id, info in pairs(self.registry) do
         if not info.parentId then
@@ -237,26 +197,19 @@ function Menu:RefreshAddonList()
         end
     end
 
-    -- Schedule a deferred refresh of inline main-panel content.
-    -- Using C_Timer.After(0) coalesces multiple rapid calls into one rebuild,
-    -- which prevents duplicate change-listener registrations.
-    if not self.mainPanelContentPending then
-        self.mainPanelContentPending = true
-        C_Timer.After(0, function()
-            self.mainPanelContentPending = false
-            self:RefreshMainPanelContent()
-        end)
-    end
+        if not self.mainPanelContentPending then
+            self.mainPanelContentPending = true
+            C_Timer.After(0, function()
+                self.mainPanelContentPending = false
+                self:RefreshMainPanelContent()
+            end)
+        end
 end
 
--- ============================================================
--- Rebuild inline content (registered via RegisterMainPanelContent)
--- below the addon list on the main panel.
--- ============================================================
+-- Rebuilds inline content registered via RegisterMainPanelContent.
 function Menu:RefreshMainPanelContent()
     if not self.addonListFrame then return end
 
-    -- Destroy previously built extra-content frames
     for _, ef in ipairs(self.mainPanelExtraFrames) do
         ef:Hide()
         ef:SetParent(nil)
@@ -265,7 +218,6 @@ function Menu:RefreshMainPanelContent()
 
     if #self.mainPanelContentFns == 0 then return end
 
-    -- Anchor below the last addon entry, or below the section header if list is empty
     local lastEntry = self.addonEntries[#self.addonEntries]
     local extraAnchor = lastEntry or self.addonListAnchor
 
@@ -285,16 +237,12 @@ function Menu:RefreshMainPanelContent()
     end
 end
 
--- ============================================================
--- Create a single row entry for the main panel addon list
--- isChild: if true, indent icon/text and use a dimmer background
--- ============================================================
+-- Creates a single row entry for the main panel addon list.
 function Menu:CreateAddonListRow(parent, info, index, isChild)
     local row = CreateFrame("Button", nil, parent)
     local indent = isChild and 20 or 0
     row:SetSize(560, 28)
 
-    -- Row background
     local bg = row:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
     if isChild then
@@ -305,12 +253,10 @@ function Menu:CreateAddonListRow(parent, info, index, isChild)
         bg:SetColorTexture(0.04, 0.07, 0.12, 0.3)
     end
 
-    -- Highlight on hover
     local hl = row:CreateTexture(nil, "HIGHLIGHT")
     hl:SetAllPoints()
     hl:SetColorTexture(0.0, 0.6, 1.0, 0.15)
 
-    -- Indent connector bar for child rows
     if isChild then
         local connector = row:CreateTexture(nil, "OVERLAY")
         connector:SetPoint("LEFT", row, "LEFT", indent - 10, 0)
@@ -318,7 +264,6 @@ function Menu:CreateAddonListRow(parent, info, index, isChild)
         connector:SetColorTexture(0.2, 0.5, 0.8, 0.5)
     end
 
-    -- Icon (if provided)
     local xOffset = 8 + indent
     if info.icon then
         local icon = row:CreateTexture(nil, "ARTWORK")
@@ -328,7 +273,6 @@ function Menu:CreateAddonListRow(parent, info, index, isChild)
         xOffset = xOffset + 26
     end
 
-    -- Name
     local nameLabel = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     nameLabel:SetPoint("LEFT", row, "LEFT", xOffset, 0)
     nameLabel:SetText(info.name)
@@ -338,7 +282,6 @@ function Menu:CreateAddonListRow(parent, info, index, isChild)
         nameLabel:SetTextColor(0.9, 0.95, 1.0, 1.0)
     end
 
-    -- Version (if provided)
     if info.version then
         local verLabel = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         verLabel:SetPoint("LEFT", nameLabel, "RIGHT", 8, 0)
@@ -346,7 +289,6 @@ function Menu:CreateAddonListRow(parent, info, index, isChild)
         verLabel:SetTextColor(0.4, 0.55, 0.7, 1.0)
     end
 
-    -- Description (if provided)
     if info.desc then
         local descLabel = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         descLabel:SetPoint("RIGHT", row, "RIGHT", -8, 0)
@@ -356,7 +298,6 @@ function Menu:CreateAddonListRow(parent, info, index, isChild)
         descLabel:SetJustifyH("RIGHT")
     end
 
-    -- Click to open submenu
     row:SetScript("OnClick", function()
         if InCombatLockdown() then
             print("|cFFFF4444CombatCoach:|r Cannot open settings during combat.")
@@ -371,9 +312,7 @@ function Menu:CreateAddonListRow(parent, info, index, isChild)
     return row
 end
 
--- ============================================================
--- Add a subcategory (submenu) for a registered addon
--- ============================================================
+-- Adds a subcategory (submenu) for a registered addon.
 function Menu:AddSubcategory(info)
     -- Create the sub-panel canvas
     local subPanel = self:CreateSubPanel(info)
@@ -440,7 +379,6 @@ function Menu:CreateSubPanel(info)
     title:SetText("|cFF00CCFF" .. info.name .. "|r")
     title:SetFont("Fonts\\FRIZQT__.TTF", 16, "OUTLINE")
 
-    -- Version
     if info.version then
         local ver = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         ver:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -2)
@@ -448,7 +386,6 @@ function Menu:CreateSubPanel(info)
         ver:SetTextColor(0.5, 0.65, 0.8, 1.0)
     end
 
-    -- Description below header
     if info.desc then
         local descBg = frame:CreateTexture(nil, "BACKGROUND")
         descBg:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -8)
@@ -463,19 +400,16 @@ function Menu:CreateSubPanel(info)
         descText:SetTextColor(0.75, 0.85, 0.95, 1.0)
     end
 
-    -- Content area — create a scrollframe so addon content is clipped
     local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -120)
     scroll:SetSize(580, 460)
     scroll:SetClipsChildren(true)
 
     local contentFrame = CreateFrame("Frame", nil, scroll)
-    -- width slightly smaller than scroll to account for the scrollbar
     contentFrame:SetSize(560, 1000)
     contentFrame:SetPoint("TOPLEFT", scroll, "TOPLEFT", 0, 0)
     scroll:SetScrollChild(contentFrame)
 
-    -- Collect direct children of this addon (already in registry at PLAYER_LOGIN)
     local children = {}
     for id, reg in pairs(self.registry) do
         if reg.parentId == info.id then
@@ -484,7 +418,6 @@ function Menu:CreateSubPanel(info)
     end
     table.sort(children, function(a, b) return a.name < b.name end)
 
-    -- If this addon has children, inject a sub-addons list at the top of the scroll content
     local onBuildUIParent = contentFrame
     if #children > 0 then
         local childLabel = contentFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -505,20 +438,17 @@ function Menu:CreateSubPanel(info)
             prevAnchor = row
         end
 
-        -- Divider between child list and addon's own settings
         local dividerLine = contentFrame:CreateTexture(nil, "OVERLAY")
         dividerLine:SetPoint("TOPLEFT", prevAnchor, "BOTTOMLEFT", 0, -12)
         dividerLine:SetSize(540, 1)
         dividerLine:SetColorTexture(0.1, 0.2, 0.3, 0.5)
 
-        -- Inner frame below the child list; passed as parent to OnBuildUI
         local innerFrame = CreateFrame("Frame", nil, contentFrame)
         innerFrame:SetPoint("TOPLEFT", dividerLine, "BOTTOMLEFT", 0, -8)
         innerFrame:SetSize(560, 900)
         onBuildUIParent = innerFrame
     end
 
-    -- Call the addon's UI builder
     if info.OnBuildUI then
         local ok, err = pcall(info.OnBuildUI, onBuildUIParent)
         if not ok then
