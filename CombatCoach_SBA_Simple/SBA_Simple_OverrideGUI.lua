@@ -80,7 +80,13 @@ local BuildPluginSummary
 local COND_TYPES = {
     -- Spell-based checks (needsSpell = true → picker shows This Spell / Other Spell toggle)
     { id = "on_cd",        label = "Ready (Off-Cooldown)",        shortLabel = "Ready",   needsSpell = true,
-      generate = function(c, s) local id = ResolveSpell(c,s) return ("(not C_Spell.GetSpellCooldown(%d).isActive or C_Spell.GetSpellCooldown(%d).isOnGCD)"):format(id, id) end },
+      generate = function(c, s, rule)
+          if (not c.spell or c.spell == "this") and rule and rule.itemID then
+              return ("(select(2, C_Item.GetItemCooldown(%d)) == 0)"):format(rule.itemID)
+          end
+          local id = ResolveSpell(c, s)
+          return ("(not C_Spell.GetSpellCooldown(%d).isActive or C_Spell.GetSpellCooldown(%d).isOnGCD)"):format(id, id)
+      end },
     { id = "reactive_enabled", label = "Reactive Spell Enabled",  shortLabel = "Enabled", needsSpell = true,
       generate = function(c, s) return ("C_Spell.GetSpellCooldown(%d).isEnabled"):format(ResolveSpell(c,s)) end },
     { id = "usable",       label = "Is Usable",                  shortLabel = "Usable",  needsSpell = true,
@@ -559,7 +565,7 @@ local function DeepCopyRules(src)
                 rparen   = c.rparen,
             }
         end
-        out[i] = { spellID = r.spellID, name = r.name, conditions = conds }
+        out[i] = { spellID = r.spellID, name = r.name, conditions = conds, itemID = r.itemID }
     end
     return out
 end
@@ -1240,7 +1246,7 @@ local function GenerateCode(rules)
             for ci, cond in ipairs(rule.conditions or {}) do
                 local def = COND_BY_ID[cond.type]
                 if def then
-                    local frag = def.generate(cond, rule.spellID)
+                    local frag = def.generate(cond, rule.spellID, rule)
                     if cond.negate then frag = "not (" .. frag .. ")" end
                     local lp = (cond.lparen or 0) > 0 and string.rep("(", cond.lparen) or ""
                     local rp = (cond.rparen or 0) > 0 and string.rep(")", cond.rparen) or ""
@@ -2034,7 +2040,16 @@ local function UpdateRowFrame(f, idx, rule)
     local info = rule.spellID and C_Spell and C_Spell.GetSpellInfo
                  and C_Spell.GetSpellInfo(rule.spellID)
     local iconID  = info and info.originalIconID
+    -- For item-sourced rules, prefer the item's own icon
+    if rule.itemID then
+        local itemIcon = C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(rule.itemID)
+        if itemIcon then iconID = itemIcon end
+    end
     local dispName = (info and info.name) or rule.name or "Unknown"
+    -- For item-sourced rules use the stored item name
+    if rule.itemID and rule.name then
+        dispName = rule.name
+    end
     f.iconTex:SetTexture(iconID or "Interface\\Icons\\INV_Misc_QuestionMark")
     f.nameLabel:SetText(dispName)
     f.nameLabel:SetWidth(math.max(120, leftW - 186))
@@ -2917,6 +2932,20 @@ local function CreateCondInputArea(parent)
         f:SetHeight(h)
     end
 
+    -- Whether the currently-edited rule is an item rule (has itemID set).
+    local isItemRule = false
+    -- Condition types where "This Spell" is meaningless for item rules.
+    local ITEM_DISABLED_THIS = {
+        reactive_enabled = true,
+        usable           = true,
+        talented         = true,
+        sba_suggests     = true,
+        last_ability_eq  = true,
+    }
+
+    -- Forward-declare so SetSpellSel can reference it before the definition.
+    local ApplyItemModeToSpellToggle
+
     local function SetSpellSel(mode)
         spellSel = mode
         if mode == "this" then
@@ -2929,6 +2958,33 @@ local function CreateCondInputArea(parent)
             thisBtn:GetFontString():SetTextColor(0.65, 0.65, 0.65, 1)
         end
         UpdateLayout()
+    end
+
+    -- Update thisBtn label and enabled/disabled state based on item mode + selType.
+    ApplyItemModeToSpellToggle = function()
+        if not selType or not selType.needsSpell then return end
+        if isItemRule then
+            if selType.id == "on_cd" then
+                thisBtn:SetText("This Item")
+                thisBtn:Enable()
+            elseif ITEM_DISABLED_THIS[selType.id] then
+                thisBtn:SetText("This Spell")
+                thisBtn:Disable()
+                -- Force to "Other Spell" — "This Spell" has no meaning for items here.
+                if spellSel == "this" then SetSpellSel("other") end
+            else
+                thisBtn:SetText("This Spell")
+                thisBtn:Enable()
+            end
+        else
+            thisBtn:Enable()
+            thisBtn:SetText("This Spell")
+            if selType.id == "talented" then
+                otherBtn:SetText("Other Spell / Talent")
+            else
+                otherBtn:SetText("Other Spell")
+            end
+        end
     end
 
     thisBtn:SetScript("OnClick",  function() SetSpellSel("this")  end)
@@ -2960,6 +3016,7 @@ local function CreateCondInputArea(parent)
                     otherBtn:SetText("Other Spell")
                 end
                 SetSpellSel("this")
+                ApplyItemModeToSpellToggle()
             end
             if ct.needsResource then
                 resourceFrame:Show()
@@ -3030,6 +3087,11 @@ local function CreateCondInputArea(parent)
     end
     f.RefreshSize     = RefreshSize
 
+    f.SetItemMode = function(isItem)
+        isItemRule = isItem and true or false
+        ApplyItemModeToSpellToggle()
+    end
+
     -- Update the secondary-resource button label to match the spec now being edited.
     -- Call whenever editSpecID changes (e.g. from OpenGUI).
     f.RefreshSpec = function()
@@ -3093,6 +3155,7 @@ local function CreateCondInputArea(parent)
                 end
                 SetSpellSel("other")
             end
+            ApplyItemModeToSpellToggle()
         end
         if ct.needsResource then
             resourceFrame:Show()
@@ -3618,6 +3681,8 @@ RefreshRightPanel = function()
         else
             condInputArea.Reset()
         end
+        local _activeRule = workingRules[selectedIdx]
+        condInputArea.SetItemMode(_activeRule and _activeRule.itemID ~= nil)
         condInputArea:Show()
     else
         if condInputArea then condInputArea:Hide() end
@@ -3637,7 +3702,7 @@ end
 --                              row inserts the spell BEFORE that rule;
 --                              releasing over the empty list area appends it.
 -------------------------------------------------------------------------------
-local sbasDrag = { active = false, spellID = nil, spellName = nil }
+local sbasDrag = { active = false, spellID = nil, spellName = nil, itemID = nil }
 -- Assign into the forward-declared upvalues so CreateRowFrame closures can see them
 ruleDrag      = { active = false, fromIdx = nil, pending = false, pendingX = 0, pendingY = 0 }
 condDrag      = { active = false, pending = false, fromIdx = nil, pendingX = 0, pendingY = 0, toSlot = nil }
@@ -3890,6 +3955,56 @@ end
 -- Expose for other modules (e.g. CooldownTracker spell picker)
 SBAS_GetClassSpells = GetClassSpells
 
+-------------------------------------------------------------------------------
+-- 10c. GetBagItems – scans bag and equipped slots for usable items
+-------------------------------------------------------------------------------
+local function GetBagItems()
+    local items, seen = {}, {}
+
+    -- Bags 0–4
+    for bag = 0, 4 do
+        local numSlots = C_Container and C_Container.GetContainerNumSlots(bag) or 0
+        for slot = 1, numSlots do
+            local info = C_Container.GetContainerItemInfo(bag, slot)
+            if info and info.itemID and not seen[info.itemID] then
+                local itemName = C_Item and C_Item.GetItemInfo and C_Item.GetItemInfo(info.itemID)
+                local spellName, spellID = GetItemSpell(info.itemID)
+                if spellID and itemName then
+                    seen[info.itemID] = true
+                    items[#items + 1] = {
+                        name    = itemName,
+                        itemID  = info.itemID,
+                        spellID = spellID,
+                        texture = info.iconFileID or "Interface\\Icons\\INV_Misc_QuestionMark",
+                    }
+                end
+            end
+        end
+    end
+
+    -- Equipped slots 1–19
+    for slotID = 1, 19 do
+        local itemID = GetInventoryItemID("player", slotID)
+        if itemID and not seen[itemID] then
+            local itemName = C_Item and C_Item.GetItemInfo and C_Item.GetItemInfo(itemID)
+            local spellName, spellID = GetItemSpell(itemID)
+            if spellID and itemName then
+                seen[itemID] = true
+                local tex = GetInventoryItemTexture("player", slotID)
+                items[#items + 1] = {
+                    name    = itemName,
+                    itemID  = itemID,
+                    spellID = spellID,
+                    texture = tex or "Interface\\Icons\\INV_Misc_QuestionMark",
+                }
+            end
+        end
+    end
+
+    table.sort(items, function(a, b) return a.name < b.name end)
+    return items
+end
+
 EnsureDragIcon = function()
     if dragIconFrame then return end
     dragIconFrame = CreateFrame("Frame", "SBAS_SpellDragIcon", UIParent)
@@ -4034,13 +4149,14 @@ EnsureDragCatcher = function()
         end
 
         if insertIdx then
-            local id   = sbasDrag.spellID
-            local name = sbasDrag.spellName
+            local id     = sbasDrag.spellID
+            local name   = sbasDrag.spellName
+            local iID    = sbasDrag.itemID
             if insertIdx > #workingRules then
-                workingRules[#workingRules + 1] = { spellID = id, name = name, conditions = {} }
+                workingRules[#workingRules + 1] = { spellID = id, name = name, conditions = {}, itemID = iID }
                 selectedIdx = #workingRules
             else
-                table.insert(workingRules, insertIdx, { spellID = id, name = name, conditions = {} })
+                table.insert(workingRules, insertIdx, { spellID = id, name = name, conditions = {}, itemID = iID })
                 selectedIdx = insertIdx
             end
             isAddingCond = false
@@ -4050,6 +4166,7 @@ EnsureDragCatcher = function()
 
         sbasDrag.spellID   = nil
         sbasDrag.spellName = nil
+        sbasDrag.itemID    = nil
     end
 
     -- Highlight row under cursor while dragging
@@ -4570,7 +4687,261 @@ local function CreateSpellbookPanel(f, leftSF)
 end
 
 -------------------------------------------------------------------------------
--- 11c. Tab management helpers
+-- 11b. CreateBagPanel – slide-out flyout showing usable bag / equipped items
+-------------------------------------------------------------------------------
+local function CreateBagPanel(f, leftSF)
+    EnsureDragIcon()
+    EnsureDragCatcher()
+
+    local PANEL_W  = 264
+    local TAB_W, TAB_H = 54, 56
+
+    local panel = CreateFrame("Frame", "SBAS_BagPanel", f, "BackdropTemplate")
+    panel:SetSize(PANEL_W, f:GetHeight())
+    panel:SetPoint("TOPRIGHT", f, "TOPLEFT", -1, 0)
+    panel:SetFrameLevel(f:GetFrameLevel() + 1)
+    panel:Hide()
+    SetBD(panel, 0.04, 0.08, 0.06, 0.97, 0.20, 0.52, 0.34)
+
+    -- ── Tab button (parented to panel, flies with it) ─────────────────────
+    local tabBtn = CreateFrame("Button", nil, panel, "BackdropTemplate")
+    tabBtn:SetSize(TAB_W, TAB_H)
+    tabBtn:SetFrameLevel(panel:GetFrameLevel() + 2)
+    tabBtn:SetPoint("TOPRIGHT", panel, "TOPLEFT", 0, -14)
+    SetBD(tabBtn, 0.05, 0.10, 0.07, 0.95, 0.20, 0.52, 0.34)
+
+    local tabIcon = tabBtn:CreateTexture(nil, "ARTWORK")
+    tabIcon:SetSize(28, 28)
+    tabIcon:SetPoint("TOP", tabBtn, "TOP", 0, -5)
+    tabIcon:SetTexture("Interface\\Icons\\INV_Misc_Bag_07")
+    tabIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+    local tabLbl = tabBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    tabLbl:SetPoint("BOTTOM", tabBtn, "BOTTOM", 0, 6)
+    tabLbl:SetJustifyH("CENTER")
+    tabLbl:SetText("Items")
+    tabLbl:SetTextColor(0.55, 1, 0.70, 1)
+
+    tabBtn:SetScript("OnEnter", function()
+        tabIcon:SetVertexColor(0.4, 1, 0.6, 1)
+        tabLbl:SetTextColor(0.4, 1, 0.6, 1)
+        GameTooltip:SetOwner(tabBtn, "ANCHOR_LEFT")
+        GameTooltip:SetText("Bag Items")
+        GameTooltip:AddLine("Click to add  ·  Drag to insert at position", 0.7, 1, 0.8, true)
+        GameTooltip:Show()
+    end)
+    tabBtn:SetScript("OnLeave", function()
+        tabIcon:SetVertexColor(1, 1, 1, 1)
+        tabLbl:SetTextColor(0.55, 1, 0.70, 1)
+        GameTooltip:Hide()
+    end)
+
+    -- ── Stub button (parented to main frame, shown when panel is closed) ──
+    -- Positioned directly below the Spells stub
+    local stubBtn = CreateFrame("Button", nil, f, "BackdropTemplate")
+    stubBtn:SetSize(TAB_W, TAB_H)
+    stubBtn:SetFrameLevel(f:GetFrameLevel() + 3)
+    stubBtn:SetPoint("TOPLEFT", f, "TOPLEFT", -TAB_W, -(14 + TAB_H + 4))
+    SetBD(stubBtn, 0.05, 0.10, 0.07, 0.95, 0.20, 0.52, 0.34)
+
+    local stubIcon = stubBtn:CreateTexture(nil, "ARTWORK")
+    stubIcon:SetSize(28, 28)
+    stubIcon:SetPoint("TOP", stubBtn, "TOP", 0, -5)
+    stubIcon:SetTexture("Interface\\Icons\\INV_Misc_Bag_07")
+    stubIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+    local stubLbl = stubBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    stubLbl:SetPoint("BOTTOM", stubBtn, "BOTTOM", 0, 6)
+    stubLbl:SetJustifyH("CENTER")
+    stubLbl:SetText("Items")
+    stubLbl:SetTextColor(0.55, 1, 0.70, 1)
+
+    stubBtn:SetScript("OnEnter", function()
+        stubIcon:SetVertexColor(0.4, 1, 0.6, 1)
+        stubLbl:SetTextColor(0.4, 1, 0.6, 1)
+        GameTooltip:SetOwner(stubBtn, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Bag Items")
+        GameTooltip:AddLine("Click to add  ·  Drag to insert at position", 0.7, 1, 0.8, true)
+        GameTooltip:Show()
+    end)
+    stubBtn:SetScript("OnLeave", function()
+        stubIcon:SetVertexColor(1, 1, 1, 1)
+        stubLbl:SetTextColor(0.55, 1, 0.70, 1)
+        GameTooltip:Hide()
+    end)
+
+    -- ── Panel header ──────────────────────────────────────────────────────
+    local phdr = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    phdr:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -12)
+    phdr:SetText("Bag Items")
+    phdr:SetTextColor(0.38, 1, 0.60, 1)
+
+    local hintLbl = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    hintLbl:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -34)
+    hintLbl:SetSize(PANEL_W - 16, 24)
+    hintLbl:SetJustifyH("LEFT")
+    hintLbl:SetText("Click to add  ·  Drag to insert at position")
+    hintLbl:SetTextColor(0.40, 0.72, 0.52, 1)
+
+    -- ── Scroll frame ──────────────────────────────────────────────────────
+    local panelSF = CreateFrame("ScrollFrame", nil, panel)
+    panelSF:SetPoint("TOPLEFT",     panel, "TOPLEFT",     4, -64)
+    panelSF:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -4,  4)
+    panelSF:EnableMouseWheel(true)
+    panelSF:SetScript("OnMouseWheel", function(self, d)
+        local v = self:GetVerticalScroll()
+        local m = self:GetVerticalScrollRange()
+        self:SetVerticalScroll(math.min(math.max(v - d * 28, 0), m))
+    end)
+
+    local panelContent = CreateFrame("Frame", nil, panelSF)
+    panelContent:SetSize(PANEL_W - 8, 100)
+    panelSF:SetScrollChild(panelContent)
+
+    local itemRowPool  = {}
+    local currentItems = {}
+    local ITEM_ROW_H   = 30
+
+    local function CreateItemEntry(parent)
+        local row = CreateFrame("Button", nil, parent)
+        row:SetSize(PANEL_W - 8, ITEM_ROW_H - 2)
+        row:EnableMouse(true)
+        row:RegisterForDrag("LeftButton")
+        row:RegisterForClicks("LeftButtonUp")
+
+        local bg = row:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        bg:SetColorTexture(0, 0, 0, 0)
+        row._bg = bg
+
+        local iconBg = row:CreateTexture(nil, "BACKGROUND")
+        iconBg:SetSize(24, 24)
+        iconBg:SetPoint("LEFT", row, "LEFT", 4, 0)
+        iconBg:SetColorTexture(0, 0, 0, 0.45)
+
+        local iconTex = row:CreateTexture(nil, "ARTWORK")
+        iconTex:SetSize(22, 22)
+        iconTex:SetPoint("CENTER", iconBg, "CENTER")
+        iconTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        row._icon = iconTex
+
+        local nameLbl = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        nameLbl:SetPoint("LEFT",  iconBg, "RIGHT", 6, 0)
+        nameLbl:SetPoint("RIGHT", row,    "RIGHT", -4, 0)
+        nameLbl:SetJustifyH("LEFT")
+        nameLbl:SetTextColor(0.75, 1, 0.82, 1)
+        row._nameLbl = nameLbl
+
+        row:SetScript("OnEnter", function(self)
+            self._bg:SetColorTexture(0.10, 0.30, 0.18, 0.70)
+            if self._itemID then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetItemByID(self._itemID)
+                GameTooltip:Show()
+            end
+        end)
+        row:SetScript("OnLeave", function(self)
+            self._bg:SetColorTexture(0, 0, 0, 0)
+            GameTooltip:Hide()
+        end)
+
+        -- Left-click: append to end of priority list
+        row:SetScript("OnClick", function(self)
+            if not self._spellID then return end
+            workingRules[#workingRules + 1] = {
+                spellID    = self._spellID,
+                name       = self._itemName,
+                conditions = {},
+                itemID     = self._itemID,
+            }
+            selectedIdx  = #workingRules
+            isAddingCond = false
+            RefreshRuleList()
+            RefreshRightPanel()
+        end)
+
+        -- Left-drag: drag to a specific position in the priority list
+        row:SetScript("OnDragStart", function(self)
+            if not self._spellID then return end
+            sbasDrag.active    = true
+            sbasDrag.spellID   = self._spellID
+            sbasDrag.spellName = self._itemName
+            sbasDrag.itemID    = self._itemID
+            dragIconFrame._tex:SetTexture(self._icon:GetTexture())
+            dragIconFrame:Show()
+            dragCatcher:Show()
+        end)
+
+        return row
+    end
+
+    local function PopulateBagPanel()
+        local shown = 0
+        for _, item in ipairs(currentItems) do
+            shown = shown + 1
+            if not itemRowPool[shown] then
+                itemRowPool[shown] = CreateItemEntry(panelContent)
+            end
+            local row = itemRowPool[shown]
+            row._spellID  = item.spellID
+            row._itemID   = item.itemID
+            row._itemName = item.name
+            row._icon:SetTexture(item.texture)
+            row._nameLbl:SetText(item.name)
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", panelContent, "TOPLEFT", 0, -(shown - 1) * ITEM_ROW_H)
+            row:Show()
+        end
+        for i = shown + 1, #itemRowPool do
+            if itemRowPool[i] then itemRowPool[i]:Hide() end
+        end
+        panelContent:SetHeight(math.max(shown * ITEM_ROW_H + 4, 100))
+    end
+
+    local function RefreshBagPanel()
+        currentItems = GetBagItems()
+        PopulateBagPanel()
+    end
+    f._refreshBagPanel = RefreshBagPanel
+
+    local function OpenBagPanel()
+        RefreshBagPanel()
+        stubBtn:Hide()
+        panel:Show()
+    end
+
+    local function CloseBagPanel()
+        panel:Hide()
+        stubBtn:Show()
+    end
+
+    tabBtn:SetScript("OnClick",  function() CloseBagPanel() end)
+    stubBtn:SetScript("OnClick", function() OpenBagPanel()  end)
+
+    stubBtn:Show()
+
+    f:HookScript("OnSizeChanged", function(self)
+        panel:SetHeight(self:GetHeight())
+    end)
+
+    -- ── Rebuild on bag / equipment changes ────────────────────────────────
+    local eventFrame = CreateFrame("Frame")
+    eventFrame:RegisterEvent("BAG_UPDATE")
+    eventFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+    eventFrame:SetScript("OnEvent", function()
+        if panel:IsShown() then
+            RefreshBagPanel()
+        else
+            currentItems = nil
+        end
+    end)
+
+    panel:HookScript("OnShow", function()
+        if currentItems == nil then
+            RefreshBagPanel()
+        end
+    end)
+end
 --      SwitchTab, RefreshTabBar, AddNewTab, DeleteTab
 -------------------------------------------------------------------------------
 
@@ -5292,6 +5663,7 @@ local function CreateGUI()
     LayoutGUI()
 
     CreateSpellbookPanel(f, leftSF)
+    CreateBagPanel(f, leftSF)
 
     guiFrame = f
 end
