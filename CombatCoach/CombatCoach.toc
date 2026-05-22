@@ -11,5 +11,10 @@
 # Core files - order matters
 CombatCoach.lua
 CombatCoach_Menu.lua
+CombatCoach_Menu_MainPanel.lua
+CombatCoach_Menu_SubPanel.lua
 CombatCoach_Widgets.lua
+CombatCoach_Widgets_Input.lua
 CombatCoach_Profiles.lua
+CombatCoach_Profiles_UI.lua
+CombatCoach_Profiles_Menu.lua

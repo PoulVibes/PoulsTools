@@ -1,20 +1,15 @@
 -- SpellGlowTracker.lua: centered HUD proc icons managed via shmIcons.
+-- Data tables, proc registry, class helpers  → SpellGlowTracker_Config.lua
+-- Icon registration, timer UI, ticker, slash → SpellGlowTracker_UI.lua
 
 SpellGlowTrackerDB = SpellGlowTrackerDB or ProcViewerDB or {}
 ProcViewerDB = SpellGlowTrackerDB
 
-local FOLDER_NAME       = "CombatCoach_SpellGlowTracker"
-local ADDON             = "Spell Glow Tracker"
-local VERSION           = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata("CombatCoach_SpellGlowTracker", "Version")) or "0.1.8"
-local ICON_SIZE_DEFAULT = 64
-local GAP               = 8
+local FOLDER_NAME = "CombatCoach_SpellGlowTracker"
+local ADDON       = "Spell Glow Tracker"
+local SGT         = SpellGlowTracker  -- initialized by SpellGlowTracker_Config.lua
 
-local WINDWALKER_SPEC_ID    = 269
-local BM_HUNTER_SPEC_ID     = 253
-local SURVIVAL_HUNTER_SPEC_ID = 255
-local iconsRegistered = false
 local addonEnabled = false
-local lockCallbackRegistered = false
 local spellGlowTrackerInitialized = false
 
 _G["bok_proc_active"]  = false
@@ -39,246 +34,18 @@ _G["hogstrider_proc_timer"] = 0
 _G["moonlight_chakram_proc_timer"] = 0
 
 ------------------------------------------------------------------------
--- Default DB initialiser for a slot
+-- MaybeStopTicker: only stops the ticker when no timed entries remain active.
 ------------------------------------------------------------------------
-local function DefaultSlotDB(x, y, spellID)
-    return {
-        x           = x,
-        y           = y,
-        point       = "CENTER",
-        size        = ICON_SIZE_DEFAULT,
-        enabled     = false,
-        glow_enabled = false,
-        spellID     = spellID,
-    }
-end
-
-------------------------------------------------------------------------
--- Default positions — 2×2 grid centred on screen
---   Top row    : bok (left)  | sck (right)
---   Bottom row : tod (left)  | rwk (right)
-------------------------------------------------------------------------
-local halfStep = (ICON_SIZE_DEFAULT / 2) + (GAP / 2)
-
-local SLOT_DEFS = {
-    { key = "Black Out Kick!",           x = -halfStep,      y =  halfStep,      iconSpellID = 100784, iconTexture = 572033,   timerKey = "bok_proc_timer",          buffDuration = 15, classSpec = "MONK_WW"    },
-    { key = "Dance of Chi-JI",           x =  halfStep,      y =  halfStep,      iconSpellID = 101546, iconTexture = 607849,   timerKey = "docj_proc_timer",         buffDuration = 15, classSpec = "MONK_WW"    },
-    { key = "Touch of Death",            x = -halfStep,      y = -halfStep,      iconSpellID = 322109, timerKey = nil,                                         classSpec = "MONK_ALL"   },
-    { key = "Rushing Wind Kick",         x =  halfStep,      y = -halfStep,      iconSpellID = 468179, timerKey = "rwk_proc_timer",          buffDuration = 15, classSpec = "MONK_WW"    },
-    -- Hunter entries (Beast Mastery spec only)
-    { key = "Howl of the Pack Leader",   x =  3 * halfStep,  y =  halfStep,      iconSpellID = 34026,  iconTexture = 5927643, timerKey = "howl_proc_timer",         buffDuration = 29, classSpec = "HUNTER_BM"  },
-    { key = "Black Arrow",               x =  3 * halfStep,  y = -halfStep,      iconSpellID = 466930, timerKey = nil,                                         classSpec = "HUNTER_BM"  },
-    { key = "Wailing Arrow",             x =  0,             y = -3 * halfStep,  iconSpellID = 392060, timerKey = "wailing_arrow_proc_timer", buffDuration = 15, classSpec = "HUNTER_BM"  },
-    { key = "Hogstrider",                x = -3 * halfStep,  y =  halfStep,      iconSpellID = 193455,  iconTexture = 463878,  timerKey = "hogstrider_proc_timer",         buffDuration = 19, classSpec = "HUNTER_BM"  },
-    -- Survival Hunter entries
-    { key = "Howl of the Pack Leader",   x =  3 * halfStep,  y =  halfStep,      iconSpellID = 259489,  iconTexture = 5927643, timerKey = "howl_proc_timer",               buffDuration = 29, classSpec = "HUNTER_SV"  },
-    { key = "Hogstrider",                x = -3 * halfStep,  y =  halfStep,      iconSpellID = 1261193, iconTexture = 463878,  timerKey = "hogstrider_proc_timer",         buffDuration = 19, classSpec = "HUNTER_SV"  },
-    { key = "Moonlight Chakram",         x = -3 * halfStep,  y = -halfStep,      iconSpellID = 1264949,                         timerKey = "moonlight_chakram_proc_timer",  buffDuration = 14, classSpec = "HUNTER_SV"  },
-}
-
-local SLOT_DEF_BY_KEY = {}
-for _, def in ipairs(SLOT_DEFS) do SLOT_DEF_BY_KEY[def.key] = def end
-
-------------------------------------------------------------------------
--- Timer FontStrings
--- shmIcons owns its frames; we parent a FontString as a purely additive
--- child after registration. The library ignores unknown children.
--- We keep references here so the ticker can update them.
-------------------------------------------------------------------------
-local timerTexts = {}   -- key -> FontString (nil for tod)
-
-local function AttachTimerText(key, iconObj, size)
-    if not iconObj or not iconObj.frame then return end
-    local fs = iconObj.frame:CreateFontString(nil, "OVERLAY")
-    fs:SetFont("Fonts\\FRIZQT__.TTF", size * 0.6, "OUTLINE")
-    fs:SetPoint("CENTER", iconObj.frame, "CENTER", 0, 0)
-    fs:SetTextColor(1, 0.4, 0.8, 1)
-    fs:SetText("")
-    timerTexts[key] = fs
-end
-
-local TIMED_ENTRIES = nil
-local tickerFrame = nil
-
-------------------------------------------------------------------------
--- Class/spec helpers (must be defined before RegisterIcons calls them)
-------------------------------------------------------------------------
-local function IsPlayerMonk()
-    local _, classToken = UnitClass("player")
-    return classToken == "MONK"
-end
-
-local function IsPlayerHunter()
-    local _, classToken = UnitClass("player")
-    return classToken == "HUNTER"
-end
-
-local function IsPlayerWindwalkerSpec()
-    local specIndex = GetSpecialization()
-    if not specIndex then return false end
-    local specID = select(1, GetSpecializationInfo(specIndex))
-    return specID == WINDWALKER_SPEC_ID
-end
-
-local function IsPlayerBMHunterSpec()
-    local specIndex = GetSpecialization()
-    if not specIndex then return false end
-    local specID = select(1, GetSpecializationInfo(specIndex))
-    return specID == BM_HUNTER_SPEC_ID
-end
-
-local function IsPlayerSVHunterSpec()
-    local specIndex = GetSpecialization()
-    if not specIndex then return false end
-    local specID = select(1, GetSpecializationInfo(specIndex))
-    return specID == SURVIVAL_HUNTER_SPEC_ID
-end
-
-local function IsSlotEligible(def)
-    local cs = def.classSpec
-    if cs == "MONK_ALL"  then return IsPlayerMonk() end
-    if cs == "MONK_WW"   then return IsPlayerMonk() and IsPlayerWindwalkerSpec() end
-    if cs == "HUNTER_BM" then return IsPlayerHunter() and IsPlayerBMHunterSpec() end
-    if cs == "HUNTER_SV" then return IsPlayerHunter() and IsPlayerSVHunterSpec() end
-    return false
-end
-
-------------------------------------------------------------------------
--- Icon registration
-------------------------------------------------------------------------
-local iconObjs = {}
-
-local function RegisterIcons()
-    local _migrate = { bok = "Black Out Kick!", sck = "Dance of Chi-JI", tod = "Touch of Death", rwk = "Rushing Wind Kick" }
-    for oldKey, newKey in pairs(_migrate) do
-        if SpellGlowTrackerDB[oldKey] and not SpellGlowTrackerDB[newKey] then
-            SpellGlowTrackerDB[newKey] = SpellGlowTrackerDB[oldKey]
-        end
-    end
-    for _, def in ipairs(SLOT_DEFS) do
-        if IsSlotEligible(def) then
-            local k = def.key
-            if not SpellGlowTrackerDB[k] then
-                SpellGlowTrackerDB[k] = DefaultSlotDB(def.x, def.y, def.iconSpellID)
-            end
-            local db = SpellGlowTrackerDB[k]
-
-            local iconObj = shmIcons:Register(ADDON, k, db, {
-                onResize = function(sq)
-                    db.size = sq
-                    local fs = timerTexts[k]
-                    if fs then
-                        fs:SetFont("Fonts\\FRIZQT__.TTF", sq * 0.6, "OUTLINE")
-                    end
-                end,
-                onMove = function() end,
-            })
-
-            shmIcons:SetIcon(ADDON, k, def.iconTexture or C_Spell.GetSpellTexture(def.iconSpellID))
-            shmIcons:SetVisible(ADDON, k, false)
-
-            iconObjs[k] = iconObj
-
-            if def.timerKey then
-                AttachTimerText(k, iconObj, db.size)
-            end
-        end
-    end
-
-    iconsRegistered = true
-    shmIcons:RestoreSnapGroups()
-    if not lockCallbackRegistered and shmIcons and shmIcons.RegisterLockCallback then
-        lockCallbackRegistered = true
-        shmIcons:RegisterLockCallback(function(locked)
-            if locked then
-                for k in pairs(iconObjs) do
-                    shmIcons:SetGlow(ADDON, k, false)
-                    shmIcons:SetVisible(ADDON, k, false)
-                end
-                for _, entry in pairs(TIMED_ENTRIES) do entry.endTime = 0 end
-                tickerFrame:Hide()
-            end
-        end)
-    end
-end
-
-------------------------------------------------------------------------
--- Timer helpers
-------------------------------------------------------------------------
-local function SetTimerText(key, t)
-    local fs = timerTexts[key]
-    if not fs then return end
-    if t > 0 then
-        fs:SetText(string.format("%d", math.ceil(t)))
-    else
-        fs:SetText("")
-    end
-end
-
-------------------------------------------------------------------------
--- Countdown ticker
-------------------------------------------------------------------------
-tickerFrame = CreateFrame("Frame")
-tickerFrame:Hide()
-
-local function StartTicker() tickerFrame:Show() end
 local function MaybeStopTicker()
-    for _, entry in pairs(TIMED_ENTRIES) do
+    for _, entry in pairs(SGT.TIMED_ENTRIES) do
         if entry.endTime > 0 then return end
     end
-    tickerFrame:Hide()
+    SpellGlowTracker_StopTicker()
 end
 
-local TICKER_INTERVAL = 0.1  -- update globals and timer text at ~10 fps
-local tickerElapsed   = 0
 
-tickerFrame:SetScript("OnUpdate", function(self, elapsed)
-    tickerElapsed = tickerElapsed + elapsed
-    if tickerElapsed < TICKER_INTERVAL then return end
-    tickerElapsed = 0
 
-    local now = GetTime()
-    local anyActive = false
-    for _, entry in pairs(TIMED_ENTRIES) do
-        local remaining = 0
-        if entry.endTime > 0 then
-            remaining = entry.endTime - now
-            if remaining < 0 then remaining = 0 end
-            if remaining > 0 then anyActive = true end
-        end
-        if entry.timerKey then
-            _G[entry.timerKey] = remaining
-            SetTimerText(entry.key, remaining)
-        end
-    end
-    if not anyActive then tickerFrame:Hide() end
-end)
 
-------------------------------------------------------------------------
--- Proc state registry
-------------------------------------------------------------------------
-local PROC_REGISTRY = {
-    [100784] = { globalKey = "bok_proc_active",  key = "Black Out Kick!",  timerKey = "bok_proc_timer",  buffDuration = 15, endTime = 0 },
-    [101546] = { globalKey = "docj_proc_active", key = "Dance of Chi-JI",   timerKey = "docj_proc_timer", buffDuration = 15, endTime = 0 },
-    [322109] = { globalKey = "tod_proc_active",  key = "Touch of Death" },
-    [107428] = { globalKey = "rwk_proc_active",  key = "Rushing Wind Kick", timerKey = "rwk_proc_timer",  buffDuration = 15, endTime = 0 },
-    -- Hunter procs
-    [34026]  = { globalKey = "howl_proc_active",          key = "Howl of the Pack Leader", timerKey = "howl_proc_timer",         buffDuration = 29, endTime = 0 },
-    [466930] = { globalKey = "black_arrow_proc_active",   key = "Black Arrow" },
-    [392060] = { globalKey = "wailing_arrow_proc_active", key = "Wailing Arrow",            timerKey = "wailing_arrow_proc_timer", buffDuration = 15, endTime = 0 },
-    [193455] = { globalKey = "hogstrider_proc_active",        key = "Hogstrider",               timerKey = "hogstrider_proc_timer",         buffDuration = 19, endTime = 0 },
-    -- Survival Hunter procs (different trigger spell IDs than BM)
-    [259489]  = { globalKey = "howl_proc_active",              key = "Howl of the Pack Leader",  timerKey = "howl_proc_timer",               buffDuration = 29, endTime = 0 },
-    [1261193] = { globalKey = "hogstrider_proc_active",        key = "Hogstrider",               timerKey = "hogstrider_proc_timer",         buffDuration = 19, endTime = 0 },
-    [1264949] = { globalKey = "moonlight_chakram_proc_active", key = "Moonlight Chakram",        timerKey = "moonlight_chakram_proc_timer",  buffDuration = 14, endTime = 0 },
-}
-
-TIMED_ENTRIES = {}
-for _, entry in pairs(PROC_REGISTRY) do
-    if entry.timerKey then
-        table.insert(TIMED_ENTRIES, entry)
-    end
-end
 
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("ADDON_LOADED")
@@ -292,7 +59,7 @@ eventFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
 local function EnableAddon()
     if addonEnabled then return end
     addonEnabled = true
-    if not iconsRegistered then RegisterIcons() end
+    if not SpellGlowTracker_AreIconsRegistered() then SpellGlowTracker_RegisterIcons() end
     eventFrame:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_SHOW")
     eventFrame:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_HIDE")
 end
@@ -302,41 +69,20 @@ local function DisableAddon()
     addonEnabled = false
     eventFrame:UnregisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_SHOW")
     eventFrame:UnregisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_HIDE")
-    if iconsRegistered then
-        for k in pairs(iconObjs) do
-            shmIcons:Unregister(ADDON, k)
-            timerTexts[k] = nil
-            iconObjs[k] = nil
-        end
-        iconsRegistered = false
-    end
-    for _, entry in pairs(PROC_REGISTRY) do
+    SpellGlowTracker_UnregisterIcons()
+    for _, entry in pairs(SGT.PROC_REGISTRY) do
         _G[entry.globalKey] = false
         if entry.timerKey then
             entry.endTime = 0
             _G[entry.timerKey] = 0
         end
     end
-    tickerFrame:Hide()
+    SpellGlowTracker_StopTicker()
 end
 
 local function UpdateEnabledState()
-    local hasEligible = false
-    for _, def in ipairs(SLOT_DEFS) do
-        if IsSlotEligible(def) then hasEligible = true break end
-    end
     DisableAddon()
-    if hasEligible then EnableAddon() end
-end
-
-------------------------------------------------------------------------
--- Slash command
-------------------------------------------------------------------------
-SLASH_SPELLGLOWTRACKER1 = "/sgt"
-SLASH_SPELLGLOWTRACKER2 = "/SGT"
-SlashCmdList["SPELLGLOWTRACKER"] = function(msg)
-    print("|cff00ff00[" .. ADDON .. " v" .. VERSION .. "]|r")
-    print("  |cffffd700/shm lock|r  -- toggle move/resize mode for all shmIcons")
+    if SpellGlowTracker_HasEligibleSlot() then EnableAddon() end
 end
 
 ------------------------------------------------------------------------
@@ -361,10 +107,10 @@ local function InitializeSpellGlowTracker()
     _G["black_arrow_proc_active"]   = false
     _G["wailing_arrow_proc_active"] = false
     _G["moonlight_chakram_proc_active"] = false
-    for _, entry in pairs(TIMED_ENTRIES) do
+    for _, entry in pairs(SGT.TIMED_ENTRIES) do
         entry.endTime = 0
     end
-    tickerFrame:Hide()
+    SpellGlowTracker_StopTicker()
     UpdateEnabledState()
 end
 
@@ -390,20 +136,20 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
 
     elseif event == "SPELL_ACTIVATION_OVERLAY_GLOW_SHOW" then
         if not addonEnabled then return end
-        local entry = PROC_REGISTRY[arg1]
+        local entry = SGT.PROC_REGISTRY[arg1]
         if entry then
             _G[entry.globalKey] = true
             shmIcons:SetVisible(ADDON, entry.key, true)
             shmIcons:SetGlow(ADDON, entry.key, true)
             if entry.timerKey then
                 entry.endTime = GetTime() + entry.buffDuration
-                StartTicker()
+                SpellGlowTracker_StartTicker()
             end
         end
 
     elseif event == "SPELL_ACTIVATION_OVERLAY_GLOW_HIDE" then
         if not addonEnabled then return end
-        local entry = PROC_REGISTRY[arg1]
+        local entry = SGT.PROC_REGISTRY[arg1]
         if entry then
             _G[entry.globalKey] = false
             shmIcons:SetGlow(ADDON, entry.key, false)
@@ -411,7 +157,6 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
             if entry.timerKey then
                 entry.endTime = 0
                 _G[entry.timerKey] = 0
-                SetTimerText(entry.key, 0)
                 MaybeStopTicker()
             end
         end

@@ -9,8 +9,6 @@ local frame = CreateFrame("Frame")
 local trackedUnits = {}
 local enemyCount = 0
 local initialized = false
-local debugFrame = nil
-local debugCountText = nil
 
 -- Public global for other addons/conditions.
 _G.ECT_TargetCount = 0
@@ -44,66 +42,6 @@ local function Recount()
     _G.ECT_TargetCount = enemyCount
 end
 
-local function UpdateDebugDisplay()
-    if not debugFrame then return end
-    if debugCountText then
-        debugCountText:SetText(tostring(enemyCount))
-    end
-    if EnemyCountTrackerDB.debugDisplayEnabled then
-        debugFrame:Show()
-    else
-        debugFrame:Hide()
-    end
-end
-
-local function SaveDebugFramePosition()
-    if not debugFrame then return end
-    local point, _, _, x, y = debugFrame:GetPoint()
-    EnemyCountTrackerDB.debugPoint = point or "CENTER"
-    EnemyCountTrackerDB.debugX = x or 0
-    EnemyCountTrackerDB.debugY = y or 0
-end
-
-local function CreateDebugFrame()
-    if debugFrame then return end
-
-    local db = EnemyCountTrackerDB
-    debugFrame = CreateFrame("Frame", "EnemyCountTrackerDebugFrame", UIParent, "BackdropTemplate")
-    debugFrame:SetSize(90, 44)
-    debugFrame:SetPoint(db.debugPoint, UIParent, db.debugPoint, db.debugX, db.debugY)
-    debugFrame:SetFrameStrata("MEDIUM")
-    debugFrame:SetMovable(true)
-    debugFrame:EnableMouse(true)
-    debugFrame:RegisterForDrag("LeftButton")
-    debugFrame:SetClampedToScreen(true)
-
-    debugFrame:SetBackdrop({
-        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        edgeSize = 12,
-    })
-    debugFrame:SetBackdropColor(0, 0, 0, 0.75)
-
-    debugFrame:SetScript("OnDragStart", function(self)
-        self:StartMoving()
-    end)
-    debugFrame:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        SaveDebugFramePosition()
-    end)
-
-    local label = debugFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    label:SetPoint("TOP", debugFrame, "TOP", 0, -6)
-    label:SetText("ECT")
-    label:SetTextColor(0.85, 0.85, 0.95, 1)
-
-    debugCountText = debugFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    debugCountText:SetPoint("CENTER", debugFrame, "CENTER", 0, -2)
-    debugCountText:SetTextColor(1, 0.82, 0.2, 1)
-    debugCountText:SetText("0")
-
-    debugFrame:Hide()
-end
 
 local function ShouldCountUnit(unit)
     if not unit or not UnitExists(unit) then return false end
@@ -226,7 +164,7 @@ local function RefreshAll()
     end
 
     Recount()
-    UpdateDebugDisplay()
+    EnemyCountTracker_UpdateDebugDisplay()
 end
 
 local function PrintCount()
@@ -238,7 +176,7 @@ local function HandleSlash(msg)
 
     if cmd == "" then
         EnemyCountTrackerDB.debugDisplayEnabled = not EnemyCountTrackerDB.debugDisplayEnabled
-        UpdateDebugDisplay()
+        EnemyCountTracker_UpdateDebugDisplay()
         print("EnemyCountTracker: debug display " .. (EnemyCountTrackerDB.debugDisplayEnabled and "enabled." or "disabled."))
         return
     end
@@ -264,7 +202,7 @@ local function HandleSlash(msg)
     if cmd == "off" then
         EnemyCountTrackerDB.enabled = false
         ResetTables()
-        UpdateDebugDisplay()
+        EnemyCountTracker_UpdateDebugDisplay()
         print("EnemyCountTracker: disabled.")
         return
     end
@@ -286,7 +224,7 @@ function EnemyCountTracker_SetEnabled(enabled)
         RefreshAll()
     else
         ResetTables()
-        UpdateDebugDisplay()
+        EnemyCountTracker_UpdateDebugDisplay()
     end
 end
 
@@ -307,7 +245,7 @@ end
 
 function EnemyCountTracker_SetDebugDisplayEnabled(enabled)
     EnemyCountTrackerDB.debugDisplayEnabled = not not enabled
-    UpdateDebugDisplay()
+    EnemyCountTracker_UpdateDebugDisplay()
 end
 
 function EnemyCountTracker_IsDebugDisplayEnabled()
@@ -323,7 +261,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
         if addonName ~= ADDON_NAME then return end
 
         EnsureDB()
-        CreateDebugFrame()
+        EnemyCountTracker_CreateDebugFrame()
         initialized = true
         RefreshAll()
         return
@@ -332,7 +270,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
     if not initialized or not EnemyCountTrackerDB.enabled then
         if event == "PLAYER_REGEN_ENABLED" then
             ResetTables()
-            UpdateDebugDisplay()
+            EnemyCountTracker_UpdateDebugDisplay()
         end
         return
     end
@@ -340,14 +278,14 @@ frame:SetScript("OnEvent", function(_, event, ...)
     if event == "NAME_PLATE_UNIT_ADDED" then
         local unit = ...
         TrackUnit(unit)
-        UpdateDebugDisplay()
+        EnemyCountTracker_UpdateDebugDisplay()
         return
     end
 
     if event == "NAME_PLATE_UNIT_REMOVED" then
         local unit = ...
         RemoveUnit(unit)
-        UpdateDebugDisplay()
+        EnemyCountTracker_UpdateDebugDisplay()
         return
     end
 
@@ -355,7 +293,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
         local unit = ...
         if unit and unit:match("^nameplate%d+$") then
             TrackUnit(unit)
-            UpdateDebugDisplay()
+            EnemyCountTracker_UpdateDebugDisplay()
         end
         return
     end

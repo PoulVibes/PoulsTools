@@ -9,3 +9,4 @@
 ## Group: CombatCoach
 
 EnemyCountTracker.lua
+EnemyCountTracker_Debug.lua

@@ -12,3 +12,5 @@
 OnUseTracker.lua
 OnUseTracker_Monk.lua
 OnUseTracker_Hunter.lua
+OnUseTracker_Hunter_SV.lua
+OnUseTracker_Hunter_SV_Module.lua

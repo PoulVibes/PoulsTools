@@ -218,7 +218,9 @@ local function GetVisiblePluginOptions()
     if _G.SBAS_DynBuffRegistry then
         for pluginID, entry in pairs(_G.SBAS_DynBuffRegistry) do
             if entry.specID == editSpecID then
-                dynOpts[#dynOpts + 1] = { id = pluginID, label = entry.label }
+                local opt = { id = pluginID, label = entry.label }
+                if entry.timerVar then opt.supportsProcMode = true end
+                dynOpts[#dynOpts + 1] = opt
             end
         end
         table.sort(dynOpts, function(a, b) return a.label < b.label end)
@@ -386,7 +388,11 @@ BuildPluginConditionExpr = function(cond, ruleSpellID)
 
     -- Dynamic buff registry (populated by DynamicBuffTracker).
     if _G.SBAS_DynBuffRegistry and _G.SBAS_DynBuffRegistry[plugin] then
-        return ("(%s == true)"):format(_G.SBAS_DynBuffRegistry[plugin].activeFlag)
+        local reg = _G.SBAS_DynBuffRegistry[plugin]
+        if IsCompOp(op) and reg.timerVar then
+            return ("(tonumber(%s) or 0) %s %d"):format(reg.timerVar, op, value or 0)
+        end
+        return ("(%s == true)"):format(reg.activeFlag)
     end
 
     local meta = PROC_PLUGIN_BY_ID[plugin]
@@ -422,7 +428,11 @@ BuildPluginSummary = function(cond)
 
     -- Dynamic buff registry (populated by DynamicBuffTracker).
     if _G.SBAS_DynBuffRegistry and _G.SBAS_DynBuffRegistry[plugin] then
-        return _G.SBAS_DynBuffRegistry[plugin].label .. " Active"
+        local reg = _G.SBAS_DynBuffRegistry[plugin]
+        if IsCompOp(op) and reg.timerVar then
+            return reg.label .. " " .. (op) .. " " .. tostring(value or "")
+        end
+        return reg.label .. " Active"
     end
 
     local meta = PROC_PLUGIN_BY_ID[plugin]
@@ -3602,11 +3612,22 @@ RefreshRightPanel = function()
                     return
                 end
                 newCond.plugin = pid
+                local mode = condInputArea.GetProcMode()
+                -- Built-in proc plugins
                 if PROC_PLUGIN_BY_ID[pid] then
-                    local mode = condInputArea.GetProcMode()
                     if IsCompOp(mode) then
                         newCond.operator = mode
                         newCond.value = condInputArea.GetValue() or 4
+                    end
+                else
+                    -- Dynamic plugins registered by DynamicBuffTracker may also support
+                    -- proc-mode comparisons when a timerVar is present. Handle those here.
+                    if _G.SBAS_DynBuffRegistry and _G.SBAS_DynBuffRegistry[pid] then
+                        local reg = _G.SBAS_DynBuffRegistry[pid]
+                        if reg and reg.timerVar and IsCompOp(mode) then
+                            newCond.operator = mode
+                            newCond.value = condInputArea.GetValue() or 4
+                        end
                     end
                 end
             end

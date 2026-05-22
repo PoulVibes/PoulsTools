@@ -10,4 +10,11 @@
 ## Category-enUS: CombatCoach
 ## Group: CombatCoach
 
+DynamicBuffTracker_State.lua
+DynamicBuffTracker_Helpers.lua
+DynamicBuffTracker_Icons.lua
+DynamicBuffTracker_CDM.lua
+DynamicBuffTracker_Scan.lua
 DynamicBuffTracker.lua
+DynamicBuffTracker_Defaults.lua
+DynamicBuffTracker_CombatCoach.lua

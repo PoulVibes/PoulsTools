@@ -1,18 +1,20 @@
 -- CooldownTracker.lua: tracks ability cooldowns by spell name per spec; delegates UI to shmIcons.
+-- State initialization moved to CooldownTracker_State.lua (loads first).
 
-local FOLDER_NAME  = "CombatCoach_CooldownTracker"
-local ADDON_NAME   = "Cooldown Tracker"
-local DEFAULT_SIZE = 64
-local POLL_INTERVAL_SECONDS = 0.10
+local CT          = CooldownTracker
+local FOLDER_NAME = CT.FOLDER_NAME
+local ADDON_NAME  = CT.ADDON_NAME
+local DEFAULT_SIZE = CT.DEFAULT_SIZE
+local POLL_INTERVAL_SECONDS = CT.POLL_INTERVAL
 
 -- spellKey → { spellName, spellID } for the currently active specialization.
-local tracked = {}
+local tracked = CT.tracked
 
 -- Change listeners for UI integrations (called when trackers change)
-local changeListeners = {}
+local changeListeners = CT.changeListeners
 
 -- Tracks which spell keys have already emitted the dormant warning this session.
-local warnedDormant = {}
+local warnedDormant = CT.warnedDormant
 
 local function NotifyChangeListeners()
     for _, cb in ipairs(changeListeners) do
@@ -21,9 +23,7 @@ local function NotifyChangeListeners()
     end
 end
 
--- The spec ID we last loaded icons for
-local currentSpecID = nil
-
+-- The spec ID we last loaded icons for (stored on module table)
 local function GetCurrentSpecID()
     local specIndex = GetSpecialization()
     if not specIndex then return 0 end
@@ -118,7 +118,7 @@ local function UpdateTracker(key, updateStacks)
     local chargeInfo     = C_Spell.GetSpellCharges(entry.spellID)
     local isChargeSpell  = chargeInfo and chargeInfo.maxCharges and chargeInfo.maxCharges > 1
     local chargeDuration = C_Spell.GetSpellChargeDuration(entry.spellID)
-    local db             = GetSpecSpells(currentSpecID)[key]
+    local db             = GetSpecSpells(CT.currentSpecID)[key]
 
     if isChargeSpell then
         if durationObject and cdInfo and cdInfo.isActive then
@@ -288,7 +288,7 @@ local function EnsureTickerState()
 end
 
 local function AddTracker(spellName, specID)
-    specID = specID or currentSpecID
+    specID = specID or CT.currentSpecID
     local spellID = C_Spell.GetSpellIDForSpellIdentifier(spellName)
 
     local key = KeyFor(spellName)
@@ -345,7 +345,7 @@ local function TryRemapDormant()
             if spellID then
                 entry.spellID = spellID
                 entry.dormant = false
-                local db = GetSpecSpells(currentSpecID)[key]
+                local db = GetSpecSpells(CT.currentSpecID)[key]
                 if db then db.spellID = spellID end
                 shmIcons:SetEnabled(ADDON_NAME, key, true)
                 shmIcons:SetVisible(ADDON_NAME, key, true)
@@ -357,7 +357,7 @@ local function TryRemapDormant()
             if not spellID then
                 entry.spellID = nil
                 entry.dormant = true
-                local db = GetSpecSpells(currentSpecID)[key]
+                local db = GetSpecSpells(CT.currentSpecID)[key]
                 if db then db.enabled = true end  -- keep enabled so LoadSpec reloads it
                 shmIcons:SetEnabled(ADDON_NAME, key, false)
                 shmIcons:SetVisible(ADDON_NAME, key, false)
@@ -382,7 +382,7 @@ local function RemoveTracker(key)
     shmIcons:Unregister(ADDON_NAME, key)
     tracked[key] = nil
     warnedDormant[key] = nil
-    local spells = GetSpecSpells(currentSpecID)
+    local spells = GetSpecSpells(CT.currentSpecID)
     if spells[key] then spells[key].enabled = false end
     EnsureTickerState()
     NotifyChangeListeners()
@@ -401,7 +401,7 @@ end
 -- Load all enabled spells for the given specID.
 local function LoadSpec(specID)
     UnloadSpec()
-    currentSpecID = specID
+    CT.currentSpecID = specID
     local spells = GetSpecSpells(specID)
     for key, db in pairs(spells) do
         if db.enabled and db.spellName then
@@ -471,7 +471,7 @@ function CooldownTracker_HandleCommand(msg)
     if cmd == "list" then
         local found = false
         for key, entry in pairs(tracked) do
-            local db        = GetSpecSpells(currentSpecID)[key]
+            local db        = GetSpecSpells(CT.currentSpecID)[key]
             local glowState = db and db.glow_enabled and "glow on" or "glow off"
             print(string.format("|cFFFFFF00  %s|r  [%s]", entry.spellName, glowState))
             found = true
@@ -513,7 +513,7 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
 
     elseif event == "PLAYER_ENTERING_WORLD" then
         local specID = GetCurrentSpecID()
-        if specID ~= currentSpecID then
+        if specID ~= CT.currentSpecID then
             LoadSpec(specID)
         else
             UpdateAllTrackers()
@@ -608,7 +608,7 @@ end
 function CooldownTracker_List()
     local found = false
     for key, entry in pairs(tracked) do
-        local db = GetSpecSpells(currentSpecID)[key]
+        local db = GetSpecSpells(CT.currentSpecID)[key]
         local glowState = db and db.glow_enabled and "glow on" or "glow off"
         print(string.format("|cFFFFFF00  %s|r  [%s]", entry.spellName, glowState))
         found = true

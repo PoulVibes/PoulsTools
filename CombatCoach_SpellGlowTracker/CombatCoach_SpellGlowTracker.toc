@@ -9,4 +9,6 @@
 ## Group: CombatCoach
 ## SavedVariables: SpellGlowTrackerDB, ProcViewerDB
 
+SpellGlowTracker_Config.lua
+SpellGlowTracker_UI.lua
 SpellGlowTracker.lua

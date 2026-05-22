@@ -10,4 +10,5 @@
 ## RequiredDeps: CombatCoach_shmIcons, CombatCoach
 
 ItemTracker.lua
+ItemTracker_Commands.lua
 ItemTracker_CombatCoach.lua

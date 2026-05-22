@@ -9,5 +9,7 @@
 ## SavedVariables: CooldownTrackerDB
 ## RequiredDeps: CombatCoach_shmIcons, CombatCoach
 
+CooldownTracker_State.lua
 CooldownTracker.lua
 CooldownTracker_CombatCoach.lua
+CooldownTracker_CombatCoach_LookAndFeel.lua

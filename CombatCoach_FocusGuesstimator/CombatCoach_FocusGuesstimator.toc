@@ -6,4 +6,6 @@
 ## Category-enUS: CombatCoach
 ## Group: CombatCoach
 
+FocusGuesstimator_Data.lua
+FocusGuesstimator_Enable.lua
 FocusGuesstimator.lua

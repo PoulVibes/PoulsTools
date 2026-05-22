@@ -1,0 +1,47 @@
+-- DynamicBuffTracker_Helpers.lua
+-- DB accessors and key/flag/plugin-ID helper functions.
+
+local DBT = DynamicBuffTracker
+
+-- Returns the buffs sub-table for a spec, creating it if absent.
+function DynamicBuffTracker_GetSpecBuffDB(specID)
+    DynamicBuffTrackerDB.specs = DynamicBuffTrackerDB.specs or {}
+    if not DynamicBuffTrackerDB.specs[specID] then
+        DynamicBuffTrackerDB.specs[specID] = { buffs = {} }
+    end
+    DynamicBuffTrackerDB.specs[specID].buffs =
+        DynamicBuffTrackerDB.specs[specID].buffs or {}
+    return DynamicBuffTrackerDB.specs[specID].buffs
+end
+
+-- Returns the removed-spells deny-list for a spec.
+function DynamicBuffTracker_GetSpecRemovedDB(specID)
+    DynamicBuffTrackerDB.specs = DynamicBuffTrackerDB.specs or {}
+    if not DynamicBuffTrackerDB.specs[specID] then
+        DynamicBuffTrackerDB.specs[specID] = { buffs = {} }
+    end
+    DynamicBuffTrackerDB.specs[specID].removed =
+        DynamicBuffTrackerDB.specs[specID].removed or {}
+    return DynamicBuffTrackerDB.specs[specID].removed
+end
+
+-- shmIcons key for a given spell ID.
+function DynamicBuffTracker_MakeKey(spellID)
+    return "dbt_" .. tostring(spellID)
+end
+
+-- Global variable name that tracks whether a buff is currently active.
+function DynamicBuffTracker_MakeActiveFlag(specID, spellID)
+    return "DynBuff_" .. tostring(specID) .. "_" .. tostring(spellID) .. "_Active"
+end
+
+-- Plugin ID used in the SBAS condition registry and saved data.
+function DynamicBuffTracker_MakePluginID(specID, spellID)
+    return "dynbuff_" .. tostring(specID) .. "_" .. tostring(spellID)
+end
+
+function DynamicBuffTracker_GetCurrentSpecID()
+    local si = GetSpecialization()
+    if not si then return 0 end
+    return select(1, GetSpecializationInfo(si)) or 0
+end
