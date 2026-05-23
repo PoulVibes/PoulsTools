@@ -135,7 +135,6 @@ local PLUGIN_OPTS_BM = {
 }
 
 local PLUGIN_OPTS_SV = {
-    { id = "sentinel_mark",        label = "Sentinel's Mark",           supportsProcMode = true, default = 12    },
     { id = "tots_stacks",          label = "Tip of the Spear Stacks",   supportsProcMode = true, default = 1,
                                    valueLabel = "Stacks",               procCompareOnly = true                    },
     { id = "tots_timer",           label = "Tip of the Spear Timer",    supportsProcMode = true, default = 5     },
@@ -321,11 +320,6 @@ local PROC_PLUGIN_BY_ID = {
         activeFlag = "moonlight_chakram_proc_active",
         timerVar = "moonlight_chakram_proc_timer",
     },
-    sentinel_mark = {
-        label = "Sentinel's Mark",
-        activeFlag = "SentinelMarkActiveTracker",
-        timerVar = "SentinelMarkRemaining",
-    },
     tots_stacks = {
         label = "Tip of the Spear Stacks",
         timerVar = "TipOfTheSpearStacks",
@@ -405,7 +399,6 @@ BuildPluginConditionExpr = function(cond, ruleSpellID)
         if plugin == "bestial_wrath_cooldown" then return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 90) end
         if plugin == "barbed_shot_debuff"   then return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 12) end
         if plugin == "beast_cleave"         then return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 8)  end
-        if plugin == "sentinel_mark"        then return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 12) end
         if plugin == "tots_timer"           then return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 5)  end
         if plugin == "takedown_buff"        then return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 5)  end
         return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 4)
@@ -1914,7 +1907,7 @@ local function CreateRowFrame(parent)
         end
     end)
 
-    -- Warning icon (shown when sentinel_mark tracking is not ready)
+    -- Warning icon (shown when condition dependencies are not ready)
     -- Anchored left of the remove button so they don't overlap.
     f.warnIcon = CreateFrame("Frame", nil, f)
     f.warnIcon:SetSize(18, 18)
@@ -1957,30 +1950,6 @@ local function HasParenMismatch(conds)
         if depth < 0 then return true end   -- unmatched close
     end
     return depth ~= 0                       -- unclosed open(s)
-end
-
--- Returns true when any condition in the rule is a sentinel_mark plugin check.
-local function RuleHasSentinelMarkCondition(rule)
-    for _, cond in ipairs(rule.conditions or {}) do
-        if cond.type == "plugin" and cond.plugin == "sentinel_mark" then
-            return true
-        end
-    end
-    return false
-end
-
--- Returns a warning string when sentinel_mark tracking is not operational,
--- or nil when everything is fine.
-local function GetSentinelMarkWarning()
-    if _G["SentinelMarkTrackerReady"] == true then return nil end
-    if _G["BuffIconCooldownViewer"] == nil then
-        return "Sentinel's Mark condition requires the Cooldown"
-            .. " Manager to be enabled.\n\nEnable it, add"
-            .. " Sentinel to its Tracked Buff Icons, then reload."
-    end
-    return "Sentinel's Mark Condition requires the Cooldown Manager's Tracked Buff Icons"
-            .. "\n\nEnable Blizzard's Cooldown Manager, add Sentinel to the Tracked Buff Icons, then reload."
-        
 end
 
 -- Returns a warning string when any dynbuff_ plugin condition in the rule
@@ -2154,18 +2123,11 @@ local function UpdateRowFrame(f, idx, rule)
     f:Show()
 
     local hasMismatch  = HasParenMismatch(rule.conditions)
-    local sentinelWarn = RuleHasSentinelMarkCondition(rule) and GetSentinelMarkWarning() or nil
     local dynBuffWarn  = GetDynBuffWarning(rule)
 
     -- Build combined warning text and title for the warning icon.
     local warnTitle, warnBody
-    if sentinelWarn and dynBuffWarn then
-        warnTitle = "|cffff9900\xE2\x9A\xA0 Condition Warnings|r"
-        warnBody  = sentinelWarn .. "\n\n" .. dynBuffWarn
-    elseif sentinelWarn then
-        warnTitle = "|cffff9900\xE2\x9A\xA0 Sentinel's Mark Warning|r"
-        warnBody  = sentinelWarn
-    elseif dynBuffWarn then
+    if dynBuffWarn then
         warnTitle = "|cffff9900\xE2\x9A\xA0 Dynamic Buff Tracker Warning|r"
         warnBody  = dynBuffWarn
     end
@@ -5716,15 +5678,6 @@ local function OpenGUI(specID, displayName)
 end
 
 _G.SBAS_OpenOverrideGUI    = OpenGUI
-
--- Called by OnUseTracker_Hunter when the Sentinel's Mark cooldown viewer child is
--- successfully hooked (immediately or after the 20 s retry).  Refreshes the rule
--- list so any tracker-missing warning icons are cleared.
-_G.SBAS_OnSentinelMarkTrackerReady = function()
-    if guiFrame and guiFrame:IsShown() then
-        RefreshRuleList()
-    end
-end
 
 -- Public: reset tab-1 GUI rules for a spec to the single Blizzard SBA entry
 -- and clear any compiled override code for that spec.
