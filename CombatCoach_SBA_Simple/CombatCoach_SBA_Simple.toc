@@ -9,7 +9,19 @@
 ## RequiredDeps: CombatCoach_shmIcons, CombatCoach
 ## SavedVariablesPerCharacter: SBA_SimpleDB
 
+SBA_Simple_DB.lua
 SBA_Simple.lua
+SBA_Simple_Registration.lua
+SBA_Simple_IconAPI.lua
+SBA_Simple_RuntimeTicker.lua
+SBA_Simple_Events.lua
+SBA_Simple_OverrideEditor.lua
+SBA_Simple_SlashCommands.lua
 SBA_Simple_OverrideGUI.lua
 SBA_Simple_RecommendedImports.lua
+SBA_Simple_CombatCoach_Analyzer.lua
+SBA_Simple_CombatCoach_ClassSpec.lua
+SBA_Simple_CombatCoach_UISections.lua
+SBA_Simple_CombatCoach_SpecUI.lua
+SBA_Simple_CombatCoach_EditorHooks.lua
 SBA_Simple_CombatCoach.lua

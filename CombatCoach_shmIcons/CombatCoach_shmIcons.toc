@@ -11,4 +11,17 @@
 ## RequiredDeps: CombatCoach
 
 shmIcons.lua
+shmIcons_Core.lua
+shmIcons_Hotkeys.lua
+shmIcons_Visuals.lua
+shmIcons_IconRuntime.lua
+shmIcons_IconFrame_DragHelpers.lua
+shmIcons_IconFrame_Behavior.lua
+shmIcons_IconFrame.lua
+shmIcons_API.lua
+shmIcons_API_System.lua
+shmIcons_EditModeGroupFrame_Settings.lua
+shmIcons_EditModeGroupFrame_Drag.lua
+shmIcons_EditModeGroupFrame.lua
+shmIcons_EditMode.lua
 shmIcons_CombatCoach.lua

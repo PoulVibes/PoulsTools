@@ -16,6 +16,11 @@ local TRINKET_SLOT_NAMES = {
 }
 
 local function OnBuildUI(parent)
+    if parent.__SHMIconsPanelInitialized then
+        if parent.__SHMIconsRefresh then parent.__SHMIconsRefresh() end
+        return
+    end
+
     local W = CombatCoach.Widgets
     if not W then
         local note = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -67,6 +72,7 @@ local function OnBuildUI(parent)
     listContainer:SetSize(540, 0)
 
     local activeRows = {}
+    local listDirty = true
 
     local function BuildIconList()
         for _, f in ipairs(activeRows) do
@@ -77,20 +83,24 @@ local function OnBuildUI(parent)
         local allIcons = (shmIcons and shmIcons.GetAll) and shmIcons:GetAll() or {}
 
         table.sort(allIcons, function(a, b)
-            if a.addonName ~= b.addonName then return a.addonName < b.addonName end
-            return a.localID < b.localID
+            local aAddon = tostring((a and a.addonName) or "")
+            local bAddon = tostring((b and b.addonName) or "")
+            if aAddon ~= bAddon then return aAddon < bAddon end
+            local aLocalID = tostring((a and a.localID) or "")
+            local bLocalID = tostring((b and b.localID) or "")
+            return aLocalID < bLocalID
         end)
 
         local rowY      = 0
         local lastAddon = nil
 
         for _, entry in ipairs(allIcons) do
-            local addonName = entry.addonName
-            local localID   = entry.localID
+            local addonName = tostring(entry.addonName or "Unknown Addon")
+            local localID   = tostring(entry.localID or "")
 
             -- Skip NP-clone icons (suffix "_np"): their enabled/glow state is
             -- driven each frame by the main icon and should not be user-editable.
-            if localID:sub(-3) ~= "_np" then
+            if localID ~= "" and localID:sub(-3) ~= "_np" then
             local icon      = entry.icon
             local db        = icon and icon.db
 
@@ -242,9 +252,6 @@ local function OnBuildUI(parent)
                     end)
                     sndChk:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-                    parent:HookScript("OnShow", function()
-                        sndChk:SetChecked(ComboTrackerDB and ComboTrackerDB.failureSound or false)
-                    end)
                 end
             end
 
@@ -267,24 +274,45 @@ local function OnBuildUI(parent)
         end
 
         listContainer:SetHeight(rowY)
+        listDirty = false
     end
 
     BuildIconList()
 
-    if type(CooldownTracker_RegisterChangeListener) == "function" then
-        CooldownTracker_RegisterChangeListener(BuildIconList)
-    end
-    if type(ItemTracker_RegisterChangeListener) == "function" then
-        ItemTracker_RegisterChangeListener(BuildIconList)
-    end
-    if type(TrinketTracker_RegisterChangeListener) == "function" then
-        TrinketTracker_RegisterChangeListener(BuildIconList)
+    local function MarkListDirty()
+        listDirty = true
+        if parent:IsShown() then
+            BuildIconList()
+        end
     end
 
-    parent:HookScript("OnShow", function()
-        BuildIconList()
+    if not parent.__SHMIconsListenersRegistered then
+        if type(CooldownTracker_RegisterChangeListener) == "function" then
+            CooldownTracker_RegisterChangeListener(MarkListDirty)
+        end
+        if type(ItemTracker_RegisterChangeListener) == "function" then
+            ItemTracker_RegisterChangeListener(MarkListDirty)
+        end
+        if type(TrinketTracker_RegisterChangeListener) == "function" then
+            TrinketTracker_RegisterChangeListener(MarkListDirty)
+        end
+        parent.__SHMIconsListenersRegistered = true
+    end
+
+    parent.__SHMIconsRefresh = function()
+        if listDirty then
+            BuildIconList()
+        end
         UpdateLockLabel()
-    end)
+    end
+    if not parent.__SHMIconsRefreshHooked then
+        parent:HookScript("OnShow", function(self)
+            if self.__SHMIconsRefresh then self.__SHMIconsRefresh() end
+        end)
+        parent.__SHMIconsRefreshHooked = true
+    end
+    if parent.__SHMIconsRefresh then parent.__SHMIconsRefresh() end
+    parent.__SHMIconsPanelInitialized = true
 end
 
 CombatCoach.Menu:RegisterMainPanelContent(OnBuildUI)

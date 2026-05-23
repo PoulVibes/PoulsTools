@@ -22,6 +22,7 @@ local SOUND_CHOICES = {
     { id = 74437,  text = "Keystone Upgrade" },
     { id = 278769, text = "Event Scheduler Chime" },
 }
+CooldownTracker_SOUND_CHOICES = SOUND_CHOICES
 local SOUND_NAME_BY_ID = {}
 for _, s in ipairs(SOUND_CHOICES) do SOUND_NAME_BY_ID[s.id] = s.text end
 
@@ -207,7 +208,9 @@ local function OnBuildUI(parent)
                     row.optionsBtn:SetPoint("RIGHT", row, "RIGHT", -10, 0)
                     row.optionsBtn:SetText("Options")
                     row.optionsBtn:SetScript("OnClick", function()
-                        OpenLookAndFeelWindow(row.db, row.spellName, row.spellKey)
+                        if type(CooldownTracker_OpenLookAndFeel) == "function" then
+                            CooldownTracker_OpenLookAndFeel(row.spellKey)
+                        end
                     end)
                 end
 

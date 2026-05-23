@@ -194,7 +194,7 @@ local function OpenLookAndFeelWindow(db, spellName, spellKey)
                 pdb.glow_enabled = want
             end)
         y = -2
-        anchor = CR(content, anchor, y, "Reactive Spell Enabled  (cdInfo.isEnabled)",
+        anchor = CR(content, anchor, y, "Reactive Spell Enabled",
             function() return pdb.glow_cond_reactive end, function(v) pdb.glow_cond_reactive = v end, 14)
         y = -2
         anchor = CR(content, anchor, y, "Usable  (resource + range check)",
@@ -237,6 +237,7 @@ local function OpenLookAndFeelWindow(db, spellName, spellKey)
         soundDrop:SetPoint("TOPLEFT", soundLbl, "BOTTOMLEFT", -16, -4)
         UIDropDownMenu_SetWidth(soundDrop, 200)
         UIDropDownMenu_Initialize(soundDrop, function(self, level)
+            local soundChoices = CooldownTracker_SOUND_CHOICES or SOUND_CHOICES or {}
             local ni = UIDropDownMenu_CreateInfo()
             ni.text = "None"; ni.value = nil; ni.checked = (pdb.ready_sound == nil)
             ni.func = function()
@@ -245,7 +246,7 @@ local function OpenLookAndFeelWindow(db, spellName, spellKey)
                 UIDropDownMenu_SetText(soundDrop, "None")
             end
             UIDropDownMenu_AddButton(ni, level)
-            for _, s in ipairs(SOUND_CHOICES) do
+            for _, s in ipairs(soundChoices) do
                 local si = UIDropDownMenu_CreateInfo()
                 si.text = s.text; si.value = s.id; si.checked = (pdb.ready_sound == s.id)
                 si.func = function(btn)
@@ -315,7 +316,7 @@ end
 ------------------------------------------------------------------------
 function CooldownTracker_OpenLookAndFeel(spellKey)
     if type(CooldownTracker_GetTrackedSpells) == "function" then
-        local spells = CooldownTracker_GetTrackedSpells()
+        local spells = CooldownTracker_GetTrackedSpells() or {}
         for _, entry in ipairs(spells) do
             if entry.key == spellKey then
                 OpenLookAndFeelWindow(entry.db, entry.spellName, entry.key)
