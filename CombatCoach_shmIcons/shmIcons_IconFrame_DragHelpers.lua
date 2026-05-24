@@ -31,6 +31,7 @@ function shmIcons_IconFrameRevertSnap(ctx)
 end
 
 function shmIcons_IconFrameResolveOverlaps(ctx)
+    if not ctx or not ctx.frame then return end
     local myCX, myCY = ctx.frame:GetCenter()
     local myHalf = ctx.frame:GetWidth() * 0.5
     local uiCX, uiCY = UIParent:GetCenter()
@@ -41,7 +42,7 @@ function shmIcons_IconFrameResolveOverlaps(ctx)
         changed = false
         iters = iters + 1
         for otherID, other in pairs(icons) do
-            if otherID ~= ctx.globalID and other.frame:IsShown()
+            if otherID ~= ctx.globalID and other and other.frame and other.frame:IsShown()
                 and not other.isNameplateManaged then
                 local oCX, oCY = other.frame:GetCenter()
                 local oHalf = other.frame:GetHeight() * 0.5
@@ -105,7 +106,7 @@ function shmIcons_IconFrameFindSnapCandidate(ctx, myCX, myCY, mySize, isCtrl)
         end
 
         for otherID, other in pairs(icons) do
-            if otherID ~= ctx.globalID and other.frame:IsShown()
+            if otherID ~= ctx.globalID and other and other.frame and other.frame:IsShown()
                 and not other.isNameplateManaged then
                 local oH = other.frame:GetHeight()
                 local oCX, oCY = other.frame:GetCenter()
@@ -120,7 +121,7 @@ function shmIcons_IconFrameFindSnapCandidate(ctx, myCX, myCY, mySize, isCtrl)
         local bestDist = math.huge
         local best = nil
         for otherID, other in pairs(icons) do
-            if otherID ~= ctx.globalID and other.frame:IsShown()
+            if otherID ~= ctx.globalID and other and other.frame and other.frame:IsShown()
                 and not other.isNameplateManaged then
                 local c = nearestCornerOf(otherID, other)
                 if c and c.dist < bestDist then
@@ -135,7 +136,7 @@ function shmIcons_IconFrameFindSnapCandidate(ctx, myCX, myCY, mySize, isCtrl)
     local bestDist = math.huge
     local best = nil
     for otherID, other in pairs(icons) do
-        if otherID ~= ctx.globalID and other.frame:IsShown()
+        if otherID ~= ctx.globalID and other and other.frame and other.frame:IsShown()
             and not other.isNameplateManaged
             and not other.db.ctrlAttachedTo
             and math.abs(other.frame:GetHeight() - mySize) < 0.5 then

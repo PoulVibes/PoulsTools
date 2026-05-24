@@ -59,7 +59,7 @@ function shmIcons_AttachIconDragHandlers(icon, globalID, db, cd, stackLabel, fra
                     local nearestDist = math.huge
                     local nearestSize = nil
                     for otherID, other in pairs(icons) do
-                        if otherID ~= globalID and other.frame:IsShown() and not other.isNameplateManaged then
+                        if otherID ~= globalID and other and other.frame and other.frame:IsShown() and not other.isNameplateManaged then
                             local oCX, oCY = other.frame:GetCenter()
                             local d = math.sqrt((myCX - oCX)^2 + (myCY - oCY)^2)
                             if d < nearestDist then
@@ -113,7 +113,7 @@ function shmIcons_AttachIconDragHandlers(icon, globalID, db, cd, stackLabel, fra
             while #queue > 0 do
                 local curr = table.remove(queue, 1)
                 for otherID, other in pairs(icons) do
-                    if not visited[otherID] and other.frame:IsShown()
+                    if not visited[otherID] and other and other.frame and other.frame:IsShown()
                         and not other.db.ctrlAttachedTo
                         and math.abs(other.frame:GetHeight() - mySize) < 0.5 then
                         local ocx, ocy = other.frame:GetCenter()
@@ -147,8 +147,10 @@ function shmIcons_AttachIconDragHandlers(icon, globalID, db, cd, stackLabel, fra
             groupUpdateFrame:SetScript("OnUpdate", function()
                 local newCX, newCY = frame:GetCenter()
                 for _, member in ipairs(groupMembers) do
-                    member.icon.frame:ClearAllPoints()
-                    member.icon.frame:SetPoint("CENTER", UIParent, "CENTER", newCX + member.offsetX - uiCX, newCY + member.offsetY - uiCY)
+                    if member.icon and member.icon.frame then
+                        member.icon.frame:ClearAllPoints()
+                        member.icon.frame:SetPoint("CENTER", UIParent, "CENTER", newCX + member.offsetX - uiCX, newCY + member.offsetY - uiCY)
+                    end
                 end
             end)
         end
@@ -164,16 +166,20 @@ function shmIcons_AttachIconDragHandlers(icon, globalID, db, cd, stackLabel, fra
             local finalCX, finalCY = frame:GetCenter()
             local finalUiCX, finalUiCY = UIParent:GetCenter()
             for _, member in ipairs(ctx.dragState.groupMembers) do
-                member.icon.frame:ClearAllPoints()
-                member.icon.frame:SetPoint("CENTER", UIParent, "CENTER", finalCX + member.offsetX - finalUiCX, finalCY + member.offsetY - finalUiCY)
+                if member.icon and member.icon.frame then
+                    member.icon.frame:ClearAllPoints()
+                    member.icon.frame:SetPoint("CENTER", UIParent, "CENTER", finalCX + member.offsetX - finalUiCX, finalCY + member.offsetY - finalUiCY)
+                end
             end
             SaveIconPos(icon)
             if icon.onMove then icon.onMove(icon.db) end
             RepositionCtrlChildren(globalID)
             for _, member in ipairs(ctx.dragState.groupMembers) do
-                SaveIconPos(member.icon)
-                if member.icon.onMove then member.icon.onMove(member.icon.db) end
-                RepositionCtrlChildren(member.icon.globalID)
+                if member.icon and member.icon.frame then
+                    SaveIconPos(member.icon)
+                    if member.icon.onMove then member.icon.onMove(member.icon.db) end
+                    RepositionCtrlChildren(member.icon.globalID)
+                end
             end
         elseif ctx.dragState and ctx.dragState.pendingSnap then
             local snap = ctx.dragState.pendingSnap
@@ -201,7 +207,7 @@ function shmIcons_AttachIconDragHandlers(icon, globalID, db, cd, stackLabel, fra
             if isCtrl then
                 db.ctrlAttachedTo = snap.targetID
                 local parentIcon = icons[snap.targetID]
-                if parentIcon then
+                if parentIcon and parentIcon.frame then
                     local pCX, pCY = parentIcon.frame:GetCenter()
                     local puiCX, puiCY = UIParent:GetCenter()
                     db.ctrlOffsetX = snap.cx - (pCX - puiCX)

@@ -46,7 +46,11 @@ end
 
 function shmIcons:ToggleLock()
     isLocked = not isLocked
-    for _, icon in pairs(icons) do ApplyLockState(icon) end
+    for _, icon in pairs(icons) do
+        if icon and icon.frame then
+            ApplyLockState(icon)
+        end
+    end
     UpdateInfoFrameVisibility()
     for _, cb in ipairs(lockCallbacks) do
         local ok, err = pcall(cb, isLocked)
