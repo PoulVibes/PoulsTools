@@ -31,6 +31,9 @@ local function CR(content, anchor, yOff, label, getVal, setVal, xOff)
     cb:SetSize(20, 20)
     cb:SetChecked(getVal())
     cb:SetScript("OnClick", function(self) setVal(self:GetChecked()) end)
+    row.Refresh = function()
+        cb:SetChecked(getVal())
+    end
     local txt = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     txt:SetPoint("LEFT", cb, "RIGHT", 4, 0)
     txt:SetText(label)
@@ -56,6 +59,10 @@ local function DCR(content, anchor, yOff, label, getCondVal, setCondVal, getNotV
     cbCond:SetSize(20, 20)
     cbCond:SetChecked(getCondVal())
     cbCond:SetScript("OnClick", function(self) setCondVal(self:GetChecked()) end)
+    row.Refresh = function()
+        cbNot:SetChecked(getNotVal())
+        cbCond:SetChecked(getCondVal())
+    end
     local txt = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     txt:SetPoint("LEFT", cbCond, "RIGHT", 4, 0)
     txt:SetText(label)
@@ -83,6 +90,7 @@ local function JunctionBtn(content, anchor, getVal, setVal)
         end
     end
     Refresh()
+    btn.Refresh = Refresh
     btn:SetScript("OnClick", function()
         local j = getVal() or "and"
         setVal((j == "and") and "or" or "and")
@@ -176,33 +184,47 @@ local function OpenLookAndFeelWindow(db, spellName, spellKey)
     UIDropDownMenu_SetSelectedValue(spellDrop, spellKey)
     UIDropDownMenu_SetText(spellDrop, spellName or "?")
 
-    PopulateContent = function(pdb, pSpellName, pSpellKey)
-        f.currentSpellKey = pSpellKey
-        for _, child in ipairs({ content:GetChildren() }) do child:Hide(); child:SetParent(nil) end
-        for _, region in ipairs({ content:GetRegions() }) do region:Hide() end
+    if not f._contentBuilt then
+        f._contentBuilt = true
+        f._refreshers = {}
+
+        local function AddRefresher(w)
+            if w and w.Refresh then
+                table.insert(f._refreshers, w)
+            end
+            return w
+        end
 
         local anchor, y = content, 0
 
         -- ---- GLOW TRIGGERS ----
         local div, dy = SL(content, anchor, y, "Glow Triggers")
         anchor, y = div, dy
-        anchor = CR(content, anchor, y, "Enable Glow",
-            function() return pdb.glow_enabled end,
+        anchor = AddRefresher(CR(content, anchor, y, "Enable Glow",
+            function() return f.currentDB and f.currentDB.glow_enabled end,
             function(v)
+                local pdb = f.currentDB
+                if not pdb then return end
                 local want = (v == true)
-                if want ~= (pdb.glow_enabled == true) then shmIcons:ToggleGlowEnabled("Cooldown Tracker", pSpellKey) end
+                if want ~= (pdb.glow_enabled == true) and f.currentSpellKey then
+                    shmIcons:ToggleGlowEnabled("Cooldown Tracker", f.currentSpellKey)
+                end
                 pdb.glow_enabled = want
-            end)
+            end))
         y = -2
-        anchor = CR(content, anchor, y, "Reactive Spell Enabled",
-            function() return pdb.glow_cond_reactive end, function(v) pdb.glow_cond_reactive = v end, 14)
+        anchor = AddRefresher(CR(content, anchor, y, "Reactive Spell Enabled",
+            function() return f.currentDB and f.currentDB.glow_cond_reactive end,
+            function(v) if f.currentDB then f.currentDB.glow_cond_reactive = v end end, 14))
         y = -2
-        anchor = CR(content, anchor, y, "Usable  (resource + range check)",
-            function() return pdb.glow_cond_usable end, function(v) pdb.glow_cond_usable = v end)
-        anchor = CR(content, anchor, y, "Has 1+ Charges ready",
-            function() return pdb.glow_cond_charges end, function(v) pdb.glow_cond_charges = v end)
-        anchor = CR(content, anchor, y, "Off-Cooldown  (max charges full)",
-            function() return pdb.glow_cond_offcd end, function(v) pdb.glow_cond_offcd = v end)
+        anchor = AddRefresher(CR(content, anchor, y, "Usable  (resource + range check)",
+            function() return f.currentDB and f.currentDB.glow_cond_usable end,
+            function(v) if f.currentDB then f.currentDB.glow_cond_usable = v end end))
+        anchor = AddRefresher(CR(content, anchor, y, "Has 1+ Charges ready",
+            function() return f.currentDB and f.currentDB.glow_cond_charges end,
+            function(v) if f.currentDB then f.currentDB.glow_cond_charges = v end end))
+        anchor = AddRefresher(CR(content, anchor, y, "Off-Cooldown  (max charges full)",
+            function() return f.currentDB and f.currentDB.glow_cond_offcd end,
+            function(v) if f.currentDB then f.currentDB.glow_cond_offcd = v end end))
         local glowReset = CreateFrame("Frame", nil, content)
         glowReset:SetSize(350, 1)
         glowReset:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", -14, 0)
@@ -211,18 +233,23 @@ local function OpenLookAndFeelWindow(db, spellName, spellKey)
         -- ---- AUDIO ALERT ----
         local div2, dy2 = SL(content, anchor, -6, "Audio Alert Triggers")
         anchor, y = div2, dy2
-        anchor = CR(content, anchor, y, "Enable Sound",
-            function() return pdb.sound_enabled end, function(v) pdb.sound_enabled = (v == true) end)
+        anchor = AddRefresher(CR(content, anchor, y, "Enable Sound",
+            function() return f.currentDB and f.currentDB.sound_enabled end,
+            function(v) if f.currentDB then f.currentDB.sound_enabled = (v == true) end end))
         y = -2
-        anchor = CR(content, anchor, y, "Reactive Spell Enabled",
-            function() return pdb.sound_cond_reactive end, function(v) pdb.sound_cond_reactive = v end, 14)
+        anchor = AddRefresher(CR(content, anchor, y, "Reactive Spell Enabled",
+            function() return f.currentDB and f.currentDB.sound_cond_reactive end,
+            function(v) if f.currentDB then f.currentDB.sound_cond_reactive = v end end, 14))
         y = -2
-        anchor = CR(content, anchor, y, "Usable  (resource + range check)",
-            function() return pdb.sound_cond_usable end, function(v) pdb.sound_cond_usable = v end)
-        anchor = CR(content, anchor, y, "Has 1+ Charges ready",
-            function() return pdb.sound_cond_charges end, function(v) pdb.sound_cond_charges = v end)
-        anchor = CR(content, anchor, y, "Off-Cooldown  (max charges full)",
-            function() return pdb.sound_cond_offcd end, function(v) pdb.sound_cond_offcd = v end)
+        anchor = AddRefresher(CR(content, anchor, y, "Usable  (resource + range check)",
+            function() return f.currentDB and f.currentDB.sound_cond_usable end,
+            function(v) if f.currentDB then f.currentDB.sound_cond_usable = v end end))
+        anchor = AddRefresher(CR(content, anchor, y, "Has 1+ Charges ready",
+            function() return f.currentDB and f.currentDB.sound_cond_charges end,
+            function(v) if f.currentDB then f.currentDB.sound_cond_charges = v end end))
+        anchor = AddRefresher(CR(content, anchor, y, "Off-Cooldown  (max charges full)",
+            function() return f.currentDB and f.currentDB.sound_cond_offcd end,
+            function(v) if f.currentDB then f.currentDB.sound_cond_offcd = v end end))
         local sndReset = CreateFrame("Frame", nil, content)
         sndReset:SetSize(350, 1)
         sndReset:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", -14, 0)
@@ -237,9 +264,13 @@ local function OpenLookAndFeelWindow(db, spellName, spellKey)
         soundDrop:SetPoint("TOPLEFT", soundLbl, "BOTTOMLEFT", -16, -4)
         UIDropDownMenu_SetWidth(soundDrop, 200)
         UIDropDownMenu_Initialize(soundDrop, function(self, level)
+            local pdb = f.currentDB
+            if not pdb then return end
             local soundChoices = CooldownTracker_SOUND_CHOICES or SOUND_CHOICES or {}
             local ni = UIDropDownMenu_CreateInfo()
-            ni.text = "None"; ni.value = nil; ni.checked = (pdb.ready_sound == nil)
+            ni.text = "None"
+            ni.value = nil
+            ni.checked = (pdb.ready_sound == nil)
             ni.func = function()
                 pdb.ready_sound = nil
                 UIDropDownMenu_SetSelectedValue(soundDrop, nil)
@@ -248,7 +279,9 @@ local function OpenLookAndFeelWindow(db, spellName, spellKey)
             UIDropDownMenu_AddButton(ni, level)
             for _, s in ipairs(soundChoices) do
                 local si = UIDropDownMenu_CreateInfo()
-                si.text = s.text; si.value = s.id; si.checked = (pdb.ready_sound == s.id)
+                si.text = s.text
+                si.value = s.id
+                si.checked = (pdb.ready_sound == s.id)
                 si.func = function(btn)
                     pdb.ready_sound = btn.value
                     UIDropDownMenu_SetSelectedValue(soundDrop, btn.value)
@@ -258,8 +291,13 @@ local function OpenLookAndFeelWindow(db, spellName, spellKey)
                 UIDropDownMenu_AddButton(si, level)
             end
         end)
-        UIDropDownMenu_SetSelectedValue(soundDrop, pdb.ready_sound)
-        UIDropDownMenu_SetText(soundDrop, FindSoundName(pdb.ready_sound))
+        f._refreshSoundDrop = function()
+            local pdb = f.currentDB
+            if not pdb then return end
+            UIDropDownMenu_SetSelectedValue(soundDrop, pdb.ready_sound)
+            UIDropDownMenu_SetText(soundDrop, FindSoundName(pdb.ready_sound))
+        end
+
         local dropSpacer = CreateFrame("Frame", nil, content)
         dropSpacer:SetSize(350, 1)
         dropSpacer:SetPoint("TOPLEFT", soundLbl, "BOTTOMLEFT", 0, -42)
@@ -268,42 +306,68 @@ local function OpenLookAndFeelWindow(db, spellName, spellKey)
         -- ---- CONDITIONAL HIDE ----
         local div3, dy3 = SL(content, anchor, -10, "Conditional Hide")
         anchor, y = div3, dy3
-        anchor = CR(content, anchor, y, "Conditionally hide icon",
-            function() return pdb.show_enabled end, function(v) pdb.show_enabled = (v == true) end)
+        anchor = AddRefresher(CR(content, anchor, y, "Conditionally hide icon",
+            function() return f.currentDB and f.currentDB.show_enabled end,
+            function(v) if f.currentDB then f.currentDB.show_enabled = (v == true) end end))
         y = -2
-        anchor = DCR(content, anchor, y, "Reactive Spell Enabled",
-            function() return pdb.show_cond_reactive end, function(v) pdb.show_cond_reactive = v end,
-            function() return pdb.show_cond_reactive_not end, function(v) pdb.show_cond_reactive_not = v end)
-        anchor = JunctionBtn(content, anchor,
-            function() return pdb.show_join_usable end, function(v) pdb.show_join_usable = v end)
+        anchor = AddRefresher(DCR(content, anchor, y, "Reactive Spell Enabled",
+            function() return f.currentDB and f.currentDB.show_cond_reactive end,
+            function(v) if f.currentDB then f.currentDB.show_cond_reactive = v end end,
+            function() return f.currentDB and f.currentDB.show_cond_reactive_not end,
+            function(v) if f.currentDB then f.currentDB.show_cond_reactive_not = v end end))
+        anchor = AddRefresher(JunctionBtn(content, anchor,
+            function() return f.currentDB and f.currentDB.show_join_usable end,
+            function(v) if f.currentDB then f.currentDB.show_join_usable = v end end))
         y = -2
-        anchor = DCR(content, anchor, y, "Usable  (resource + range check)",
-            function() return pdb.show_cond_usable end, function(v) pdb.show_cond_usable = v end,
-            function() return pdb.show_cond_usable_not end, function(v) pdb.show_cond_usable_not = v end)
-        anchor = JunctionBtn(content, anchor,
-            function() return pdb.show_join_charges end, function(v) pdb.show_join_charges = v end)
-        anchor = DCR(content, anchor, y, "Has 1+ Charges ready",
-            function() return pdb.show_cond_charges end, function(v) pdb.show_cond_charges = v end,
-            function() return pdb.show_cond_charges_not end, function(v) pdb.show_cond_charges_not = v end)
-        anchor = JunctionBtn(content, anchor,
-            function() return pdb.show_join_offcd end, function(v) pdb.show_join_offcd = v end)
-        anchor = DCR(content, anchor, y, "Off-Cooldown  (max charges full)",
-            function() return pdb.show_cond_offcd end, function(v) pdb.show_cond_offcd = v end,
-            function() return pdb.show_cond_offcd_not end, function(v) pdb.show_cond_offcd_not = v end)
+        anchor = AddRefresher(DCR(content, anchor, y, "Usable  (resource + range check)",
+            function() return f.currentDB and f.currentDB.show_cond_usable end,
+            function(v) if f.currentDB then f.currentDB.show_cond_usable = v end end,
+            function() return f.currentDB and f.currentDB.show_cond_usable_not end,
+            function(v) if f.currentDB then f.currentDB.show_cond_usable_not = v end end))
+        anchor = AddRefresher(JunctionBtn(content, anchor,
+            function() return f.currentDB and f.currentDB.show_join_charges end,
+            function(v) if f.currentDB then f.currentDB.show_join_charges = v end end))
+        anchor = AddRefresher(DCR(content, anchor, y, "Has 1+ Charges ready",
+            function() return f.currentDB and f.currentDB.show_cond_charges end,
+            function(v) if f.currentDB then f.currentDB.show_cond_charges = v end end,
+            function() return f.currentDB and f.currentDB.show_cond_charges_not end,
+            function(v) if f.currentDB then f.currentDB.show_cond_charges_not = v end end))
+        anchor = AddRefresher(JunctionBtn(content, anchor,
+            function() return f.currentDB and f.currentDB.show_join_offcd end,
+            function(v) if f.currentDB then f.currentDB.show_join_offcd = v end end))
+        anchor = AddRefresher(DCR(content, anchor, y, "Off-Cooldown  (max charges full)",
+            function() return f.currentDB and f.currentDB.show_cond_offcd end,
+            function(v) if f.currentDB then f.currentDB.show_cond_offcd = v end end,
+            function() return f.currentDB and f.currentDB.show_cond_offcd_not end,
+            function(v) if f.currentDB then f.currentDB.show_cond_offcd_not = v end end))
 
         -- ---- HOTKEY ----
         local div4, dy4 = SL(content, anchor, -6, "Hotkey")
         anchor, y = div4, dy4
-        CR(content, anchor, y, "Show action-bar hotkey on icon",
-            function() return pdb.show_hotkey end,
+        AddRefresher(CR(content, anchor, y, "Show action-bar hotkey on icon",
+            function() return f.currentDB and f.currentDB.show_hotkey end,
             function(v)
+                local pdb = f.currentDB
+                if not pdb then return end
                 pdb.show_hotkey = v
-                if pSpellKey and shmIcons then
-                    shmIcons:SetDisplayHotkey("Cooldown Tracker", pSpellKey, v == true)
+                if f.currentSpellKey and shmIcons then
+                    shmIcons:SetDisplayHotkey("Cooldown Tracker", f.currentSpellKey, v == true)
                 end
-            end)
+            end))
 
         content:SetHeight(710)
+    end
+
+    PopulateContent = function(pdb, pSpellName, pSpellKey)
+        f.currentDB = pdb
+        f.currentSpellName = pSpellName
+        f.currentSpellKey = pSpellKey
+        for _, w in ipairs(f._refreshers or {}) do
+            if w.Refresh then w:Refresh() end
+        end
+        if f._refreshSoundDrop then
+            f._refreshSoundDrop()
+        end
     end
 
     PopulateContent(db, spellName, spellKey)

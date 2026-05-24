@@ -264,6 +264,19 @@ local function OnBuildUI(parent)
     if type(CooldownTracker_RegisterChangeListener) == "function" then
         CooldownTracker_RegisterChangeListener(parent._cdtChangeListener)
     end
+    if not parent._cdtChangeListenerHooks then
+        parent._cdtChangeListenerHooks = true
+        parent:HookScript("OnHide", function(self)
+            if self._cdtChangeListener and type(CooldownTracker_UnregisterChangeListener) == "function" then
+                CooldownTracker_UnregisterChangeListener(self._cdtChangeListener)
+            end
+        end)
+        parent:HookScript("OnShow", function(self)
+            if self._cdtChangeListener and type(CooldownTracker_RegisterChangeListener) == "function" then
+                CooldownTracker_RegisterChangeListener(self._cdtChangeListener)
+            end
+        end)
+    end
 
     local div3, dy3 = W:SectionHeader(parent, trackedContainer, -6, "Actions")
     -- keep a reference so the tracked list can reanchor this header on updates

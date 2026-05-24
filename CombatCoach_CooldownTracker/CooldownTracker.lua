@@ -106,7 +106,19 @@ local function PlayReadySound(db)
     end
 end
 
-local function UpdateTracker(key, updateStacks)
+-- Evaluates AND-gated conditions for glow/sound/show; returns nil when no boxes checked.
+local function CondGate(db, prefix, condReactive, condUsable, condCharges, condOffCd)
+    local anyChecked = db[prefix.."reactive"] or db[prefix.."usable"]
+                    or db[prefix.."charges"]  or db[prefix.."offcd"]
+    if not anyChecked then return nil end
+    if db[prefix.."reactive"] and not condReactive then return false end
+    if db[prefix.."charges"]  and not condCharges  then return false end
+    if db[prefix.."offcd"]    and not condOffCd    then return false end
+    if db[prefix.."usable"] and not condUsable then return false end
+    return true
+end
+
+local function UpdateTracker(key, updateStacks, skipCooldownApi)
     local entry = tracked[key]
     if not entry then return end
     if entry.dormant or not entry.spellID then return end
@@ -114,32 +126,35 @@ local function UpdateTracker(key, updateStacks)
     shmIcons:SetIcon(ADDON_NAME, key, spellInfo and spellInfo.iconID or 134400)
 
     local cdInfo         = C_Spell.GetSpellCooldown(entry.spellID)
-    local durationObject = C_Spell.GetSpellCooldownDuration(entry.spellID)
     local chargeInfo     = C_Spell.GetSpellCharges(entry.spellID)
     local isChargeSpell  = chargeInfo and chargeInfo.maxCharges and chargeInfo.maxCharges > 1
-    local chargeDuration = C_Spell.GetSpellChargeDuration(entry.spellID)
     local db             = GetSpecSpells(CT.currentSpecID)[key]
 
-    if isChargeSpell then
-        if durationObject and cdInfo and cdInfo.isActive then
-            shmIcons:SetCooldown(ADDON_NAME, key, durationObject)
-        elseif chargeDuration and chargeInfo and chargeInfo.isActive then
-            shmIcons:SetCooldown(ADDON_NAME, key, chargeDuration)
+    if not skipCooldownApi then
+        local durationObject = C_Spell.GetSpellCooldownDuration(entry.spellID)
+        local chargeDuration = C_Spell.GetSpellChargeDuration(entry.spellID)
+
+        if isChargeSpell then
+            if durationObject and cdInfo and cdInfo.isActive then
+                shmIcons:SetCooldown(ADDON_NAME, key, durationObject)
+            elseif chargeDuration and chargeInfo and chargeInfo.isActive then
+                shmIcons:SetCooldown(ADDON_NAME, key, chargeDuration)
+            else
+                shmIcons:SetCooldown(ADDON_NAME, key, nil)
+            end
+            if cdInfo and (not cdInfo.isActive or cdInfo.isOnGCD) then
+                shmIcons:SetStacks(ADDON_NAME, key, chargeInfo.currentCharges)
+            else
+                shmIcons:SetStacks(ADDON_NAME, key, 0)
+            end
         else
-            shmIcons:SetCooldown(ADDON_NAME, key, nil)
+            if durationObject and cdInfo and cdInfo.isActive then
+                shmIcons:SetCooldown(ADDON_NAME, key, durationObject)
+            else
+                shmIcons:SetCooldown(ADDON_NAME, key, nil)
+            end
+            if updateStacks then shmIcons:SetStacks(ADDON_NAME, key, 0) end
         end
-        if cdInfo and (not cdInfo.isActive or cdInfo.isOnGCD) then
-            shmIcons:SetStacks(ADDON_NAME, key, chargeInfo.currentCharges)
-        else
-            shmIcons:SetStacks(ADDON_NAME, key, 0)
-        end
-    else
-        if durationObject and cdInfo and cdInfo.isActive then
-            shmIcons:SetCooldown(ADDON_NAME, key, durationObject)
-        else
-            shmIcons:SetCooldown(ADDON_NAME, key, nil)
-        end
-        if updateStacks then shmIcons:SetStacks(ADDON_NAME, key, 0) end
     end
 
     local condReactive = cdInfo and cdInfo.isEnabled == true
@@ -157,25 +172,8 @@ local function UpdateTracker(key, updateStacks)
         condOffCd = true
     end
 
--- Evaluates AND-gated conditions for glow/sound/show; returns nil when no boxes checked.
-    local function CondGate(prefix)
-        local anyChecked = db[prefix.."reactive"] or db[prefix.."usable"]
-                        or db[prefix.."charges"]  or db[prefix.."offcd"]
-        if not anyChecked then return nil end
-        if db[prefix.."reactive"] and not condReactive then return false end
-        if db[prefix.."charges"]  and not condCharges  then return false end
-        if db[prefix.."offcd"]    and not condOffCd    then return false end
-        if db[prefix.."usable"] then
-            if condUsable then
-            else
-                return false
-            end
-        end
-        return true
-    end
-
     -- ---- Glow ----
-    local glowResult = db and CondGate("glow_cond_")
+    local glowResult = db and CondGate(db, "glow_cond_", condReactive, condUsable, condCharges, condOffCd)
     if glowResult == nil then
         glowResult = isChargeSpell and condCharges or condOffCd
     end
@@ -187,7 +185,7 @@ local function UpdateTracker(key, updateStacks)
     else
         shmIcons:SetRange(ADDON_NAME, key, nil)
     end
-    shmIcons:SetUsable(ADDON_NAME, key, C_Spell.IsSpellUsable(entry.spellID))
+    shmIcons:SetUsable(ADDON_NAME, key, condUsable)
 
     -- ---- Visibility (Conditional Hide with AND/OR junctions) ----
     if db and db.show_enabled then
@@ -243,7 +241,7 @@ local function UpdateTracker(key, updateStacks)
     -- ---- Sound (fire on transition only) ----
     local soundGate = false
     if db and db.sound_enabled then
-        local gate = CondGate("sound_cond_")
+        local gate = CondGate(db, "sound_cond_", condReactive, condUsable, condCharges, condOffCd)
         soundGate = (gate ~= nil) and gate or false
     end
     if isChargeSpell then
@@ -374,7 +372,13 @@ ticker:SetScript("OnUpdate", function(_, elapsed)
         return
     end
     ticker.elapsed = 0
-    UpdateAllTrackers()
+    -- Avoid constant polling allocations while idle out of combat with no target.
+    if not InCombatLockdown() and not UnitExists("target") then
+        return
+    end
+    for key in pairs(tracked) do
+        UpdateTracker(key, false, true)
+    end
 end)
 ticker:Hide()
 
@@ -392,8 +396,8 @@ end
 local function UnloadSpec()
     for key in pairs(tracked) do
         shmIcons:Unregister(ADDON_NAME, key)
+        tracked[key] = nil
     end
-    tracked = {}
     EnsureTickerState()
     NotifyChangeListeners()
 end
