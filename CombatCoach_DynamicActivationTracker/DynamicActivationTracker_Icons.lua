@@ -110,9 +110,6 @@ local function RegisterIcon(specID, spellID, entry)
     entry.spellName = displayName
     entry.label = displayName
     shmIcons:SetIcon(DAT.ADDON_NAME, spellIDStr, displayIcon)
-    if shmIcons and shmIcons.SetEnabled then
-        pcall(shmIcons.SetEnabled, shmIcons, DAT.ADDON_NAME, spellIDStr, entry.enabled == true)
-    end
     if entry.enabled == false then
         shmIcons:SetGlow(DAT.ADDON_NAME, spellIDStr, false)
         shmIcons:SetVisible(DAT.ADDON_NAME, spellIDStr, false)
@@ -198,6 +195,8 @@ function DynamicActivationTracker_LoadSpec(specID)
             end
         end
     end
+
+    DynamicActivationTracker_ReevaluateVisibility()
 
     if shmIcons and shmIcons.RestoreSnapGroups then
         shmIcons:RestoreSnapGroups()
@@ -309,7 +308,7 @@ function DynamicActivationTracker_ReevaluateVisibility()
             else
                 DynamicActivationTracker_RefreshEntry(specID, spellID)
                 local activeFlag = DynamicActivationTracker_MakeActiveFlag(specID, spellID)
-                local isActive = (_G[activeFlag] == true) or (DAT.iconShown[spellIDStr] == true)
+                local isActive = (_G[activeFlag] == true)
                 shmIcons:SetVisible(DAT.ADDON_NAME, spellIDStr, isActive)
                 shmIcons:SetGlow(DAT.ADDON_NAME, spellIDStr, isActive and (entry.glow_enabled ~= false))
                 if not isActive then

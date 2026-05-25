@@ -139,6 +139,7 @@ local function OnBuildUI(parent)
                     if entry.enabled then
                         DynamicActivationTracker_RefreshEntry(specID, spellID)
                     else
+                        shmIcons:SetEnabled(DAT.ADDON_NAME, spellIDStr, false)
                         shmIcons:SetGlow(DAT.ADDON_NAME, spellIDStr, false)
                         shmIcons:SetVisible(DAT.ADDON_NAME, spellIDStr, false)
                     end
