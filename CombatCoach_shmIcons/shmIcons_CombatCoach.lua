@@ -236,10 +236,22 @@ local function OnBuildUI(parent)
                 glowBtn:SetSize(80, 20)
                 glowBtn:SetPoint("RIGHT", row, "RIGHT", -120, 0)
                 glowBtn:SetText("Glow")
+
+                local function UpdateGlowButtonHighlight(enabled)
+                    if enabled then
+                        glowBtn:LockHighlight()
+                    else
+                        glowBtn:UnlockHighlight()
+                    end
+                end
+
+                UpdateGlowButtonHighlight((icon and icon.glowEnabled == true) or (capturedDB and capturedDB.glow_enabled == true))
+
                 glowBtn:SetScript("OnClick", function()
                     if shmIcons and shmIcons.ToggleGlowEnabled then
                         local enabled = shmIcons:ToggleGlowEnabled(capturedAddon, capturedID)
                         if capturedDB then capturedDB.glow_enabled = enabled end
+                        UpdateGlowButtonHighlight(enabled)
                     end
                 end)
 
