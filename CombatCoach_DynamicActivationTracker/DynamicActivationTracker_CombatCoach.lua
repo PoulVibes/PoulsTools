@@ -71,8 +71,15 @@ local function OnBuildUI(parent)
 
     RebuildList = function()
         for _, row in ipairs(rows) do
-            row:Hide()
-            row:SetParent(nil)
+            if row and row.Hide then
+                row:Hide()
+            end
+            if row and row.ClearAllPoints then
+                row:ClearAllPoints()
+            end
+            if row and row.SetParent then
+                row:SetParent(nil)
+            end
         end
         rows = {}
 

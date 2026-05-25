@@ -187,7 +187,7 @@ function DynamicActivationTracker_GetOrCreateEntry(specID, spellID)
         point = "CENTER",
         size = size,
         enabled = false,
-        glow_enabled = true,
+        glow_enabled = false,
     }
     specDB.icons[spellIDStr] = entry
     return entry

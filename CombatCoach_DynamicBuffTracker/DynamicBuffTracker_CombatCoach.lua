@@ -16,6 +16,101 @@ local function OnBuildUI(parent)
     anchor = div
     y = dy
 
+    local cdmEnableRow = nil
+    local cdmEnableCheck = nil
+    local cdmCVarName = nil
+
+    local function ReadCVar(name)
+        if not name or name == "" then return nil end
+        if C_CVar and C_CVar.GetCVar then
+            local ok, value = pcall(C_CVar.GetCVar, name)
+            if ok then return value end
+        end
+        if GetCVar then
+            local ok, value = pcall(GetCVar, name)
+            if ok then return value end
+        end
+        return nil
+    end
+
+    local function ResolveCDMCVarName()
+        if cdmCVarName then return cdmCVarName end
+        local candidates = {
+            "cooldownViewerEnabled",
+            "cooldownManagerEnabled",
+            "buffIconCooldownViewerEnabled",
+        }
+        for _, name in ipairs(candidates) do
+            local value = ReadCVar(name)
+            if value ~= nil and value ~= "" then
+                cdmCVarName = name
+                return cdmCVarName
+            end
+        end
+        cdmCVarName = candidates[1]
+        return cdmCVarName
+    end
+
+    local function IsCDMEnabled()
+        local value = ReadCVar(ResolveCDMCVarName())
+        if value == nil or value == "" then return false end
+        if value == true or value == "1" then return true end
+        if tonumber(value) and tonumber(value) ~= 0 then return true end
+        return false
+    end
+
+    local function SetCDMEnabled(enabled)
+        local name = ResolveCDMCVarName()
+        local val = enabled and "1" or "0"
+        local ok = false
+        if C_CVar and C_CVar.SetCVar then
+            ok = pcall(C_CVar.SetCVar, name, val)
+        elseif SetCVar then
+            ok = pcall(SetCVar, name, val)
+        end
+        if not ok then
+            print("|cFFFF4444DynamicBuffTracker: Unable to set Blizzard Cooldown Manager CVAR '|r" .. tostring(name) .. "|cFFFF4444'.|r")
+        end
+        return ok
+    end
+
+    local function RefreshCDMEnableCheckbox()
+        if cdmEnableCheck then
+            cdmEnableCheck:SetChecked(IsCDMEnabled())
+        end
+    end
+
+    cdmEnableRow = CreateFrame("Frame", nil, parent)
+    cdmEnableRow:SetSize(540, 26)
+    cdmEnableRow:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, y - 6)
+
+    cdmEnableCheck = CreateFrame("CheckButton", nil, cdmEnableRow, "UICheckButtonTemplate")
+    cdmEnableCheck:SetPoint("LEFT", cdmEnableRow, "LEFT", 0, 0)
+    cdmEnableCheck:SetSize(22, 22)
+    cdmEnableCheck:SetChecked(IsCDMEnabled())
+    cdmEnableCheck:SetScript("OnClick", function(self)
+        SetCDMEnabled(self:GetChecked() and true or false)
+        RefreshCDMEnableCheckbox()
+    end)
+    cdmEnableCheck:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Enable Blizzard Cooldown Manager", 1, 1, 1)
+        GameTooltip:AddLine(
+            "Mirrors and controls Blizzard's Cooldown Manager enable CVar.\n"
+            .. "Checked = enabled, unchecked = disabled.",
+            nil, nil, nil, true)
+        GameTooltip:Show()
+    end)
+    cdmEnableCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    local cdmEnableText = cdmEnableRow:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    cdmEnableText:SetPoint("LEFT", cdmEnableCheck, "RIGHT", 6, 0)
+    cdmEnableText:SetText("Enable Blizzard Cooldown Manager")
+    cdmEnableText:SetTextColor(unpack(W.colors.text))
+
+    anchor = cdmEnableRow
+    y = -4
+
     local hideBarChk = W:Checkbox(parent, anchor, y,
         "Hide Blizzard Buff Icon Bar",
         "Sets the Blizzard BuffIconCooldownViewer alpha to 0, hiding it while"
@@ -355,6 +450,7 @@ local function OnBuildUI(parent)
         canvasFrame = canvasFrame:GetParent()
     end
     canvasFrame:HookScript("OnShow", function()
+        RefreshCDMEnableCheckbox()
         RebuildList()
         if lockBtn and shmIcons and shmIcons.IsLocked then
             lockBtn:SetText(shmIcons:IsLocked() and "Unlock Icons" or "Lock Icons")
