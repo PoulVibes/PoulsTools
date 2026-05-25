@@ -26,6 +26,29 @@ local function IsIgnoredDATIcon(addonName, localID)
     return DynamicActivationTracker_IsIgnored(specID, spellID)
 end
 
+local function ResolveListIconTexture(icon, db, localID)
+    local tex = (icon and icon.iconTex and icon.iconTex:GetTexture()) or nil
+    if tex and tex ~= 134400 then
+        return tex, false
+    end
+
+    local fallback = db and (db.override_icon or db.iconID)
+    if fallback and fallback ~= 134400 then
+        return fallback, false
+    end
+
+    local spellID = tonumber(localID)
+    if spellID and C_Spell and C_Spell.GetSpellInfo then
+        local ok, info = pcall(C_Spell.GetSpellInfo, spellID)
+        local iconID = ok and info and info.iconID or nil
+        if iconID and iconID ~= 134400 then
+            return iconID, false
+        end
+    end
+
+    return 134400, true
+end
+
 local function OnBuildUI(parent)
     if parent.__SHMIconsPanelInitialized then
         if parent.__SHMIconsRefresh then parent.__SHMIconsRefresh() end
@@ -84,6 +107,8 @@ local function OnBuildUI(parent)
 
     local activeRows = {}
     local listDirty = true
+    local textureRetryCount = 0
+    local maxTextureRetries = 5
 
     local function BuildIconList()
         for _, f in ipairs(activeRows) do
@@ -105,6 +130,7 @@ local function OnBuildUI(parent)
         local rowY         = 0
         local lastAddon    = nil
         local visibleCount = 0
+        local unresolvedTextureSeen = false
 
         for _, entry in ipairs(allIcons) do
             local addonName = tostring(entry.addonName or "Unknown Addon")
@@ -213,8 +239,11 @@ local function OnBuildUI(parent)
             local iconTex = row:CreateTexture(nil, "ARTWORK")
             iconTex:SetSize(20, 20)
             iconTex:SetPoint("LEFT", leftControl, "RIGHT", 6, 0)
-            iconTex:SetTexture(
-                (icon and icon.iconTex and icon.iconTex:GetTexture()) or 134400)
+            local resolvedTexture, unresolvedTexture = ResolveListIconTexture(icon, db, capturedID)
+            iconTex:SetTexture(resolvedTexture)
+            if unresolvedTexture then
+                unresolvedTextureSeen = true
+            end
 
             local nameLbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             nameLbl:SetPoint("LEFT", iconTex, "RIGHT", 6, 0)
@@ -302,6 +331,20 @@ local function OnBuildUI(parent)
 
         listContainer:SetHeight(rowY)
         listDirty = false
+
+        if unresolvedTextureSeen then
+            if textureRetryCount < maxTextureRetries then
+                textureRetryCount = textureRetryCount + 1
+                C_Timer.After(0.25, function()
+                    listDirty = true
+                    if parent and parent:IsShown() then
+                        BuildIconList()
+                    end
+                end)
+            end
+        else
+            textureRetryCount = 0
+        end
     end
 
     BuildIconList()

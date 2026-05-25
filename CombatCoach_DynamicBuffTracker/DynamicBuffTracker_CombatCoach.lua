@@ -36,10 +36,58 @@ local function OnBuildUI(parent)
     note:SetTextColor(0.72, 0.82, 0.92, 1)
     note:SetText(
         "Discovers spells tracked in Blizzard's CooldownManager (BuffIconCooldownViewer) "
-        .. "whose icons match a purchased talent. Add buff icons in the CooldownManager settings, "
+        .. "and allows the user to use conditions in the rotation helper based on the buffs. "
+        .. "Add buff icons in the CooldownManager settings, Trigger buffs at least once. "
         .. "then click Scan Now (or change talents) to update.")
     anchor = note
     y = -8
+
+    local openCDMBtn = W:Button(parent, anchor, y, "Blizz Cooldown Manager", function()
+        local function OpenCooldownManager()
+            if not CooldownViewerSettings then
+                local okLoad = pcall(UIParentLoadAddOn, "Blizzard_CooldownViewer")
+                if not okLoad then
+                    print("|cFFFF4444DynamicBuffTracker: Could not load Blizzard_CooldownViewer.|r")
+                    return
+                end
+            end
+
+            if CooldownViewerSettings then
+                if CooldownViewerSettings:IsShown() then
+                    CooldownViewerSettings:Show()
+                elseif CooldownViewerSettings.TogglePanel then
+                    CooldownViewerSettings:TogglePanel()
+                else
+                    print("|cFFFF4444DynamicBuffTracker: Cooldown Manager UI is unavailable.|r")
+                end
+            else
+                print("|cFFFF4444DynamicBuffTracker: Cooldown Manager UI is unavailable.|r")
+            end
+        end
+
+        if SettingsPanel and SettingsPanel:IsShown() then
+            HideUIPanel(SettingsPanel)
+            C_Timer.After(0, OpenCooldownManager)
+        else
+            OpenCooldownManager()
+        end
+    end)
+    openCDMBtn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("How to make DBT shmIcons appear", 1, 1, 1)
+        GameTooltip:AddLine(
+            "1) Click this button to open Blizzard's Cooldown Manager.\n"
+            .. "2) Open the Buffs Tab.\n"
+            .. "3) Add the buff you want track to the icons section.\n"
+            .. "4) Trigger any buffs you want to track at least once.\n"
+            .. "5) Return here and click Scan Now (or type /dbt scan).\n"
+            .. "DBT only mirrors entries that exist in Blizzard's viewer.",
+            nil, nil, nil, true)
+        GameTooltip:Show()
+    end)
+    openCDMBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    anchor = openCDMBtn
+    y = -4
 
     anchor = W:Button(parent, anchor, y, "Scan Now", function()
         if InCombatLockdown() then

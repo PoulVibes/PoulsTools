@@ -21,7 +21,10 @@ local function OnBuildUI(parent)
     note:SetTextColor(0.72, 0.82, 0.92, 1)
     note:SetText(
         "Icons are created from spell activation overlay events and saved per spec. "
-        .. "Override icon IDs and SBAS timers are stored with each saved entry.")
+        .. "Override icon IDs and timers are stored with each saved entry."
+        .. "These can be used for triggering conditions in rotation helper. "
+        .. "Most Spell Activations happen when a particular buff is present. "
+        .. "Set the Timer, Icon, and Display Name to match the buff you want to track.")
     anchor = note
     y = -8
 

@@ -209,16 +209,21 @@ function DynamicActivationTracker_ShowActivation(spellID)
     if not specID or specID == 0 then return end
     if DynamicActivationTracker_IsIgnored(specID, spellID) then return end
 
+    local key = SpellKey(spellID)
+    local wasTracked = DAT.runtimeIcons[key] ~= nil
+
     local entry = DynamicActivationTracker_GetOrCreateEntry(specID, spellID)
     if not entry then return end
 
     -- Always register newly discovered DAT entries so the CombatCoach main
     -- shmIcons list updates immediately without requiring reload.
     DynamicActivationTracker_RefreshEntry(specID, spellID)
+    if not wasTracked then
+        DynamicActivationTracker_RefreshCurrentSpecList()
+    end
 
     if entry.enabled == false then return end
     local defaultOverride = DynamicActivationTracker_GetDefaultOverride(specID, spellID)
-    local key = SpellKey(spellID)
 
     _G[DynamicActivationTracker_MakeActiveFlag(specID, spellID)] = true
     DAT.iconShown[key] = true
