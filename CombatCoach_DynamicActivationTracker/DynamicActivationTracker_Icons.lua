@@ -110,6 +110,9 @@ local function RegisterIcon(specID, spellID, entry)
     entry.spellName = displayName
     entry.label = displayName
     shmIcons:SetIcon(DAT.ADDON_NAME, spellIDStr, displayIcon)
+    if shmIcons and shmIcons.SetEnabled then
+        pcall(shmIcons.SetEnabled, shmIcons, DAT.ADDON_NAME, spellIDStr, entry.enabled == true)
+    end
     if entry.enabled == false then
         shmIcons:SetGlow(DAT.ADDON_NAME, spellIDStr, false)
         shmIcons:SetVisible(DAT.ADDON_NAME, spellIDStr, false)
@@ -148,6 +151,9 @@ function DynamicActivationTracker_RemoveTrackedSpell(specID, spellID, ignoreSpel
     DAT.iconShown[spellIDStr] = nil
     StopConditionTimer(specID, spellID)
     _G[DynamicActivationTracker_MakeActiveFlag(specID, spellID)] = false
+    if shmIcons and shmIcons.MarkCombatCoachListDirty then
+        shmIcons.MarkCombatCoachListDirty()
+    end
 
     for sid in pairs(specDB.icons) do
         local numSID = tonumber(sid)

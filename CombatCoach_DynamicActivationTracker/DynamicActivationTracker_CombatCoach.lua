@@ -134,14 +134,17 @@ local function OnBuildUI(parent)
             showChk:SetPoint("RIGHT", ignoreBtn, "LEFT", -12, -1)
             showChk:SetChecked(entry.enabled ~= false)
             showChk:SetScript("OnClick", function(self)
-                entry.enabled = self:GetChecked() and true or false
+                local wantEnabled = self:GetChecked() and true or false
+                entry.enabled = wantEnabled
                 if spellID and specID == DAT.currentSpecID then
+                    if shmIcons and shmIcons.SetEnabled then
+                        local applied = shmIcons:SetEnabled(DAT.ADDON_NAME, spellIDStr, wantEnabled)
+                        if applied ~= nil then
+                            entry.enabled = applied
+                        end
+                    end
                     if entry.enabled then
                         DynamicActivationTracker_RefreshEntry(specID, spellID)
-                    else
-                        shmIcons:SetEnabled(DAT.ADDON_NAME, spellIDStr, false)
-                        shmIcons:SetGlow(DAT.ADDON_NAME, spellIDStr, false)
-                        shmIcons:SetVisible(DAT.ADDON_NAME, spellIDStr, false)
                     end
                 end
             end)
@@ -272,6 +275,7 @@ local function OnBuildUI(parent)
             for ignoredSpellIDStr, ignoredEntry in pairs(removedDB) do
                 ignoredCount = ignoredCount + 1
                 local ignoredSpellID = tonumber(ignoredSpellIDStr)
+                local capturedIgnoredKey = tostring(ignoredSpellIDStr)
                 local displayName = type(ignoredEntry) == "table"
                     and (ignoredEntry.display_name or ignoredEntry.label or ignoredEntry.spellName)
                     or nil
@@ -300,10 +304,8 @@ local function OnBuildUI(parent)
                 unignoreBtn:SetText("X")
                 unignoreBtn:SetScript("OnClick", function()
                     if InCombatLockdown() then return end
-                    if ignoredSpellID then
-                        DynamicActivationTracker_UnignoreSpell(specID, ignoredSpellID)
-                        QueueRebuild()
-                    end
+                    DynamicActivationTracker_UnignoreSpell(specID, capturedIgnoredKey)
+                    QueueRebuild()
                 end)
 
                 rows[#rows + 1] = row
