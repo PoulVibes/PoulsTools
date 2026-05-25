@@ -272,6 +272,36 @@ function DynamicActivationTracker_RefreshCurrentSpecList()
     end
 end
 
+function DynamicActivationTracker_ReevaluateVisibility()
+    local specID = DAT.currentSpecID
+    if not specID or specID == 0 then return end
+
+    local specDB = DynamicActivationTracker_GetSpecDB(specID)
+    if not specDB or not specDB.icons then return end
+
+    for spellIDStr, entry in pairs(specDB.icons) do
+        local spellID = tonumber(spellIDStr)
+        if spellID then
+            if entry.enabled == false then
+                shmIcons:SetVisible(DAT.ADDON_NAME, spellIDStr, false)
+                shmIcons:SetGlow(DAT.ADDON_NAME, spellIDStr, false)
+                StopConditionTimer(specID, spellID)
+                _G[DynamicActivationTracker_MakeActiveFlag(specID, spellID)] = false
+                DAT.iconShown[spellIDStr] = nil
+            else
+                DynamicActivationTracker_RefreshEntry(specID, spellID)
+                local activeFlag = DynamicActivationTracker_MakeActiveFlag(specID, spellID)
+                local isActive = (_G[activeFlag] == true) or (DAT.iconShown[spellIDStr] == true)
+                shmIcons:SetVisible(DAT.ADDON_NAME, spellIDStr, isActive)
+                shmIcons:SetGlow(DAT.ADDON_NAME, spellIDStr, isActive and (entry.glow_enabled ~= false))
+                if not isActive then
+                    StopConditionTimer(specID, spellID)
+                end
+            end
+        end
+    end
+end
+
 function DynamicActivationTracker_RefreshAllTimerCooldowns()
     for _, handle in pairs(DAT.conditionTimers) do
         if handle and handle.specID == DAT.currentSpecID and handle.spellID then

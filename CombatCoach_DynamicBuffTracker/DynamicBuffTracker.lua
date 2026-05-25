@@ -3,6 +3,7 @@
 -- All logic is in the helper files loaded before this one.
 
 local DBT = DynamicBuffTracker
+local lockCallbackRegistered = false
 
 -- ============================================================
 -- CDM bar visibility
@@ -24,6 +25,12 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" and arg1 == DBT.ADDON_FOLDER then
         DynamicBuffTrackerDB       = DynamicBuffTrackerDB or {}
         DynamicBuffTrackerDB.specs = DynamicBuffTrackerDB.specs or {}
+        if not lockCallbackRegistered and shmIcons and shmIcons.RegisterLockCallback then
+            lockCallbackRegistered = true
+            shmIcons:RegisterLockCallback(function()
+                DynamicBuffTracker_ReevaluateVisibility()
+            end)
+        end
         for _, specData in pairs(DynamicBuffTrackerDB.specs) do
             if type(specData) == "table" and specData.buffs then
                 for k, entry in pairs(specData.buffs) do

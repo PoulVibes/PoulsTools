@@ -115,6 +115,13 @@ function shmIcons:ExitEditMode()
             icon.frame:Hide()
         end
     end
+
+    for _, cb in ipairs(lockCallbacks) do
+        local ok, err = pcall(cb, isLocked)
+        if not ok then
+            print("shmIcons: lock callback error: " .. tostring(err))
+        end
+    end
 end
 
 function shmIcons:IsInEditMode()

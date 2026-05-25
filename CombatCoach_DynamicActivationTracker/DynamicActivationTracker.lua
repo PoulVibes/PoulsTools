@@ -1,4 +1,5 @@
 local DAT = DynamicActivationTracker
+local lockCallbackRegistered = false
 
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("ADDON_LOADED")
@@ -14,6 +15,15 @@ local function Initialize()
     if DAT.initialized then return end
     DAT.initialized = true
     DynamicActivationTracker_EnsureDatabase()
+
+    if not lockCallbackRegistered and shmIcons and shmIcons.RegisterLockCallback then
+        lockCallbackRegistered = true
+        shmIcons:RegisterLockCallback(function()
+            if type(DynamicActivationTracker_ReevaluateVisibility) == "function" then
+                DynamicActivationTracker_ReevaluateVisibility()
+            end
+        end)
+    end
 end
 
 local function LoadCurrentSpec()

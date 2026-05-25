@@ -219,6 +219,26 @@ function DynamicBuffTracker_ResyncCDMFrames()
     end
 end
 
+function DynamicBuffTracker_ReevaluateVisibility()
+    local specID = DBT.currentSpecID
+    if not specID or specID == 0 then return end
+
+    for spellIDStr, spellID in pairs(DBT.trackedSpells) do
+        if DBT.cdmSpellToFrame[spellID] then
+            DynamicBuffTracker_SyncIconFromCDMFrame(spellID, specID)
+        else
+            local key = DynamicBuffTracker_MakeKey(spellID)
+            _G[DynamicBuffTracker_MakeActiveFlag(specID, spellID)] = false
+            if DBT.iconShown then DBT.iconShown[spellIDStr] = nil end
+            DynamicBuffTracker_StopBuffTimer(specID, spellID, "reevaluate_no_frame")
+            shmIcons:SetVisible(DBT.ADDON_NAME, key, false)
+            shmIcons:SetGlow(DBT.ADDON_NAME, key, false)
+            shmIcons:SetStacks(DBT.ADDON_NAME, key, 0)
+            shmIcons:SetCooldown(DBT.ADDON_NAME, key, nil)
+        end
+    end
+end
+
 function DynamicBuffTracker_HookCDMFrame(frame)
     if not frame or DBT.cdmFrames[frame] then return end
     if not frame.SetAuraInstanceInfo then return end
