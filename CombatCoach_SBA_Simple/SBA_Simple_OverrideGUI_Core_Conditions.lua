@@ -119,6 +119,11 @@ function M.SupportsPluginGUI()
             if entry.specID == M.GetEditSpecID() then return true end
         end
     end
+    if _G.SBAS_DynActivationRegistry then
+        for _, entry in pairs(_G.SBAS_DynActivationRegistry) do
+            if entry.specID == M.GetEditSpecID() then return true end
+        end
+    end
     return false
 end
 
@@ -135,14 +140,22 @@ function M.GetVisiblePluginOptions()
     end
 
     local dynOpts = {}
-    if _G.SBAS_DynBuffRegistry then
-        for pluginID, entry in pairs(_G.SBAS_DynBuffRegistry) do
-            if entry.specID == M.GetEditSpecID() then
+    local seenDyn = {}
+    local function AddDynOpts(registry)
+        if not registry then return end
+        for pluginID, entry in pairs(registry) do
+            if entry.specID == M.GetEditSpecID() and not seenDyn[pluginID] then
+                seenDyn[pluginID] = true
                 local opt = { id = pluginID, label = entry.label }
                 if entry.timerVar then opt.supportsProcMode = true end
                 dynOpts[#dynOpts + 1] = opt
             end
         end
+    end
+
+    if _G.SBAS_DynBuffRegistry or _G.SBAS_DynActivationRegistry then
+        AddDynOpts(_G.SBAS_DynBuffRegistry)
+        AddDynOpts(_G.SBAS_DynActivationRegistry)
         table.sort(dynOpts, function(a, b) return a.label < b.label end)
     end
 

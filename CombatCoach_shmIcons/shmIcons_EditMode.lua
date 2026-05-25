@@ -19,7 +19,8 @@ function RepositionCtrlChildren(parentGlobalID)
     end
 end
 
-local editModeSettingsWindow = nil
+-- Shared with shmIcons_EditModeGroupFrame_Settings.lua.
+editModeSettingsWindow = nil
 local editModeGroupFramePool = {}
 
 function CloseEditModeSettingsWindow()

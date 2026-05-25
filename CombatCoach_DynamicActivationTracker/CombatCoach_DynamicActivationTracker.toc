@@ -1,0 +1,17 @@
+## Interface: 120005
+## Title: CombatCoach_DynamicActivationTracker
+## Notes: Dynamically creates shmIcons from spell activation overlay events.
+## Author: Poul
+## Version: 0.1.0
+## RequiredDeps: CombatCoach_shmIcons
+## Category-enUS: CombatCoach
+## Group: CombatCoach
+## SavedVariablesPerCharacter: DynamicActivationTrackerDB
+## OptionalDeps: CombatCoach
+
+DynamicActivationTracker_State.lua
+DynamicActivationTracker_Defaults.lua
+DynamicActivationTracker_DB.lua
+DynamicActivationTracker_Icons.lua
+DynamicActivationTracker_CombatCoach.lua
+DynamicActivationTracker.lua

@@ -56,6 +56,16 @@ function M.NormalizePluginState(cond)
     return plugin, op, value
 end
 
+local function GetDynamicPluginRegistry(pluginID)
+    if _G.SBAS_DynBuffRegistry and _G.SBAS_DynBuffRegistry[pluginID] then
+        return _G.SBAS_DynBuffRegistry[pluginID]
+    end
+    if _G.SBAS_DynActivationRegistry and _G.SBAS_DynActivationRegistry[pluginID] then
+        return _G.SBAS_DynActivationRegistry[pluginID]
+    end
+    return nil
+end
+
 function M.BuildPluginConditionExpr(cond, ruleSpellID)
     local plugin, op, value = M.NormalizePluginState(cond)
     if plugin == "zenith" then return "ZenithActiveTracker" end
@@ -65,8 +75,8 @@ function M.BuildPluginConditionExpr(cond, ruleSpellID)
         return ("LastComboStrikeSpellID == %d"):format(ruleSpellID or 0)
     end
 
-    if _G.SBAS_DynBuffRegistry and _G.SBAS_DynBuffRegistry[plugin] then
-        local reg = _G.SBAS_DynBuffRegistry[plugin]
+    local reg = GetDynamicPluginRegistry(plugin)
+    if reg then
         if M.IsCompOp(op) and reg.timerVar then
             return ("(tonumber(%s) or 0) %s %d"):format(reg.timerVar, op, value or 0)
         end
@@ -101,8 +111,8 @@ function M.BuildPluginSummary(cond)
     if plugin == "withering_fire_active" then return "Withering Fire Active" end
     if plugin == "last_combo_eq" then return "Combo" end
 
-    if _G.SBAS_DynBuffRegistry and _G.SBAS_DynBuffRegistry[plugin] then
-        local reg = _G.SBAS_DynBuffRegistry[plugin]
+    local reg = GetDynamicPluginRegistry(plugin)
+    if reg then
         if M.IsCompOp(op) and reg.timerVar then
             return reg.label .. " " .. op .. " " .. tostring(value or "")
         end

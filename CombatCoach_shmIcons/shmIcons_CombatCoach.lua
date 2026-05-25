@@ -15,6 +15,17 @@ local TRINKET_SLOT_NAMES = {
     [19] = "Tabard",
 }
 
+local function IsIgnoredDATIcon(addonName, localID)
+    if addonName ~= "Dynamic Activation Tracker" then return false end
+    if not DynamicActivationTracker_GetCurrentSpecID then return false end
+    if not DynamicActivationTracker_IsIgnored then return false end
+    local spellID = tonumber(localID)
+    if not spellID then return false end
+    local specID = DynamicActivationTracker_GetCurrentSpecID()
+    if not specID or specID == 0 then return false end
+    return DynamicActivationTracker_IsIgnored(specID, spellID)
+end
+
 local function OnBuildUI(parent)
     if parent.__SHMIconsPanelInitialized then
         if parent.__SHMIconsRefresh then parent.__SHMIconsRefresh() end
@@ -91,16 +102,19 @@ local function OnBuildUI(parent)
             return aLocalID < bLocalID
         end)
 
-        local rowY      = 0
-        local lastAddon = nil
+        local rowY         = 0
+        local lastAddon    = nil
+        local visibleCount = 0
 
         for _, entry in ipairs(allIcons) do
             local addonName = tostring(entry.addonName or "Unknown Addon")
             local localID   = tostring(entry.localID or "")
 
+            local skipEntry = IsIgnoredDATIcon(addonName, localID)
+
             -- Skip NP-clone icons (suffix "_np"): their enabled/glow state is
             -- driven each frame by the main icon and should not be user-editable.
-            if localID ~= "" and localID:sub(-3) ~= "_np" then
+            if not skipEntry and localID ~= "" and localID:sub(-3) ~= "_np" then
             local icon      = entry.icon
             local db        = icon and icon.db
 
@@ -258,10 +272,11 @@ local function OnBuildUI(parent)
             row:Show()
             table.insert(activeRows, row)
             rowY = rowY + 26
+            visibleCount = visibleCount + 1
             end -- if localID:sub(-3) ~= "_np"
         end
 
-        if #allIcons == 0 then
+        if visibleCount == 0 then
             local emptyRow = CreateFrame("Frame", nil, listContainer)
             emptyRow:SetSize(540, 26)
             emptyRow:SetPoint("TOPLEFT", listContainer, "TOPLEFT", 0, 0)
@@ -316,3 +331,10 @@ local function OnBuildUI(parent)
 end
 
 CombatCoach.Menu:RegisterMainPanelContent(OnBuildUI)
+CombatCoach.Menu:RegisterAddon({
+    id = "shmIcons",
+    name = "shmIcons",
+    icon = "Interface\\Icons\\battleground_strongbox_skirmish_horde",
+    desc = "Global icon controls and registry.",
+    OnBuildUI = OnBuildUI,
+})

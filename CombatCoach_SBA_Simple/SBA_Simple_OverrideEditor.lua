@@ -93,6 +93,7 @@ local function CreateOverrideFrame()
     local scroll = CreateFrame("ScrollFrame", "SBAS_OverrideScroll", f, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -44)
     scroll:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -32, 48)
+    scroll:EnableMouseWheel(true)
 
     local editBox = CreateFrame("EditBox", "SBAS_OverrideEditBox", scroll)
     editBox:SetMultiLine(true)
@@ -104,6 +105,7 @@ local function CreateOverrideFrame()
     editBox:SetCountInvisibleLetters(false)
     editBox:SetIgnoreParentAlpha(true)
     editBox:SetHyperlinksEnabled(true)
+    editBox:EnableMouseWheel(true)
     editBox:SetScript("OnEscapePressed", function() editBox:ClearFocus() end)
     editBox:SetScript("OnTextChanged", function(self)
         local needed = self:GetNumLines() * 14 + 16
@@ -112,11 +114,20 @@ local function CreateOverrideFrame()
     editBox:SetAllPoints()
 
     scroll:SetScript("OnSizeChanged", function(_, w) editBox:SetWidth(w) end)
-    scroll:SetScript("OnMouseDown", function() editBox:SetFocus() end)
-    scroll:SetScript("OnMouseUp", function()
-        editBox:SetFocus()
-        editBox:SetCursorPosition(editBox:GetNumLetters())
+
+    local function ScrollByWheel(delta)
+        local v = scroll:GetVerticalScroll()
+        local m = scroll:GetVerticalScrollRange()
+        scroll:SetVerticalScroll(math.min(math.max(v - delta * 24, 0), m))
+    end
+
+    scroll:SetScript("OnMouseWheel", function(_, delta)
+        ScrollByWheel(delta)
     end)
+    editBox:SetScript("OnMouseWheel", function(_, delta)
+        ScrollByWheel(delta)
+    end)
+
     scroll:HookScript("OnVerticalScroll", function(self, offset)
         local editH = editBox:GetHeight()
         editBox:SetHitRectInsets(0, 0, offset, editH - offset - self:GetHeight())
@@ -176,7 +187,8 @@ local function CreateOverrideFrame()
         else
             editBox:SetText(specDB.overrideCode or "")
         end
-        editBox:SetFocus()
+        scroll:SetVerticalScroll(0)
+        editBox:ClearFocus()
         if state.targetName then
             local suffix = state.previewMode and " (Preview)" or ""
             title:SetText("SBA Simple - Override Logic: " .. state.targetName .. suffix)
@@ -213,14 +225,7 @@ local function CreateOverrideFrame()
     end
 
     editBox:SetScript("OnCursorChanged", function(self, _, y, _, h)
-        self.cursorOffset = y
-        self.cursorHeight = h
-        self.handleCursorChange = true
-        self:SetScript("OnUpdate", function(frame, elapsed)
-            frame:SetScript("OnUpdate", nil)
-            ScrollingEdit_OnUpdate(frame, elapsed, scroll)
-            UpdateCursorPos()
-        end)
+        UpdateCursorPos()
     end)
     editBox:HookScript("OnTextChanged", UpdateCursorPos)
 
