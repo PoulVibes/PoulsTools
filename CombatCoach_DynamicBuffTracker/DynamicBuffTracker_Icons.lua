@@ -20,12 +20,18 @@ function DynamicBuffTracker_RegisterIcon(spellID, db)
     shmIcons:SetIcon(ADDON, key, db.override_icon or (spellInfo and spellInfo.iconID))
     shmIcons:SetVisible(ADDON, key, false)
     shmIcons:SetGlow(ADDON, key, false)
+    if shmIcons and shmIcons.MarkCombatCoachListDirty then
+        shmIcons.MarkCombatCoachListDirty()
+    end
 end
 
 function DynamicBuffTracker_UnregisterIcon(spellID)
     pcall(function()
         shmIcons:Unregister(DBT.ADDON_NAME, DynamicBuffTracker_MakeKey(spellID))
     end)
+    if shmIcons and shmIcons.MarkCombatCoachListDirty then
+        shmIcons.MarkCombatCoachListDirty()
+    end
 end
 
 -- Starts a visible-duration timer for a tracked buff. Updates a global

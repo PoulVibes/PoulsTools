@@ -115,49 +115,6 @@ function DynamicBuffTracker_ScanAndSync()
         end
     end
 
-    -- Cross-spec discovery
-    for anySpecID, anySpecData in pairs(DynamicBuffTrackerDB.specs) do
-        if anySpecID ~= specID and anySpecData.buffs then
-            for spellIDStr, srcEntry in pairs(anySpecData.buffs) do
-                local spellID = tonumber(spellIDStr)
-                if spellID
-                   and not DBT.trackedSpells[spellIDStr]
-                   and not removedDB[spellIDStr]
-                   and DBT.cdmSpellToFrame[spellID]
-                then
-                    local entry = buffDB[spellIDStr]
-                    if not entry then
-                        local count = 0
-                        for _ in pairs(buffDB) do count = count + 1 end
-                        local col = count % 5
-                        local row = math.floor(count / 5)
-                        entry = {
-                            spellID      = spellID,
-                            spellName    = srcEntry.spellName,
-                            iconID       = srcEntry.iconID,
-                            label        = srcEntry.label or srcEntry.spellName,
-                            x            = (col - 2) * (DEF_SIZE + 4),
-                            y            = row > 0 and (-row * (DEF_SIZE + 4)) or 0,
-                            point        = "CENTER",
-                            size         = srcEntry.size or DEF_SIZE,
-                            enabled      = false,
-                            glow_enabled = false,
-                        }
-                        buffDB[spellIDStr] = entry
-                    end
-                    DynamicBuffTracker_RegisterIcon(spellID, entry)
-                    DBT.trackedSpells[spellIDStr] = spellID
-                    DynamicBuffTracker_RegisterSBASEntry(specID, spellID, entry.label)
-                    local c = DBT.cdmSpellToFrame[spellID]
-                    if c then
-                        DynamicBuffTracker_HookViewerChild(spellID, c)
-                        DynamicBuffTracker_SyncIconFromCDMFrame(spellID, specID)
-                    end
-                end
-            end
-        end
-    end
-
     if DBT.rebuildCombatCoachList then DBT.rebuildCombatCoachList() end
 end
 
