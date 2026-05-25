@@ -4,7 +4,6 @@
 local MONK_ADDONS = {
     "CombatCoach_VivifyProcTracker",
     "CombatCoach_ComboTracker",
-    "CombatCoach_SpellGlowTracker",
     "CombatCoach_EnergyGuesstimator",
     "CombatCoach_GuesstimatorHaste",
 }

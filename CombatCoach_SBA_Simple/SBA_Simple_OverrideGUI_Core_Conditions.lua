@@ -47,10 +47,6 @@ M.SPEC_SECONDARY = M.SPEC_SECONDARY or {
 M.PLUGIN_OPTS_WW = M.PLUGIN_OPTS_WW or {
     { id = "zenith", label = "Zenith" },
     { id = "last_combo_eq", label = "Combo" },
-    { id = "bok_proc", label = "Blackout Kick!", supportsProcMode = true, default = 4 },
-    { id = "rwk_proc", label = "Rushing Wind Kick", supportsProcMode = true, default = 4 },
-    { id = "docj_proc", label = "Dance of Chi-Ji", supportsProcMode = true, default = 4 },
-    { id = "tod_proc", label = "Touch of Death" },
     { id = "vivify_proc", label = "Vivify Proc", supportsProcMode = true, default = 20 },
     { id = "hojs", label = "Heart of the Jade Serpent", supportsProcMode = true, default = 4 },
 }
@@ -63,10 +59,6 @@ M.PLUGIN_OPTS_BM = M.PLUGIN_OPTS_BM or {
     { id = "kill_command_stacks", label = "Kill Command Stacks", supportsProcMode = true, default = 1, valueLabel = "Stacks", procCompareOnly = true },
     { id = "withering_fire_active", label = "Withering Fire Active" },
     { id = "withering_fire", label = "Withering Fire", supportsProcMode = true, default = 10 },
-    { id = "howl_proc", label = "Howl of the Pack Leader", supportsProcMode = true, default = 29 },
-    { id = "black_arrow_proc", label = "Black Arrow" },
-    { id = "wailing_arrow_proc", label = "Wailing Arrow", supportsProcMode = true, default = 15 },
-    { id = "hogstrider_proc", label = "Hogstrider (Cobra Shot)", supportsProcMode = true, default = 19 },
     { id = "natures_ally", label = "Nature's Ally Active" },
     { id = "beast_cleave", label = "Beast Cleave", supportsProcMode = true, default = 8 },
 }
@@ -76,14 +68,10 @@ M.PLUGIN_OPTS_SV = M.PLUGIN_OPTS_SV or {
     { id = "tots_timer", label = "Tip of the Spear Timer", supportsProcMode = true, default = 5 },
     { id = "takedown_buff", label = "Takedown Buff", supportsProcMode = true, default = 5 },
     { id = "raptor_swipe_override", label = "Raptor Swipe Override" },
-    { id = "howl_proc", label = "Howl of the Pack Leader", supportsProcMode = true, default = 29 },
-    { id = "hogstrider_proc", label = "Hogstrider", supportsProcMode = true, default = 19 },
-    { id = "moonlight_chakram_proc", label = "Moonlight Chakram", supportsProcMode = true, default = 14 },
     { id = "wildfire_bomb_stacks", label = "Wildfire Bomb Stacks", supportsProcMode = true, default = 1, valueLabel = "Stacks", procCompareOnly = true },
 }
 
 M.PLUGIN_OPTS_VIVIFY_MONK = M.PLUGIN_OPTS_VIVIFY_MONK or {
-    { id = "tod_proc", label = "Touch of Death" },
     { id = "vivify_proc", label = "Vivify Proc", supportsProcMode = true, default = 20 },
 }
 

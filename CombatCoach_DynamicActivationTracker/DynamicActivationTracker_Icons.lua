@@ -80,17 +80,23 @@ end
 
 local function RegisterIcon(specID, spellID, entry)
     local spellIDStr = SpellKey(spellID)
-    if DAT.runtimeIcons[spellIDStr] then return DAT.runtimeIcons[spellIDStr] end
 
     local spellInfo = GetSpellInfoData(spellID)
     local defaultOverride = DynamicActivationTracker_GetDefaultOverride(specID, spellID)
-    local iconObj = shmIcons:Register(DAT.ADDON_NAME, spellIDStr, entry, {
-        onResize = function(size)
-            entry.size = size
-        end,
-        onMove = function()
-        end,
-    })
+    local iconObj = DAT.runtimeIcons[spellIDStr]
+    if not iconObj then
+        iconObj = shmIcons:Register(DAT.ADDON_NAME, spellIDStr, entry, {
+            onResize = function(size)
+                entry.size = size
+            end,
+            onMove = function()
+            end,
+        })
+        DAT.runtimeIcons[spellIDStr] = iconObj
+        if shmIcons and shmIcons.MarkCombatCoachListDirty then
+            shmIcons.MarkCombatCoachListDirty()
+        end
+    end
 
     local displayIcon = entry.override_icon
         or (defaultOverride and defaultOverride.icon)
@@ -104,10 +110,13 @@ local function RegisterIcon(specID, spellID, entry)
     entry.spellName = displayName
     entry.label = displayName
     shmIcons:SetIcon(DAT.ADDON_NAME, spellIDStr, displayIcon)
-    shmIcons:SetGlow(DAT.ADDON_NAME, spellIDStr, false)
-    shmIcons:SetVisible(DAT.ADDON_NAME, spellIDStr, false)
-
-    DAT.runtimeIcons[spellIDStr] = iconObj
+    if shmIcons and shmIcons.SetEnabled then
+        pcall(shmIcons.SetEnabled, shmIcons, DAT.ADDON_NAME, spellIDStr, entry.enabled == true)
+    end
+    if entry.enabled == false then
+        shmIcons:SetGlow(DAT.ADDON_NAME, spellIDStr, false)
+        shmIcons:SetVisible(DAT.ADDON_NAME, spellIDStr, false)
+    end
     return iconObj
 end
 
@@ -201,10 +210,14 @@ function DynamicActivationTracker_ShowActivation(spellID)
     if DynamicActivationTracker_IsIgnored(specID, spellID) then return end
 
     local entry = DynamicActivationTracker_GetOrCreateEntry(specID, spellID)
-    if not entry or entry.enabled == false then return end
-    local defaultOverride = DynamicActivationTracker_GetDefaultOverride(specID, spellID)
+    if not entry then return end
 
+    -- Always register newly discovered DAT entries so the CombatCoach main
+    -- shmIcons list updates immediately without requiring reload.
     DynamicActivationTracker_RefreshEntry(specID, spellID)
+
+    if entry.enabled == false then return end
+    local defaultOverride = DynamicActivationTracker_GetDefaultOverride(specID, spellID)
     local key = SpellKey(spellID)
 
     _G[DynamicActivationTracker_MakeActiveFlag(specID, spellID)] = true

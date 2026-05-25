@@ -5,24 +5,15 @@ local M = _G.SBAS_GUI or {}
 _G.SBAS_GUI = M
 
 M.PROC_PLUGIN_BY_ID = M.PROC_PLUGIN_BY_ID or {
-    bok_proc = { label = "Blackout Kick!", activeFlag = "bok_proc_active", timerVar = "bok_proc_timer" },
-    rwk_proc = { label = "Rushing Wind Kick", activeFlag = "rwk_proc_active", timerVar = "rwk_proc_timer" },
-    docj_proc = { label = "Dance of Chi-Ji", activeFlag = "docj_proc_active", timerVar = "docj_proc_timer" },
-    tod_proc = { label = "Touch of Death", activeFlag = "tod_proc_active" },
     withering_fire = { label = "Withering Fire", activeFlag = "WitheringFireActiveTracker", timerVar = "WitheringFireRemaining" },
     bestial_wrath_cooldown = { label = "Bestial Wrath Cooldown", activeFlag = "BestialWrathCooldownActiveTracker", timerVar = "BestialWrathCooldownRemaining" },
     barbed_shot_debuff = { label = "Barbed Shot Debuff", activeFlag = "BarbedShotDebuffActiveTracker", timerVar = "BarbedShotDebuffRemaining" },
     barbed_shot_stacks = { label = "Barbed Shot Stacks", timerVar = "StackMatcher_BarbedShotStacks" },
     kill_command_stacks = { label = "Kill Command Stacks", timerVar = "StackMatcher_KillCommandStacks" },
-    howl_proc = { label = "Howl of the Pack Leader", activeFlag = "howl_proc_active", timerVar = "howl_proc_timer" },
-    black_arrow_proc = { label = "Black Arrow", activeFlag = "black_arrow_proc_active" },
-    wailing_arrow_proc = { label = "Wailing Arrow", activeFlag = "wailing_arrow_proc_active", timerVar = "wailing_arrow_proc_timer" },
-    hogstrider_proc = { label = "Hogstrider", activeFlag = "hogstrider_proc_active", timerVar = "hogstrider_proc_timer" },
     natures_ally = { label = "Nature's Ally", activeFlag = "NaturesAllyActiveTracker" },
     beast_cleave = { label = "Beast Cleave", activeFlag = "BeastCleaveActiveTracker", timerVar = "BeastCleaveRemaining" },
     vivify_proc = { label = "Vivify Proc", activeFlag = "VivifyProcActiveTracker", timerVar = "VivifyProcRemaining" },
     hojs = { label = "Heart of the Jade Serpent", activeFlag = "HojsActiveTracker", timerVar = "HojsRemaining" },
-    moonlight_chakram_proc = { label = "Moonlight Chakram", activeFlag = "moonlight_chakram_proc_active", timerVar = "moonlight_chakram_proc_timer" },
     tots_stacks = { label = "Tip of the Spear Stacks", timerVar = "TipOfTheSpearStacks" },
     tots_timer = { label = "Tip of the Spear Timer", activeFlag = "TipOfTheSpearTimerActive", timerVar = "TipOfTheSpearRemaining" },
     takedown_buff = { label = "Takedown Buff", activeFlag = "TakedownBuffActive", timerVar = "TakedownBuffRemaining" },
@@ -46,12 +37,6 @@ function M.NormalizePluginState(cond)
     local plugin = cond and cond.plugin or nil
     local op = cond and cond.operator or nil
     local value = cond and cond.value or nil
-
-    if plugin == "docj_timer" then
-        plugin = "docj_proc"
-        op = M.IsCompOp(op) and op or "<"
-        value = value or 4
-    end
 
     return plugin, op, value
 end

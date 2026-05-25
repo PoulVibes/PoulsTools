@@ -143,6 +143,9 @@ function DynamicActivationTracker_MigrateLegacyDB(specID)
     local specDB = DynamicActivationTracker_GetSpecDB(specID)
     for key, entry in pairs(DynamicActivationTrackerDB) do
         if IsLegacyEntry(entry) then
+            if entry.enabled == nil then
+                entry.enabled = false
+            end
             specDB.icons[tostring(entry.spellID)] = entry
             DynamicActivationTrackerDB[key] = nil
         end
@@ -158,6 +161,9 @@ function DynamicActivationTracker_GetOrCreateEntry(specID, spellID)
     local entry = specDB.icons[spellIDStr]
     if entry then
         entry.spellID = entry.spellID or spellID
+        if entry.enabled == nil then
+            entry.enabled = false
+        end
         return entry
     end
 

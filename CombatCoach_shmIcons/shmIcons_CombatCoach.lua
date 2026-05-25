@@ -301,6 +301,9 @@ local function OnBuildUI(parent)
         end
     end
 
+    -- Allow external tracker modules to request an immediate list refresh.
+    shmIcons.MarkCombatCoachListDirty = MarkListDirty
+
     if not parent.__SHMIconsListenersRegistered then
         if type(CooldownTracker_RegisterChangeListener) == "function" then
             CooldownTracker_RegisterChangeListener(MarkListDirty)
@@ -331,10 +334,3 @@ local function OnBuildUI(parent)
 end
 
 CombatCoach.Menu:RegisterMainPanelContent(OnBuildUI)
-CombatCoach.Menu:RegisterAddon({
-    id = "shmIcons",
-    name = "shmIcons",
-    icon = "Interface\\Icons\\battleground_strongbox_skirmish_horde",
-    desc = "Global icon controls and registry.",
-    OnBuildUI = OnBuildUI,
-})
