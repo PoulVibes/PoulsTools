@@ -2,7 +2,8 @@
 ## Title: CombatCoach_DynamicActivationTracker
 ## Notes: Dynamically creates shmIcons from spell activation overlay events.
 ## Author: Poul
-## Version: 0.1.0
+## IconTexture: Interface\Icons\spell_holy_layonhands
+## Version: 1.0.0
 ## RequiredDeps: CombatCoach_shmIcons
 ## Category-enUS: CombatCoach
 ## Group: CombatCoach

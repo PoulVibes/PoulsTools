@@ -1,7 +1,9 @@
 ## Interface: 120005
 ## Title: CombatCoach_StackMatcher
 ## Notes: Tracks the number of charges on spells that have max of 2 charges
-## Author: PoulVibes
+## Author: Poul
+## Version: 1.0.1
+## IconTexture: Interface\Icons\achievement_guild_timeoff
 ## Category-enUS: CombatCoach
 ## Group: CombatCoach
 
