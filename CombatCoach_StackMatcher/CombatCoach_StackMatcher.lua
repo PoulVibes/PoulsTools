@@ -1,6 +1,10 @@
 local BARBED_SHOT_SPELL_ID = 217200
 local BARBED_SHOT_MAX_CHARGES = 2
 
+-- Tentacle Slam (Shadow Priest) spell id
+local TENTACLE_SLAM_SPELL_ID = 1227280
+local TENTACLE_SLAM_MAX_CHARGES = 2
+
 -- Kill Command (BM Hunter) spell id
 local KILL_COMMAND_SPELL_ID = 34026
 local KILL_COMMAND_MAX_CHARGES = 1
@@ -71,11 +75,30 @@ local function UpdateWildfireBombStack()
     _G["StackMatcher_WildfireBombStacks"] = stacks
 end
 
+local function GetTentacleSlamCharges()
+    local cd = C_Spell.GetSpellCooldown(TENTACLE_SLAM_SPELL_ID)
+    local chargeInfo = C_Spell.GetSpellCharges(TENTACLE_SLAM_SPELL_ID)
+
+    if chargeInfo and not chargeInfo.isActive then
+        return TENTACLE_SLAM_MAX_CHARGES
+    elseif cd and (not cd.isActive or cd.isOnGCD) then
+        return 1
+    else
+        return 0
+    end
+end
+
+local function UpdateTentacleSlamStack()
+    local stacks = GetTentacleSlamCharges()
+    _G["StackMatcher_TentacleSlamStacks"] = stacks
+end
+
 frame:SetScript("OnEvent", function(self, event, ...)
     if event == "SPELL_UPDATE_COOLDOWN" then
         UpdateBarbedShotStack()
         UpdateKillCommandStack()
         UpdateWildfireBombStack()
+        UpdateTentacleSlamStack()
     end
 end)
 
@@ -88,3 +111,6 @@ _G["StackMatcher_KillCommandStacks"] = initialKCStacks
 
 local initialWFBStacks = GetWildfireBombCharges()
 _G["StackMatcher_WildfireBombStacks"] = initialWFBStacks
+
+local initialTSStacks = GetTentacleSlamCharges()
+_G["StackMatcher_TentacleSlamStacks"] = initialTSStacks

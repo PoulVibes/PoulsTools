@@ -19,6 +19,7 @@ M.PROC_PLUGIN_BY_ID = M.PROC_PLUGIN_BY_ID or {
     takedown_buff = { label = "Takedown Buff", activeFlag = "TakedownBuffActive", timerVar = "TakedownBuffRemaining" },
     raptor_swipe_override = { label = "Raptor Swipe Override", activeFlag = "RaptorSwipeOverrideActive" },
     wildfire_bomb_stacks = { label = "Wildfire Bomb Stacks", timerVar = "StackMatcher_WildfireBombStacks" },
+    tentacle_slam_stacks = { label = "Tentacle Slam Stacks", timerVar = "StackMatcher_TentacleSlamStacks" },
 }
 
 M.VALID_COMP_OPS = M.VALID_COMP_OPS or {

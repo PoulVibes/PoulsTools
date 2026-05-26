@@ -75,11 +75,16 @@ M.PLUGIN_OPTS_VIVIFY_MONK = M.PLUGIN_OPTS_VIVIFY_MONK or {
     { id = "vivify_proc", label = "Vivify Proc", supportsProcMode = true, default = 20 },
 }
 
+M.PLUGIN_OPTS_SHADOW = M.PLUGIN_OPTS_SHADOW or {
+    { id = "tentacle_slam_stacks", label = "Tentacle Slam Stacks", supportsProcMode = true, default = 2, valueLabel = "Stacks", procCompareOnly = true },
+}
+
 M.WINDWALKER_SPEC_ID = M.WINDWALKER_SPEC_ID or 269
 M.BM_HUNTER_SPEC_ID = M.BM_HUNTER_SPEC_ID or 253
 M.SURVIVAL_HUNTER_SPEC_ID = M.SURVIVAL_HUNTER_SPEC_ID or 255
 M.BM_MONK_SPEC_ID = M.BM_MONK_SPEC_ID or 268
 M.MW_MONK_SPEC_ID = M.MW_MONK_SPEC_ID or 270
+M.SHADOW_PRIEST_SPEC_ID = M.SHADOW_PRIEST_SPEC_ID or 258
 
 function M.IsWindwalkerGUI()
     return M.GetEditSpecID() == M.WINDWALKER_SPEC_ID
@@ -98,8 +103,12 @@ function M.IsVivifyMonkGUI()
     return sid == M.BM_MONK_SPEC_ID or sid == M.MW_MONK_SPEC_ID
 end
 
+function M.IsShadowPriestGUI()
+    return M.GetEditSpecID() == M.SHADOW_PRIEST_SPEC_ID
+end
+
 function M.SupportsPluginGUI()
-    if M.IsWindwalkerGUI() or M.IsBeastMasteryHunterGUI() or M.IsSurvivalHunterGUI() or M.IsVivifyMonkGUI() then
+    if M.IsWindwalkerGUI() or M.IsBeastMasteryHunterGUI() or M.IsSurvivalHunterGUI() or M.IsVivifyMonkGUI() or M.IsShadowPriestGUI() then
         return true
     end
     if _G.SBAS_DynBuffRegistry then
@@ -125,6 +134,8 @@ function M.GetVisiblePluginOptions()
         base = M.PLUGIN_OPTS_SV
     elseif M.IsVivifyMonkGUI() then
         base = M.PLUGIN_OPTS_VIVIFY_MONK
+    elseif M.IsShadowPriestGUI() then
+        base = M.PLUGIN_OPTS_SHADOW
     end
 
     local dynOpts = {}
