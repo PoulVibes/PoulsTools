@@ -2,6 +2,83 @@ if not CombatCoach then return end
 
 local DAT = DynamicActivationTracker
 
+-- Popup state for icon suggestion when a display name is committed.
+local DAT_PopupPending = {}
+
+if not StaticPopupDialogs["DAT_ICON_SUGGEST"] then
+    StaticPopupDialogs["DAT_ICON_SUGGEST"] = {
+        text = "",
+        button1 = "Use It",
+        button2 = "Skip",
+        OnAccept = function()
+            if DAT_PopupPending.entry and DAT_PopupPending.iconID then
+                DAT_PopupPending.entry.override_icon = DAT_PopupPending.iconID
+                local s = DAT_PopupPending.specID
+                local p = DAT_PopupPending.spellID
+                if p and s and s == DAT.currentSpecID then
+                    DynamicActivationTracker_RefreshEntry(s, p)
+                end
+                if DAT_PopupPending.rebuildFn then
+                    DAT_PopupPending.rebuildFn()
+                end
+            end
+            wipe(DAT_PopupPending)
+        end,
+        OnCancel = function()
+            wipe(DAT_PopupPending)
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+        showAlert = false,
+    }
+end
+
+local function DAT_OfferIconSuggest(val, capturedEntry, capturedSpellID, capturedSpecID, rebuildFn)
+    if not val or val == "" then return false end
+
+    -- Resolve icon by the typed name using the same lookup chain as SBAS talented condition.
+    local iconID = nil
+
+    -- 1. Talent tree by name (matches what SBAS SearchTalentTreeByName does)
+    local SBAS = _G.SBAS_GUI
+    if SBAS and SBAS.SearchTalentTreeByName then
+        local talentSpellID = SBAS.SearchTalentTreeByName(val)
+        if talentSpellID then
+            local ok, info = pcall(C_Spell.GetSpellInfo, talentSpellID)
+            if ok and info then iconID = info.iconID end
+        end
+    end
+
+    -- 2. Spell book by name
+    if not iconID and SBAS and SBAS.SearchSpellBookByName then
+        local bookSpellID = SBAS.SearchSpellBookByName(val)
+        if bookSpellID then
+            local ok, info = pcall(C_Spell.GetSpellInfo, bookSpellID)
+            if ok and info then iconID = info.iconID end
+        end
+    end
+
+    -- 3. Direct name string lookup via GetSpellInfo
+    if not iconID and C_Spell and C_Spell.GetSpellInfo then
+        local ok, info = pcall(C_Spell.GetSpellInfo, val)
+        if ok and info then iconID = info.iconID end
+    end
+
+    if not iconID or iconID == 134400 then return false end
+    if capturedEntry.override_icon == iconID then return false end
+
+    DAT_PopupPending.entry     = capturedEntry
+    DAT_PopupPending.iconID    = iconID
+    DAT_PopupPending.spellID   = capturedSpellID
+    DAT_PopupPending.specID    = capturedSpecID
+    DAT_PopupPending.rebuildFn = rebuildFn
+    StaticPopupDialogs["DAT_ICON_SUGGEST"].text =
+        "Use this icon for the Override Icon?\n\n|T" .. tostring(iconID) .. ":48:48|t"
+    StaticPopup_Show("DAT_ICON_SUGGEST")
+    return true
+end
+
 local function OnBuildUI(parent)
     local W = CombatCoach.Widgets
     if not W then return end
@@ -245,7 +322,7 @@ local function OnBuildUI(parent)
                 if spellID and specID == DAT.currentSpecID then
                     DynamicActivationTracker_RefreshEntry(specID, spellID)
                 end
-                RebuildList()
+                DAT_OfferIconSuggest(val, entry, spellID, specID, QueueRebuild)
                 self:ClearFocus()
             end)
             displayNameBox:SetScript("OnEditFocusLost", function(self)
