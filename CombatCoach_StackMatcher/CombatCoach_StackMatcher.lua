@@ -1,1 +1,0 @@
--- Retired: charge tracking moved to the built-in Has Stacks condition in SBAS Override GUI.
