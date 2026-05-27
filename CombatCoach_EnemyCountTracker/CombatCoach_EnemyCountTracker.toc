@@ -10,3 +10,5 @@
 
 EnemyCountTracker.lua
 EnemyCountTracker_Debug.lua
+EnemyCountTracker_UnitFrames.lua
+EnemyCountTracker_DebuffOverlay.lua

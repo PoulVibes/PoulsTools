@@ -10,8 +10,9 @@ local trackedUnits = {}
 local enemyCount = 0
 local initialized = false
 
--- Public global for other addons/conditions.
+-- Public globals for other addons/conditions.
 _G.ECT_TargetCount = 0
+_G.ECT_TrackedUnits = trackedUnits
 
 local function EnsureDB()
     EnemyCountTrackerDB = EnemyCountTrackerDB or {}
