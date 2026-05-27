@@ -55,8 +55,6 @@ M.PLUGIN_OPTS_BM = M.PLUGIN_OPTS_BM or {
     { id = "bestial_wrath_active", label = "Bestial Wrath Active" },
     { id = "bestial_wrath_cooldown", label = "Bestial Wrath Cooldown", supportsProcMode = true, default = 90 },
     { id = "barbed_shot_debuff", label = "Barbed Shot Debuff", supportsProcMode = true, default = 12 },
-    { id = "barbed_shot_stacks", label = "Barbed Shot Stacks", supportsProcMode = true, default = 2, valueLabel = "Stacks", procCompareOnly = true },
-    { id = "kill_command_stacks", label = "Kill Command Stacks", supportsProcMode = true, default = 1, valueLabel = "Stacks", procCompareOnly = true },
     { id = "withering_fire_active", label = "Withering Fire Active" },
     { id = "withering_fire", label = "Withering Fire", supportsProcMode = true, default = 10 },
     { id = "natures_ally", label = "Nature's Ally Active" },
@@ -68,15 +66,10 @@ M.PLUGIN_OPTS_SV = M.PLUGIN_OPTS_SV or {
     { id = "tots_timer", label = "Tip of the Spear Timer", supportsProcMode = true, default = 5 },
     { id = "takedown_buff", label = "Takedown Buff", supportsProcMode = true, default = 5 },
     { id = "raptor_swipe_override", label = "Raptor Swipe Override" },
-    { id = "wildfire_bomb_stacks", label = "Wildfire Bomb Stacks", supportsProcMode = true, default = 1, valueLabel = "Stacks", procCompareOnly = true },
 }
 
 M.PLUGIN_OPTS_VIVIFY_MONK = M.PLUGIN_OPTS_VIVIFY_MONK or {
     { id = "vivify_proc", label = "Vivify Proc", supportsProcMode = true, default = 20 },
-}
-
-M.PLUGIN_OPTS_SHADOW = M.PLUGIN_OPTS_SHADOW or {
-    { id = "tentacle_slam_stacks", label = "Tentacle Slam Stacks", supportsProcMode = true, default = 2, valueLabel = "Stacks", procCompareOnly = true },
 }
 
 M.WINDWALKER_SPEC_ID = M.WINDWALKER_SPEC_ID or 269
@@ -84,7 +77,6 @@ M.BM_HUNTER_SPEC_ID = M.BM_HUNTER_SPEC_ID or 253
 M.SURVIVAL_HUNTER_SPEC_ID = M.SURVIVAL_HUNTER_SPEC_ID or 255
 M.BM_MONK_SPEC_ID = M.BM_MONK_SPEC_ID or 268
 M.MW_MONK_SPEC_ID = M.MW_MONK_SPEC_ID or 270
-M.SHADOW_PRIEST_SPEC_ID = M.SHADOW_PRIEST_SPEC_ID or 258
 
 function M.IsWindwalkerGUI()
     return M.GetEditSpecID() == M.WINDWALKER_SPEC_ID
@@ -103,12 +95,8 @@ function M.IsVivifyMonkGUI()
     return sid == M.BM_MONK_SPEC_ID or sid == M.MW_MONK_SPEC_ID
 end
 
-function M.IsShadowPriestGUI()
-    return M.GetEditSpecID() == M.SHADOW_PRIEST_SPEC_ID
-end
-
 function M.SupportsPluginGUI()
-    if M.IsWindwalkerGUI() or M.IsBeastMasteryHunterGUI() or M.IsSurvivalHunterGUI() or M.IsVivifyMonkGUI() or M.IsShadowPriestGUI() then
+    if M.IsWindwalkerGUI() or M.IsBeastMasteryHunterGUI() or M.IsSurvivalHunterGUI() or M.IsVivifyMonkGUI() then
         return true
     end
     if _G.SBAS_DynBuffRegistry then
@@ -134,8 +122,6 @@ function M.GetVisiblePluginOptions()
         base = M.PLUGIN_OPTS_SV
     elseif M.IsVivifyMonkGUI() then
         base = M.PLUGIN_OPTS_VIVIFY_MONK
-    elseif M.IsShadowPriestGUI() then
-        base = M.PLUGIN_OPTS_SHADOW
     end
 
     local dynOpts = {}

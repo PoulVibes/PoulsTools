@@ -79,6 +79,12 @@ function M.BuildCondRowText(cond, ruleSpellID, isFirst, parenDepthIn, deps)
         label = (def.shortLabel or def.label) .. " " .. op .. " " .. val
     end
 
+    if def.needsStacksValue then
+        local v = cond.value
+        local vStr = (v == "max") and "Max" or tostring(v or "?")
+        label = vStr .. " " .. label
+    end
+
     local labelText = cond.negate and ("|cffff4444NOT " .. label .. "|r") or label
     return junction .. lp .. labelText .. rp, depth
 end

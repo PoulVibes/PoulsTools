@@ -21,6 +21,12 @@ M.PROC_MODE_LIST = {
     { id = "<", label = "<" },
 }
 
+M.STACKS_VALUE_LIST = {
+    { id = "0", label = "0 (None)" },
+    { id = "1", label = "1" },
+    { id = "max", label = "Max" },
+}
+
 function M.MakeOpDropdown(parent, ops, deps)
     local setBD = deps.setBD
     local closeAllPopups = deps.closeAllPopups

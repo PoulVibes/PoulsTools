@@ -167,6 +167,11 @@ function M.AttachCondInputAreaBehavior(state)
                 state.procModeSel = "active"
                 if state.procModeDropdown then state.procModeDropdown:SetSelected("active") end
             end
+            if ct.needsStacksValue then
+                state.stacksValueFrame:Show()
+                state.stacksValueSel = "max"
+                if state.stacksValueDropdown then state.stacksValueDropdown:SetSelected("max") end
+            end
             if ct.needsValue then
                 state.valLbl:SetText((ct.valueLabel or "Value") .. ":")
                 state.valLbl:Show()
@@ -216,6 +221,7 @@ function M.AttachCondInputAreaBehavior(state)
         ApplyItemModeToSpellToggle()
     end
 
+    f.GetStacksValue = function() return state.stacksValueSel or "max" end
     f.GetSelectedType = function() return state.selType end
     f.GetValue = function() return tonumber(state.valBox:GetText()) end
     f.GetNegate = function() return state.notCheck:GetChecked() and true or false end

@@ -28,6 +28,7 @@ function M.RenderRightPanelFooter(rule, yBase, deps)
 
             local newCond = { type = ct.id, negate = condInputArea.GetNegate() }
             if ct.needsValue then newCond.value = condInputArea.GetValue() or ct.default end
+            if ct.needsStacksValue then newCond.value = condInputArea.GetStacksValue() end
             if ct.needsResource then
                 newCond.resource = condInputArea.GetResource()
                 newCond.operator = condInputArea.GetOperator()

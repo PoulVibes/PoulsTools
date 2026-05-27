@@ -227,6 +227,12 @@ function M.UpdateRowFrame(f, idx, rule, deps)
                     label = (def.shortLabel or def.label) .. " " .. (cond.operator or ">=") .. " " .. tostring(cond.value or 0)
                 end
 
+                if def.needsStacksValue then
+                    local v = cond.value
+                    local vStr = (v == "max") and "Max" or tostring(v or "?")
+                    label = vStr .. " " .. label
+                end
+
                 local labelText = cond.negate and ("|cffff4444NOT " .. label .. "|r") or label
                 tokens[#tokens + 1] = junction .. lp .. labelText .. rp
             end

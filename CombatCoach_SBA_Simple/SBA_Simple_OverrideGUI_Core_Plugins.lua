@@ -8,8 +8,6 @@ M.PROC_PLUGIN_BY_ID = M.PROC_PLUGIN_BY_ID or {
     withering_fire = { label = "Withering Fire", activeFlag = "WitheringFireActiveTracker", timerVar = "WitheringFireRemaining" },
     bestial_wrath_cooldown = { label = "Bestial Wrath Cooldown", activeFlag = "BestialWrathCooldownActiveTracker", timerVar = "BestialWrathCooldownRemaining" },
     barbed_shot_debuff = { label = "Barbed Shot Debuff", activeFlag = "BarbedShotDebuffActiveTracker", timerVar = "BarbedShotDebuffRemaining" },
-    barbed_shot_stacks = { label = "Barbed Shot Stacks", timerVar = "StackMatcher_BarbedShotStacks" },
-    kill_command_stacks = { label = "Kill Command Stacks", timerVar = "StackMatcher_KillCommandStacks" },
     natures_ally = { label = "Nature's Ally", activeFlag = "NaturesAllyActiveTracker" },
     beast_cleave = { label = "Beast Cleave", activeFlag = "BeastCleaveActiveTracker", timerVar = "BeastCleaveRemaining" },
     vivify_proc = { label = "Vivify Proc", activeFlag = "VivifyProcActiveTracker", timerVar = "VivifyProcRemaining" },
@@ -18,8 +16,6 @@ M.PROC_PLUGIN_BY_ID = M.PROC_PLUGIN_BY_ID or {
     tots_timer = { label = "Tip of the Spear Timer", activeFlag = "TipOfTheSpearTimerActive", timerVar = "TipOfTheSpearRemaining" },
     takedown_buff = { label = "Takedown Buff", activeFlag = "TakedownBuffActive", timerVar = "TakedownBuffRemaining" },
     raptor_swipe_override = { label = "Raptor Swipe Override", activeFlag = "RaptorSwipeOverrideActive" },
-    wildfire_bomb_stacks = { label = "Wildfire Bomb Stacks", timerVar = "StackMatcher_WildfireBombStacks" },
-    tentacle_slam_stacks = { label = "Tentacle Slam Stacks", timerVar = "StackMatcher_TentacleSlamStacks" },
 }
 
 M.VALID_COMP_OPS = M.VALID_COMP_OPS or {

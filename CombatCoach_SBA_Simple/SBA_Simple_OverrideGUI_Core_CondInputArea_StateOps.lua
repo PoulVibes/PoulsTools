@@ -12,6 +12,7 @@ function M.CondInputArea_ResetVisibility(state)
     state.luaFrame:Hide()
     state.pluginFrame:Hide()
     state.procModeFrame:Hide()
+    state.stacksValueFrame:Hide()
     state.valLbl:Hide()
     state.valBox:Hide()
 end
@@ -36,6 +37,16 @@ function M.CondInputArea_UpdateLayout(state)
         above = (state.selPlugin and state.selPlugin.supportsProcMode) and state.procModeFrame or state.pluginFrame
     end
 
+    if selType and selType.needsStacksValue then
+        state.stacksValueFrame:ClearAllPoints()
+        if state.spellSel == "other" then
+            state.stacksValueFrame:SetPoint("TOPLEFT", state.otherFrame, "BOTTOMLEFT", 0, -4)
+        else
+            state.stacksValueFrame:SetPoint("TOPLEFT", state.spellToggleFrame, "BOTTOMLEFT", 0, -4)
+        end
+        above = state.stacksValueFrame
+    end
+
     local showVal = selType and (selType.needsValue or selType.needsResource or selType.needsCompareValue or
         (selType.needsPlugin and state.selPlugin and state.selPlugin.supportsProcMode and state.procModeSel ~= "active"))
 
@@ -49,6 +60,7 @@ function M.CondInputArea_UpdateLayout(state)
         h = h + 22 + 4
         if state.spellSel == "other" then h = h + 38 + 4 end
     end
+    if selType and selType.needsStacksValue then h = h + 22 + 4 end
     if selType and selType.needsResource then h = h + 22 + 4 + 22 + 4 end
     if selType and selType.needsCompareValue then h = h + 22 + 4 end
     if selType and selType.needsLua then h = h + 38 + 4 end
@@ -80,6 +92,7 @@ function M.CondInputArea_RefreshSize(state)
     state.operatorFrame:SetWidth(contentW)
     state.pluginFrame:SetWidth(contentW)
     state.procModeFrame:SetWidth(contentW)
+    state.stacksValueFrame:SetWidth(contentW)
     state.luaFrame:SetWidth(contentW)
     state.pluginBtn:SetWidth(contentW)
     state.luaBox:SetWidth(math.max(120, contentW - 6))
@@ -87,6 +100,7 @@ function M.CondInputArea_RefreshSize(state)
     state.energyBtn:SetWidth(resBtnW)
     if state.opDropdown then state.opDropdown:UpdateWidth(opDropdownW) end
     if state.procModeDropdown then state.procModeDropdown:UpdateWidth(opDropdownW) end
+    if state.stacksValueDropdown then state.stacksValueDropdown:UpdateWidth(opDropdownW) end
     M.CondInputArea_UpdateLayout(state)
 end
 
@@ -108,8 +122,10 @@ function M.CondInputArea_Reset(state)
     state.otherResultLbl:SetText("")
     state.otherIcon:Hide()
     state.valBox:SetText("")
+    state.stacksValueSel = "max"
     if state.opDropdown then state.opDropdown:SetSelected(">=") end
     if state.procModeDropdown then state.procModeDropdown:SetSelected("active") end
+    if state.stacksValueDropdown then state.stacksValueDropdown:SetSelected("max") end
 
     M.CondInputArea_ResetVisibility(state)
     state.frame:SetHeight(95)
@@ -202,6 +218,14 @@ function M.CondInputArea_Populate(state, cond, condById)
         state.valLbl:Show()
         state.valBox:SetText(tostring(cond.value or ct.default or ""))
         state.valBox:Show()
+    end
+
+    if ct.needsStacksValue then
+        state.stacksValueFrame:Show()
+        local v = tostring(cond.value or "max")
+        if v ~= "0" and v ~= "1" and v ~= "max" then v = "max" end
+        state.stacksValueSel = v
+        if state.stacksValueDropdown then state.stacksValueDropdown:SetSelected(v) end
     end
 
     M.CondInputArea_UpdateLayout(state)

@@ -1,8 +1,8 @@
 ## Interface: 120005
 ## Title: CombatCoach_StackMatcher
-## Notes: Tracks the number of charges on spells that have max of 2 charges
+## Notes: Retired — charge tracking is now handled by the Has Stacks condition in SBAS Override GUI.
 ## Author: Poul
-## Version: 1.0.2
+## Version: 1.0.3
 ## IconTexture: Interface\Icons\achievement_guild_timeoff
 ## Category-enUS: CombatCoach
 ## Group: CombatCoach

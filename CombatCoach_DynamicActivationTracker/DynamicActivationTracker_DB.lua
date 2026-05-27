@@ -35,6 +35,70 @@ function DynamicActivationTracker_GetDisplayName(specID, spellID, entry)
     return (spellInfo and spellInfo.name) or ("Spell " .. tostring(spellID))
 end
 
+-- Attempt to auto-detect a good display name and override icon for a new entry
+-- by scanning the talent tree for a talent whose description contains
+-- "your next <activated spell name>".  Only runs when neither a saved value
+-- (priority 1) nor a default-override value (priority 2) is present.
+function DynamicActivationTracker_AutoFillEntryFromTalents(specID, spellID, entry)
+    -- Priority 1: saved display_name or override_icon already present.
+    if entry.display_name or entry.override_icon then return end
+
+    -- Priority 2: default override provides display_name or icon.
+    local defaultOverride = DynamicActivationTracker_GetDefaultOverride(specID, spellID)
+    if defaultOverride and (defaultOverride.display_name or defaultOverride.icon) then return end
+
+    -- Need talent-tree APIs.
+    if not (C_ClassTalents and C_ClassTalents.GetActiveConfigID) then return end
+    if not (C_Traits and C_Traits.GetConfigInfo and C_Traits.GetTreeNodes
+        and C_Traits.GetNodeInfo and C_Traits.GetEntryInfo
+        and C_Traits.GetDefinitionInfo) then return end
+
+    local spellInfo = GetSpellInfoData(spellID)
+    if not spellInfo or not spellInfo.name then return end
+    local pattern = "your next " .. spellInfo.name:lower()
+
+    local configID = C_ClassTalents.GetActiveConfigID()
+    if not configID then return end
+    local configInfo = C_Traits.GetConfigInfo(configID)
+    if not (configInfo and configInfo.treeIDs) then return end
+
+    for _, treeID in ipairs(configInfo.treeIDs) do
+        local nodeIDs = C_Traits.GetTreeNodes(treeID)
+        if nodeIDs then
+            for _, nodeID in ipairs(nodeIDs) do
+                local nodeInfo = C_Traits.GetNodeInfo(configID, nodeID)
+                if nodeInfo and nodeInfo.entryIDs then
+                    for _, entryID in ipairs(nodeInfo.entryIDs) do
+                        local entryInfo = C_Traits.GetEntryInfo(configID, entryID)
+                        if entryInfo and entryInfo.definitionID then
+                            local defInfo = C_Traits.GetDefinitionInfo(entryInfo.definitionID)
+                            if defInfo and defInfo.spellID and defInfo.spellID ~= 0 then
+                                local desc
+                                if C_Spell and C_Spell.GetSpellDescription then
+                                    local ok, d = pcall(C_Spell.GetSpellDescription, defInfo.spellID)
+                                    if ok then desc = d end
+                                end
+                                if not desc and _G.GetSpellDescription then
+                                    local ok, d = pcall(_G.GetSpellDescription, defInfo.spellID)
+                                    if ok then desc = d end
+                                end
+                                if desc and desc:lower():find(pattern, 1, true) then
+                                    local ok, si = pcall(C_Spell.GetSpellInfo, defInfo.spellID)
+                                    if ok and si and si.iconID and si.iconID ~= 134400 then
+                                        entry.display_name = si.name
+                                        entry.override_icon = si.iconID
+                                        return
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
 function DynamicActivationTracker_MakeActiveFlag(specID, spellID)
     return "DynAct_" .. tostring(specID) .. "_" .. tostring(spellID) .. "_Active"
 end

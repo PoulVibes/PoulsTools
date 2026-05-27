@@ -28,6 +28,7 @@ function M.CreateCondInputArea(parent, deps)
             refreshRightPanel = deps.refreshRightPanel or function() end,
             opList = deps.opList or M.OP_LIST,
             procModeList = deps.procModeList or M.PROC_MODE_LIST,
+            stacksValueList = deps.stacksValueList or M.STACKS_VALUE_LIST,
             isCondPickerShown = deps.isCondPickerShown or function() return false end,
             isPluginPickerShown = deps.isPluginPickerShown or function() return false end,
             getEditSpecID = deps.getEditSpecID or function() return 0 end,
@@ -59,6 +60,12 @@ function M.CreateCondInputArea(parent, deps)
     state.procModeDropdown = state.deps.makeOpDropdown(state.procModeFrame, state.deps.procModeList)
     state.procModeDropdown:SetPoint("LEFT", state.procModeLabel, "RIGHT", 4, 0)
     state.procModeDropdown:SetSelected("active")
+
+    state.stacksValueSel = "max"
+    state.stacksValueDropdown = state.deps.makeOpDropdown(state.stacksValueFrame, state.deps.stacksValueList)
+    state.stacksValueDropdown:SetPoint("LEFT", state.stacksValueLabel, "RIGHT", 4, 0)
+    state.stacksValueDropdown:SetSelected("max")
+    state.stacksValueDropdown:SetOnChange(function(id) state.stacksValueSel = id end)
 
     local sec = state.deps.specSecondary[state.deps.getEditSpecID()] or state.deps.specSecondaryDefault
     state.chiBtn:SetText(sec.label)

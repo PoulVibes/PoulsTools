@@ -25,6 +25,16 @@ function M.CondSummaryText(cond, ruleSpellID, specIDOverride)
         text = "Lua: " .. expr
     elseif def.needsPlugin then
         text = M.BuildPluginSummary(cond)
+    elseif def.needsStacksValue then
+        local v = cond.value
+        local vStr = (v == "max") and "Max" or tostring(v or "?")
+        if not cond.spell or cond.spell == "this" then
+            text = vStr .. " " .. (def.shortLabel or def.label) .. " [this]"
+        else
+            local id = type(cond.spell) == "number" and cond.spell or cond.targetID
+            local n = id and C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(id) or tostring(id)
+            text = vStr .. " " .. (def.shortLabel or def.label) .. " [" .. (n or "?") .. "]"
+        end
     else
         if def.needsSpell then
             if cond.type == "sba_suggests" then

@@ -83,6 +83,8 @@ local function RegisterIcon(specID, spellID, entry)
 
     local spellInfo = GetSpellInfoData(spellID)
     local defaultOverride = DynamicActivationTracker_GetDefaultOverride(specID, spellID)
+    -- Priority 3: auto-fill display name / icon from talent tree if no saved or default values.
+    DynamicActivationTracker_AutoFillEntryFromTalents(specID, spellID, entry)
     local iconObj = DAT.runtimeIcons[spellIDStr]
     if not iconObj then
         iconObj = shmIcons:Register(DAT.ADDON_NAME, spellIDStr, entry, {

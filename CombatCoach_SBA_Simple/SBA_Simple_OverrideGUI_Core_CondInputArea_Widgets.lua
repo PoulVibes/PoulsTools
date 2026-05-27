@@ -116,6 +116,17 @@ function M.BuildCondInputAreaWidgets(state)
     state.procModeLabel:SetText("Mode:")
     state.procModeLabel:SetTextColor(0.55, 0.72, 0.88, 1)
 
+    state.stacksValueFrame = CreateFrame("Frame", nil, f)
+    state.stacksValueFrame:SetSize(panelW(), 22)
+    state.stacksValueFrame:SetPoint("TOPLEFT", state.typeBtn, "BOTTOMLEFT", 0, -4)
+    state.stacksValueFrame:Hide()
+
+    state.stacksValueLabel = state.stacksValueFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    state.stacksValueLabel:SetPoint("LEFT", state.stacksValueFrame, "LEFT", 0, 0)
+    state.stacksValueLabel:SetWidth(60)
+    state.stacksValueLabel:SetText("Stacks:")
+    state.stacksValueLabel:SetTextColor(0.55, 0.72, 0.88, 1)
+
     state.luaFrame = CreateFrame("Frame", nil, f)
     state.luaFrame:SetSize(panelW(), 38)
     state.luaFrame:SetPoint("TOPLEFT", state.typeBtn, "BOTTOMLEFT", 0, -4)
