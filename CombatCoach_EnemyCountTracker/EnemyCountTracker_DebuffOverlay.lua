@@ -113,19 +113,19 @@ local function ActivateSlot(f, slot, spellID, ad, dur)
     local DBTmod = _G.DynamicBuffTracker
     local tex = DBTmod and DBTmod.spellIconCache and DBTmod.spellIconCache[spellID]
     slot.icon:SetTexture(tex or C_Spell.GetSpellTexture(spellID))
+    slot.spellID = spellID
+    -- Always clear first so reused slots never flash the previous spell's swipe.
+    slot.cd:Clear()
+    -- dur is a non-secret DurationObject from GetAuraDuration (nil for infinite auras).
+    -- We only check nil-vs-non-nil here; no arithmetic on secret values.
     if dur then
         slot.cd:SetCooldownFromDurationObject(dur)
-    else
-        slot.cd:Clear()
     end
+    -- Always display applications; no comparison on the secret value.
     local apps = (ad and ad.applications) or 0
-    if apps then
-        slot.stackText:SetText(tostring(apps))
-        slot.stackText:SetAlpha(apps)
-        slot.stackText:Show()
-    else
-        slot.stackText:Hide()
-    end
+    slot.stackText:SetText(tostring(apps))
+    slot.stackText:SetAlpha(apps)
+    slot.stackText:Show()
     if slot.container ~= f then
         slot.container:SetBackdropColor(0.35, 0.05, 0.45, 0.9)
         slot.container:SetBackdropBorderColor(0.8, 0.3, 1.0, 1)
@@ -135,6 +135,7 @@ end
 
 local function ClearSlot(f, slot)
     slot.icon:SetTexture(nil)
+    slot.spellID = nil
     slot.cd:Clear()
     slot.stackText:Hide()
     if slot.container ~= f then
@@ -316,6 +317,21 @@ function ECT_RefreshOverlaySlots()
                         slot.container:ClearAllPoints()
                         slot.container:SetPoint("TOP", f, "BOTTOM", 0, -(SLOT_GAP + (idx - 2) * (h + SLOT_GAP)))
                     end
+                end
+            end
+        end
+    end
+end
+
+-- Update the texture on any currently-visible slots showing a given spellID.
+-- Called by DBT whenever it writes a new resolved icon to spellIconCache.
+function ECT_UpdateSlotTextures(spellID, tex)
+    for i = 1, 80 do
+        local f = _G["ECT_UnitFrame" .. i]
+        if f and f.ectSlots then
+            for _, slot in ipairs(f.ectSlots) do
+                if slot.spellID == spellID then
+                    slot.icon:SetTexture(tex or C_Spell.GetSpellTexture(spellID))
                 end
             end
         end

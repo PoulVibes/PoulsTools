@@ -20,6 +20,7 @@ function DynamicBuffTracker_RegisterIcon(spellID, db)
     local resolvedIcon = db.override_icon or (spellInfo and spellInfo.iconID)
     DBT.spellIconCache = DBT.spellIconCache or {}
     DBT.spellIconCache[spellID] = resolvedIcon
+    if ECT_UpdateSlotTextures then ECT_UpdateSlotTextures(spellID, resolvedIcon) end
     shmIcons:SetIcon(ADDON, key, resolvedIcon)
     shmIcons:SetVisible(ADDON, key, false)
     shmIcons:SetGlow(ADDON, key, false)

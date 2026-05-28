@@ -68,6 +68,7 @@ function DynamicBuffTracker_ScanAndSync()
                 shmIcons:SetDisplayName(ADDON, DynamicBuffTracker_MakeKey(spellID), spellInfo.name)
                 DBT.spellIconCache = DBT.spellIconCache or {}
                 DBT.spellIconCache[spellID] = useIcon
+                if ECT_UpdateSlotTextures then ECT_UpdateSlotTextures(spellID, useIcon) end
                 shmIcons:SetIcon(ADDON, DynamicBuffTracker_MakeKey(spellID), useIcon)
             end
             if spellInfo.name then
@@ -193,6 +194,7 @@ function DynamicBuffTracker_LoadSpec(specID)
                 shmIcons:SetDisplayName(ADDON, DynamicBuffTracker_MakeKey(spellID), spellInfo.name)
                 DBT.spellIconCache = DBT.spellIconCache or {}
                 DBT.spellIconCache[spellID] = useIcon
+                if ECT_UpdateSlotTextures then ECT_UpdateSlotTextures(spellID, useIcon) end
                 shmIcons:SetIcon(ADDON, DynamicBuffTracker_MakeKey(spellID), useIcon)
             end
             if spellInfo.name then
