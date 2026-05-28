@@ -70,3 +70,15 @@ function DynamicBuffTracker_SetSpecEctScale(specID, val)
     DynamicBuffTrackerDB.specs[specID] = DynamicBuffTrackerDB.specs[specID] or { buffs = {} }
     DynamicBuffTrackerDB.specs[specID].ectOverlayScale = val
 end
+
+function DynamicBuffTracker_GetSpecEctHideAnchor(specID)
+    if not DynamicBuffTrackerDB or not DynamicBuffTrackerDB.specs then return false end
+    local s = DynamicBuffTrackerDB.specs[specID]
+    return s ~= nil and s.ectHideAnchor == true
+end
+
+function DynamicBuffTracker_SetSpecEctHideAnchor(specID, val)
+    DynamicBuffTrackerDB.specs = DynamicBuffTrackerDB.specs or {}
+    DynamicBuffTrackerDB.specs[specID] = DynamicBuffTrackerDB.specs[specID] or { buffs = {} }
+    DynamicBuffTrackerDB.specs[specID].ectHideAnchor = val
+end

@@ -147,6 +147,17 @@ local function OnBuildUI(parent)
     anchor = ectScaleSlider
     y = -4
 
+    local ectHideAnchorChk = W:Checkbox(parent, anchor, y,
+        "Hide DoT Tracker Anchor",
+        "Hides the draggable ECT anchor handle. The unit frames remain visible.",
+        function() return DynamicBuffTracker_GetSpecEctHideAnchor(DBT.currentSpecID) end,
+        function(val)
+            DynamicBuffTracker_SetSpecEctHideAnchor(DBT.currentSpecID, val)
+            if ECT_SetAnchorHidden then ECT_SetAnchorHidden(val) end
+        end)
+    anchor = ectHideAnchorChk
+    y = -4
+
     local note = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     note:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, y - 4)
     note:SetWidth(520)

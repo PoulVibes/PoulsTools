@@ -6,9 +6,9 @@
 local instanceToSpell = {}   -- [instanceID] = spellID
 
 local function IsOverlayEnabled()
-    local DBT = _G.DynamicBuffTracker
-    if not DBT or DBT.currentSpecID == 0 then return false end
-    return DynamicBuffTracker_GetSpecEctOverlay(DBT.currentSpecID)
+    local specID = DynamicBuffTracker_GetCurrentSpecID and DynamicBuffTracker_GetCurrentSpecID() or 0
+    if specID == 0 then return false end
+    return DynamicBuffTracker_GetSpecEctOverlay(specID)
 end
 
 -- ---------------------------------------------------------------------------
@@ -98,7 +98,11 @@ local function GetOrCreateSlot(f, idx)
     icon:SetAllPoints(container)
     icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
-    local slot = { container = container, cd = cd, icon = icon }
+    local stackText = container:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
+    stackText:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -2, 2)
+    stackText:Hide()
+
+    local slot = { container = container, cd = cd, icon = icon, stackText = stackText }
     f.ectSlots[idx] = slot
     return slot
 end
@@ -110,6 +114,14 @@ local function ActivateSlot(f, slot, spellID, ad, dur)
     else
         slot.cd:Clear()
     end
+    local apps = (ad and ad.applications) or 0
+    if apps then
+        slot.stackText:SetText(tostring(apps))
+        slot.stackText:SetAlpha(apps)
+        slot.stackText:Show()
+    else
+        slot.stackText:Hide()
+    end
     if slot.container ~= f then
         slot.container:SetBackdropColor(0.35, 0.05, 0.45, 0.9)
         slot.container:SetBackdropBorderColor(0.8, 0.3, 1.0, 1)
@@ -120,6 +132,7 @@ end
 local function ClearSlot(f, slot)
     slot.icon:SetTexture(nil)
     slot.cd:Clear()
+    slot.stackText:Hide()
     if slot.container ~= f then
         slot.container:Hide()
     end
@@ -271,6 +284,56 @@ function ECT_SetOverlayEnabled(enabled)
     end
 end
 
+-- Resize glow textures and slot containers after a scale change.
+function ECT_RefreshOverlaySlots()
+    for i = 1, 80 do
+        local f = _G["ECT_UnitFrame" .. i]
+        if f then
+            local w = f:GetWidth()
+            local h = f:GetHeight()
+
+            -- Reposition glow corner textures to match the new frame size.
+            if f.targetGlow and f.targetGlow.textures then
+                local off = w * 0.1875
+                local sz  = w * 1.4
+                for idx, t in ipairs(f.targetGlow.textures) do
+                    local c = GLOW_CORNERS[idx]
+                    t:SetSize(sz, sz)
+                    t:ClearAllPoints()
+                    t:SetPoint(c.point, f, c.point, c.x * off, c.y * off)
+                end
+            end
+
+            -- Resize and reanchor extra slot containers (idx 2+).
+            if f.ectSlots then
+                for idx, slot in ipairs(f.ectSlots) do
+                    if idx > 1 then
+                        slot.container:SetSize(w, h)
+                        slot.container:ClearAllPoints()
+                        slot.container:SetPoint("TOP", f, "BOTTOM", 0, -(SLOT_GAP + (idx - 2) * (h + SLOT_GAP)))
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- Hook EnemyCountTracker_UpdateDebugDisplay so that nameplate add/remove events
+-- immediately trigger a debuff/glow refresh (not just the 10Hz ticker).
+-- DebuffOverlay loads after UnitFrames in the TOC, so this wraps the already-
+-- Sync-patched version: call order becomes orig → Sync → Snapshot + Refresh.
+-- ---------------------------------------------------------------------------
+
+local _origECTUpdateForOverlay = EnemyCountTracker_UpdateDebugDisplay
+function EnemyCountTracker_UpdateDebugDisplay()
+    _origECTUpdateForOverlay()
+    if IsOverlayEnabled() then
+        SnapshotDBT()
+        RefreshDebuffStates()
+    end
+end
+
 -- ---------------------------------------------------------------------------
 -- Slash dump
 -- ---------------------------------------------------------------------------
@@ -331,11 +394,15 @@ end)
 local loginFrame = CreateFrame("Frame")
 loginFrame:RegisterEvent("PLAYER_LOGIN")
 loginFrame:SetScript("OnEvent", function()
-    local DBT = _G.DynamicBuffTracker
-    local specID = DBT and DBT.currentSpecID or 0
+    local specID = DynamicBuffTracker_GetCurrentSpecID and DynamicBuffTracker_GetCurrentSpecID() or 0
     ECT_SetOverlayEnabled(IsOverlayEnabled())
-    if ECT_SetOverlayScale and specID ~= 0 then
-        ECT_SetOverlayScale(DynamicBuffTracker_GetSpecEctScale(specID))
+    if specID ~= 0 then
+        if ECT_SetOverlayScale then
+            ECT_SetOverlayScale(DynamicBuffTracker_GetSpecEctScale(specID))
+        end
+        if ECT_SetAnchorHidden then
+            ECT_SetAnchorHidden(DynamicBuffTracker_GetSpecEctHideAnchor(specID))
+        end
     end
 end)
 
@@ -346,11 +413,15 @@ end)
 local specFrame = CreateFrame("Frame")
 specFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 specFrame:SetScript("OnEvent", function()
-    local DBT = _G.DynamicBuffTracker
-    local specID = DBT and DBT.currentSpecID or 0
+    local specID = DynamicBuffTracker_GetCurrentSpecID and DynamicBuffTracker_GetCurrentSpecID() or 0
     ECT_SetOverlayEnabled(IsOverlayEnabled())
-    if ECT_SetOverlayScale and specID ~= 0 then
-        ECT_SetOverlayScale(DynamicBuffTracker_GetSpecEctScale(specID))
+    if specID ~= 0 then
+        if ECT_SetOverlayScale then
+            ECT_SetOverlayScale(DynamicBuffTracker_GetSpecEctScale(specID))
+        end
+        if ECT_SetAnchorHidden then
+            ECT_SetAnchorHidden(DynamicBuffTracker_GetSpecEctHideAnchor(specID))
+        end
     end
 end)
 

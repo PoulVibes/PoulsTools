@@ -55,6 +55,7 @@ anchor:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
 local frames = {}
 local framesHidden = false
+local currentScale = 1.0
 
 anchor:SetScript("OnMouseDown", function(self, button)
     if button == "RightButton" then
@@ -99,13 +100,15 @@ function ECT_UnitFrames_Sync(trackedSet)
     local DBT = _G.DynamicBuffTracker
     local specID = DBT and DBT.currentSpecID or 0
     if specID == 0 or not DynamicBuffTracker_GetSpecEctOverlay or not DynamicBuffTracker_GetSpecEctOverlay(specID) then return end
+    local w   = FRAME_W * currentScale
+    local gap = FRAME_GAP * currentScale
     local col = 0
     for i = 1, 40 do
         local f = frames[i]
         if trackedSet["nameplate" .. i] then
             col = col + 1
             f:ClearAllPoints()
-            f:SetPoint("LEFT", anchor, "LEFT", (FRAME_W + FRAME_GAP) * col, 0)
+            f:SetPoint("LEFT", anchor, "LEFT", (w + gap) * col, 0)
             if not framesHidden then f:Show() end
         else
             f:Hide()
@@ -132,7 +135,34 @@ end
 -- ---------------------------------------------------------------------------
 
 function ECT_SetOverlayScale(scale)
-    anchor:SetScale(scale or 1.0)
+    currentScale = scale or 1.0
+    anchor:SetScale(1.0)  -- clear any residual SetScale from older versions
+    local w = FRAME_W * currentScale
+    local h = FRAME_H * currentScale
+    anchor:SetSize(w, h)
+    for i = 1, 40 do
+        frames[i]:SetSize(w, h)
+    end
+    ECT_UnitFrames_Sync(_G.ECT_TrackedUnits or {})
+    if ECT_RefreshOverlaySlots then ECT_RefreshOverlaySlots() end
+end
+
+function ECT_SetAnchorHidden(hidden)
+    if hidden then
+        anchor:SetBackdropColor(0, 0, 0, 0)
+        anchor:SetBackdropBorderColor(0, 0, 0, 0)
+        anchorLabel:Hide()
+        anchor:EnableMouse(false)
+    else
+        anchor:SetBackdropColor(
+            framesHidden and 0.4 or 0.2,
+            framesHidden and 0.1 or 0.6,
+            framesHidden and 0.1 or 1,
+            0.5)
+        anchor:SetBackdropBorderColor(0.4, 0.8, 1, 1)
+        anchorLabel:Show()
+        anchor:EnableMouse(true)
+    end
 end
 
 -- ---------------------------------------------------------------------------
