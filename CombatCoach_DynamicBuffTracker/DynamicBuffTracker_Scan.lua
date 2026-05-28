@@ -66,6 +66,8 @@ function DynamicBuffTracker_ScanAndSync()
                 local entry = buffDB[spellIDStr]
                 local useIcon = (entry and entry.override_icon) or spellInfo.iconID
                 shmIcons:SetDisplayName(ADDON, DynamicBuffTracker_MakeKey(spellID), spellInfo.name)
+                DBT.spellIconCache = DBT.spellIconCache or {}
+                DBT.spellIconCache[spellID] = useIcon
                 shmIcons:SetIcon(ADDON, DynamicBuffTracker_MakeKey(spellID), useIcon)
             end
             if spellInfo.name then
@@ -189,6 +191,8 @@ function DynamicBuffTracker_LoadSpec(specID)
                 local entry = buffDB[spellIDStr]
                 local useIcon = (entry and entry.override_icon) or spellInfo.iconID
                 shmIcons:SetDisplayName(ADDON, DynamicBuffTracker_MakeKey(spellID), spellInfo.name)
+                DBT.spellIconCache = DBT.spellIconCache or {}
+                DBT.spellIconCache[spellID] = useIcon
                 shmIcons:SetIcon(ADDON, DynamicBuffTracker_MakeKey(spellID), useIcon)
             end
             if spellInfo.name then

@@ -108,7 +108,11 @@ local function GetOrCreateSlot(f, idx)
 end
 
 local function ActivateSlot(f, slot, spellID, ad, dur)
-    slot.icon:SetTexture(C_Spell.GetSpellTexture(spellID))
+    -- Use the exact texture DBT resolved and passed to shmIcons:SetIcon,
+    -- cached in DBT.spellIconCache[spellID] at each SetIcon call site.
+    local DBTmod = _G.DynamicBuffTracker
+    local tex = DBTmod and DBTmod.spellIconCache and DBTmod.spellIconCache[spellID]
+    slot.icon:SetTexture(tex or C_Spell.GetSpellTexture(spellID))
     if ad and ad.expirationTime and ad.duration then
         slot.cd:SetCooldownFromDurationObject(dur)
     else

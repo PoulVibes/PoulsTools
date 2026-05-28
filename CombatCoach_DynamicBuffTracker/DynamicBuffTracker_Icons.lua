@@ -17,7 +17,10 @@ function DynamicBuffTracker_RegisterIcon(spellID, db)
     })
     shmIcons:SetCooldownReverse(ADDON, key, true)
     shmIcons:SetHideCooldownText(ADDON, key, db.hide_cooldown_text or false)
-    shmIcons:SetIcon(ADDON, key, db.override_icon or (spellInfo and spellInfo.iconID))
+    local resolvedIcon = db.override_icon or (spellInfo and spellInfo.iconID)
+    DBT.spellIconCache = DBT.spellIconCache or {}
+    DBT.spellIconCache[spellID] = resolvedIcon
+    shmIcons:SetIcon(ADDON, key, resolvedIcon)
     shmIcons:SetVisible(ADDON, key, false)
     shmIcons:SetGlow(ADDON, key, false)
     if shmIcons and shmIcons.MarkCombatCoachListDirty then
