@@ -113,7 +113,7 @@ local function ActivateSlot(f, slot, spellID, ad, dur)
     local DBTmod = _G.DynamicBuffTracker
     local tex = DBTmod and DBTmod.spellIconCache and DBTmod.spellIconCache[spellID]
     slot.icon:SetTexture(tex or C_Spell.GetSpellTexture(spellID))
-    if ad and ad.expirationTime and ad.duration then
+    if dur then
         slot.cd:SetCooldownFromDurationObject(dur)
     else
         slot.cd:Clear()
@@ -239,8 +239,8 @@ local function RefreshDebuffStates()
                 f:SetBackdropColor(0.35, 0.05, 0.45, 0.9)
                 for idx, m in ipairs(matches) do
                     local slot = GetOrCreateSlot(f, idx)
-                    local dur = C_UnitAuras.GetAuraDuration(f.unit, m.id)
-                    ActivateSlot(f, slot, m.spellID, m.ad, dur)
+                    local ok, dur = pcall(C_UnitAuras.GetAuraDuration, f.unit, m.id)
+                    ActivateSlot(f, slot, m.spellID, m.ad, ok and dur or nil)
                 end
                 if f.ectSlots then
                     for idx = #matches + 1, #f.ectSlots do
