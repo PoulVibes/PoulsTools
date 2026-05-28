@@ -331,7 +331,12 @@ end)
 local loginFrame = CreateFrame("Frame")
 loginFrame:RegisterEvent("PLAYER_LOGIN")
 loginFrame:SetScript("OnEvent", function()
+    local DBT = _G.DynamicBuffTracker
+    local specID = DBT and DBT.currentSpecID or 0
     ECT_SetOverlayEnabled(IsOverlayEnabled())
+    if ECT_SetOverlayScale and specID ~= 0 then
+        ECT_SetOverlayScale(DynamicBuffTracker_GetSpecEctScale(specID))
+    end
 end)
 
 -- ---------------------------------------------------------------------------
@@ -341,7 +346,12 @@ end)
 local specFrame = CreateFrame("Frame")
 specFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 specFrame:SetScript("OnEvent", function()
+    local DBT = _G.DynamicBuffTracker
+    local specID = DBT and DBT.currentSpecID or 0
     ECT_SetOverlayEnabled(IsOverlayEnabled())
+    if ECT_SetOverlayScale and specID ~= 0 then
+        ECT_SetOverlayScale(DynamicBuffTracker_GetSpecEctScale(specID))
+    end
 end)
 
 -- ---------------------------------------------------------------------------

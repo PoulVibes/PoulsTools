@@ -135,6 +135,18 @@ local function OnBuildUI(parent)
     anchor = ectOverlayChk
     y = -4
 
+    local ectScaleSlider = W:Slider(parent, anchor, y,
+        "DoT Tracker Icon Scale",
+        0.5, 2.0, 0.05,
+        function() return DynamicBuffTracker_GetSpecEctScale(DBT.currentSpecID) end,
+        function(val)
+            DynamicBuffTracker_SetSpecEctScale(DBT.currentSpecID, val)
+            if ECT_SetOverlayScale then ECT_SetOverlayScale(val) end
+        end,
+        "%.2f")
+    anchor = ectScaleSlider
+    y = -4
+
     local note = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     note:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, y - 4)
     note:SetWidth(520)

@@ -57,3 +57,16 @@ function DynamicBuffTracker_SetSpecEctOverlay(specID, val)
     DynamicBuffTrackerDB.specs[specID] = DynamicBuffTrackerDB.specs[specID] or { buffs = {} }
     DynamicBuffTrackerDB.specs[specID].ectOverlayEnabled = val
 end
+
+function DynamicBuffTracker_GetSpecEctScale(specID)
+    if not DynamicBuffTrackerDB or not DynamicBuffTrackerDB.specs then return 1.0 end
+    local s = DynamicBuffTrackerDB.specs[specID]
+    if not s or s.ectOverlayScale == nil then return 1.0 end
+    return s.ectOverlayScale
+end
+
+function DynamicBuffTracker_SetSpecEctScale(specID, val)
+    DynamicBuffTrackerDB.specs = DynamicBuffTrackerDB.specs or {}
+    DynamicBuffTrackerDB.specs[specID] = DynamicBuffTrackerDB.specs[specID] or { buffs = {} }
+    DynamicBuffTrackerDB.specs[specID].ectOverlayScale = val
+end

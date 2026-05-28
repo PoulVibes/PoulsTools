@@ -128,6 +128,14 @@ function EnemyCountTracker_UpdateDebugDisplay()
 end
 
 -- ---------------------------------------------------------------------------
+-- Scale: called from DebuffOverlay on login / spec change
+-- ---------------------------------------------------------------------------
+
+function ECT_SetOverlayScale(scale)
+    anchor:SetScale(scale or 1.0)
+end
+
+-- ---------------------------------------------------------------------------
 -- Restore saved anchor position on load
 -- ---------------------------------------------------------------------------
 
