@@ -50,28 +50,29 @@ end)
 anchor:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
 -- ---------------------------------------------------------------------------
--- Frame pool
+-- Pre-create one frame per nameplate slot (1-40)
 -- ---------------------------------------------------------------------------
 
-local pool      = {}
-local active    = {}   -- [unit] = frame
-local unitOrder = {}
-local frameCount = 0
-
+local frames = {}
 local framesHidden = false
 
 anchor:SetScript("OnMouseDown", function(self, button)
     if button == "RightButton" then
         framesHidden = not framesHidden
-        for _, f in pairs(active) do
-            if framesHidden then f:Hide() else f:Show() end
+        local tracked = _G.ECT_TrackedUnits or {}
+        for i = 1, 40 do
+            local f = frames[i]
+            if tracked["nameplate" .. i] then
+                if framesHidden then f:Hide() else f:Show() end
+            end
         end
         anchor:SetBackdropColor(framesHidden and 0.4 or 0.2, framesHidden and 0.1 or 0.6, framesHidden and 0.1 or 1, 0.5)
+        anchorLabel:SetTextColor(framesHidden and 0.4 or 1, framesHidden and 0.4 or 1, framesHidden and 0.4 or 1, 1)
     end
 end)
 
-local function NewFrame(idx)
-    local f = CreateFrame("Frame", "ECT_UnitFrame" .. idx, anchor, "BackdropTemplate")
+for i = 1, 40 do
+    local f = CreateFrame("Frame", "ECT_UnitFrame" .. i, anchor, "BackdropTemplate")
     f:SetSize(FRAME_W, FRAME_H)
     f:SetFrameStrata("MEDIUM")
     f:SetBackdrop({
@@ -81,67 +82,35 @@ local function NewFrame(idx)
     })
     f:SetBackdropColor(0.6, 0.1, 0.1, 0.85)
     f:SetBackdropBorderColor(0.9, 0.3, 0.3, 1)
+    f.unit = "nameplate" .. i
+    f.npLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    f.npLabel:SetPoint("BOTTOM", f, "TOP", 0, 2)
+    f.npLabel:SetText(tostring(i))
+    f.npLabel:SetTextColor(1, 1, 1, 1)
     f:Hide()
-    return f
-end
-
-local function AcquireFrame()
-    local f = table.remove(pool)
-    if not f then
-        frameCount = frameCount + 1
-        f = NewFrame(frameCount)
-    end
-    return f
-end
-
-local function ReleaseFrame(f)
-    f:Hide()
-    f.unit = nil
-    table.insert(pool, f)
+    frames[i] = f
 end
 
 -- ---------------------------------------------------------------------------
--- Layout: stack boxes to the right of the anchor
--- ---------------------------------------------------------------------------
-
-local function LayoutFrames()
-    for i, unit in ipairs(unitOrder) do
-        local f = active[unit]
-        if f then
-            f:ClearAllPoints()
-            f:SetPoint("LEFT", anchor, "LEFT", (FRAME_W + FRAME_GAP) * i, 0)
-        end
-    end
-end
-
--- ---------------------------------------------------------------------------
--- Sync: called whenever ECT's tracked set changes
+-- Sync: show tracked frames in order, hide the rest
 -- ---------------------------------------------------------------------------
 
 function ECT_UnitFrames_Sync(trackedSet)
-    for unit, f in pairs(active) do
-        if not trackedSet[unit] then
-            active[unit] = nil
-            ReleaseFrame(f)
-        end
-    end
-
-    for unit in pairs(trackedSet) do
-        if not active[unit] then
-            local f = AcquireFrame()
-            f.unit = unit
+    local DBT = _G.DynamicBuffTracker
+    local specID = DBT and DBT.currentSpecID or 0
+    if specID == 0 or not DynamicBuffTracker_GetSpecEctOverlay or not DynamicBuffTracker_GetSpecEctOverlay(specID) then return end
+    local col = 0
+    for i = 1, 40 do
+        local f = frames[i]
+        if trackedSet["nameplate" .. i] then
+            col = col + 1
+            f:ClearAllPoints()
+            f:SetPoint("LEFT", anchor, "LEFT", (FRAME_W + FRAME_GAP) * col, 0)
             if not framesHidden then f:Show() end
-            active[unit] = f
+        else
+            f:Hide()
         end
     end
-
-    wipe(unitOrder)
-    for unit in pairs(active) do
-        unitOrder[#unitOrder + 1] = unit
-    end
-    table.sort(unitOrder)
-
-    LayoutFrames()
 end
 
 -- ---------------------------------------------------------------------------

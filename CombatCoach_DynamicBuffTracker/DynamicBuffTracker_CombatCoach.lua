@@ -123,6 +123,18 @@ local function OnBuildUI(parent)
     anchor = hideBarChk
     y = -4
 
+    local ectOverlayChk = W:Checkbox(parent, anchor, y,
+        "DoT Tracker Overlay",
+        "Shows debuff icons and cooldown swipes on ECT unit frames for DBT-tracked spells."
+            .. " Disabling hides all ECT unit frames.",
+        function() return DynamicBuffTracker_GetSpecEctOverlay(DBT.currentSpecID) end,
+        function(val)
+            DynamicBuffTracker_SetSpecEctOverlay(DBT.currentSpecID, val)
+            if ECT_SetOverlayEnabled then ECT_SetOverlayEnabled(val) end
+        end)
+    anchor = ectOverlayChk
+    y = -4
+
     local note = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     note:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, y - 4)
     note:SetWidth(520)

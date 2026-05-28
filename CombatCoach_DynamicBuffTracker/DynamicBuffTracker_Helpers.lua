@@ -45,3 +45,15 @@ function DynamicBuffTracker_GetCurrentSpecID()
     if not si then return 0 end
     return select(1, GetSpecializationInfo(si)) or 0
 end
+
+function DynamicBuffTracker_GetSpecEctOverlay(specID)
+    if not DynamicBuffTrackerDB or not DynamicBuffTrackerDB.specs then return false end
+    local s = DynamicBuffTrackerDB.specs[specID]
+    return s ~= nil and s.ectOverlayEnabled == true
+end
+
+function DynamicBuffTracker_SetSpecEctOverlay(specID, val)
+    DynamicBuffTrackerDB.specs = DynamicBuffTrackerDB.specs or {}
+    DynamicBuffTrackerDB.specs[specID] = DynamicBuffTrackerDB.specs[specID] or { buffs = {} }
+    DynamicBuffTrackerDB.specs[specID].ectOverlayEnabled = val
+end

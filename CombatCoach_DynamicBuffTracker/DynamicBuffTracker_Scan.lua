@@ -30,6 +30,17 @@ end
 -- Main scan
 -- ============================================================
 
+local function UpdateSingleTargetFlags(specID)
+    local buffDB = DynamicBuffTracker_GetSpecBuffDB(specID)
+    for spellIDStr, entry in pairs(buffDB) do
+        local sid = tonumber(spellIDStr)
+        if sid then
+            local ok, desc = pcall(C_Spell.GetSpellDescription, sid)
+            entry.singleTarget = ok and type(desc) == "string" and desc:lower():find("single target") ~= nil
+        end
+    end
+end
+
 function DynamicBuffTracker_ScanAndSync()
     if InCombatLockdown() then return end
 
@@ -115,6 +126,7 @@ function DynamicBuffTracker_ScanAndSync()
         end
     end
 
+    UpdateSingleTargetFlags(specID)
     if DBT.rebuildCombatCoachList then DBT.rebuildCombatCoachList() end
 end
 
@@ -185,5 +197,6 @@ function DynamicBuffTracker_LoadSpec(specID)
         end
     end
     DynamicBuffTracker_ResyncCDMFrames()
+    if not InCombatLockdown() then UpdateSingleTargetFlags(specID) end
     DynamicBuffTracker_ScanOrRetry()
 end
