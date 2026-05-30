@@ -32,6 +32,16 @@ local function EnsureCreationFrame()
     closeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -4, -4)
     closeBtn:SetScript("OnClick", function() f:Hide() end)
 
+    f:SetScript("OnHide", function()
+        if InCombatLockdown() then return end
+        local info = CombatCoach and CombatCoach.Menu
+            and CombatCoach.Menu.registry
+            and CombatCoach.Menu.registry["TriggerTracker"]
+        if info and info._category then
+            Settings.OpenToCategory(info._category:GetID())
+        end
+    end)
+
     -- ── Row 1: name / max stacks / timer ──────────────────────────────────
     local nameLbl = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     nameLbl:SetPoint("TOPLEFT", f, "TOPLEFT", 14, -34)
@@ -240,6 +250,7 @@ local function EnsureCreationFrame()
             TriggerTracker_RegisterIcon(specID, idx, entry)
         end
         TT.spellMap = TriggerTracker_BuildSpellMap(specID)
+        TriggerTracker_RefreshSBASConditions(specID)
         if TT.rebuildCombatCoachList then TT.rebuildCombatCoachList() end
         f:Hide()
     end)
@@ -289,72 +300,3 @@ end
 function TriggerTracker_OpenEditFrame(specID, idx, entry)
     EnsureCreationFrame():OpenForEdit(specID, idx, entry)
 end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    for i = 1, 10 do SPEND_OPTS[i] = { l = tostring(i), v = i } end
-    SPEND_OPTS[11] = { l = "20",  v = 20    }
-    SPEND_OPTS[12] = { l = "All", v = "all" }
-
-    local spendPerCastLbl = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    spendPerCastLbl:SetPoint("TOPLEFT", f, "TOPLEFT", 14, -58)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

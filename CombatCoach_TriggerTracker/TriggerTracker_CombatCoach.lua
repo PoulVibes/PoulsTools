@@ -120,6 +120,7 @@ local function OnBuildUI(parent)
             delBtn:SetText("X")
             delBtn:SetScript("OnClick", function()
                 TriggerTracker_RemoveTrigger(specID, captureIdx)
+                TriggerTracker_RefreshSBASConditions(specID)
                 RebuildList()
             end)
 

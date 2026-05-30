@@ -64,6 +64,11 @@ function M.RenderRightPanelFooter(rule, yBase, deps)
                     if reg and reg.timerVar and deps.isCompOp(mode) then
                         newCond.operator = mode
                         newCond.value = condInputArea.GetValue() or 4
+                    elseif _G.SBAS_TriggerTrackerRegistry and _G.SBAS_TriggerTrackerRegistry[pid] then
+                        if deps.isCompOp(mode) then
+                            newCond.operator = mode
+                            newCond.value = condInputArea.GetValue() or 1
+                        end
                     end
                 end
             end
@@ -84,6 +89,10 @@ function M.RenderRightPanelFooter(rule, yBase, deps)
                 if selectedCondIdx then
                     local existing = r.conditions[selectedCondIdx]
                     if existing then
+                        -- Preserve structural fields (parens, junction) that the editor doesn't touch.
+                        if existing.lparen   then newCond.lparen   = existing.lparen   end
+                        if existing.rparen   then newCond.rparen   = existing.rparen   end
+                        if existing.junction then newCond.junction = existing.junction end
                         for k in pairs(existing) do existing[k] = nil end
                         for k, v in pairs(newCond) do existing[k] = v end
                     end

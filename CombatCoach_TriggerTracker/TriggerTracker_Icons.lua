@@ -174,14 +174,25 @@ end
 RegisterSBASConditions = function(specID)
     _G.SBAS_TriggerTrackerRegistry = _G.SBAS_TriggerTrackerRegistry or {}
     TriggerTracker_ForEachTrigger(specID, function(idx, entry)
-        local key      = TriggerTracker_MakeKey(specID, idx)
-        local pluginID = "tt_" .. key
+        local key       = TriggerTracker_MakeKey(specID, idx)
+        local pluginID  = "tt_" .. key
+        local name      = entry.name or ("Trigger " .. idx)
+        local maxStacks = tonumber(entry.maxStacks) or 0
         _G.SBAS_TriggerTrackerRegistry[pluginID] = {
-            specID   = specID,
-            label    = entry.name or ("Trigger " .. idx),
-            key      = key,
-            hasTimer = (tonumber(entry.timer) or 0) > 0,
+            specID    = specID,
+            label     = name,
+            key       = key,
+            hasTimer  = (tonumber(entry.timer) or 0) > 0,
+            maxStacks = maxStacks,
         }
+        if maxStacks > 0 then
+            _G.SBAS_TriggerTrackerRegistry["tt_stacks_" .. key] = {
+                specID        = specID,
+                label         = name .. " (Stacks)",
+                key           = key,
+                isStacksEntry = true,
+            }
+        end
     end)
 end
 
@@ -192,4 +203,10 @@ UnregisterSBASConditions = function(specID)
             _G.SBAS_TriggerTrackerRegistry[pluginID] = nil
         end
     end
+end
+
+-- Public: full rebuild for specID (call after creating, editing, or deleting a trigger).
+function TriggerTracker_RefreshSBASConditions(specID)
+    UnregisterSBASConditions(specID)
+    RegisterSBASConditions(specID)
 end

@@ -229,13 +229,9 @@ function DynamicActivationTracker_ShowActivation(spellID)
         DynamicActivationTracker_RefreshCurrentSpecList()
     end
 
-    if entry.enabled == false then return end
+    -- Always update condition state regardless of whether the icon is enabled.
     local defaultOverride = DynamicActivationTracker_GetDefaultOverride(specID, spellID)
-
     _G[DynamicActivationTracker_MakeActiveFlag(specID, spellID)] = true
-    DAT.iconShown[key] = true
-    shmIcons:SetVisible(DAT.ADDON_NAME, key, true)
-    shmIcons:SetGlow(DAT.ADDON_NAME, key, entry.glow_enabled ~= false)
     local timerValue = entry.condition_timer
     if timerValue == nil and defaultOverride then
         timerValue = defaultOverride.timer
@@ -243,6 +239,10 @@ function DynamicActivationTracker_ShowActivation(spellID)
     if timerValue then
         StartConditionTimer(specID, spellID, timerValue)
     end
+    if entry.enabled == false then return end
+    DAT.iconShown[key] = true
+    shmIcons:SetVisible(DAT.ADDON_NAME, key, true)
+    shmIcons:SetGlow(DAT.ADDON_NAME, key, entry.glow_enabled ~= false)
 end
 
 function DynamicActivationTracker_HideActivation(spellID)
@@ -310,8 +310,6 @@ function DynamicActivationTracker_ReevaluateVisibility()
             if entry.enabled == false then
                 shmIcons:SetVisible(DAT.ADDON_NAME, spellIDStr, false)
                 shmIcons:SetGlow(DAT.ADDON_NAME, spellIDStr, false)
-                StopConditionTimer(specID, spellID)
-                _G[DynamicActivationTracker_MakeActiveFlag(specID, spellID)] = false
                 DAT.iconShown[spellIDStr] = nil
             else
                 DynamicActivationTracker_RefreshEntry(specID, spellID)
