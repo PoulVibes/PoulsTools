@@ -22,6 +22,8 @@ local slotIconCache = {}
 local currentSpecID = nil
 -- change listeners for UI integrations
 local changeListeners = {}
+-- ticker handle for retrying icon loads after zone-in
+local iconRetryTimer = nil
 
 local function NotifyChangeListeners()
     for _, cb in ipairs(changeListeners) do
@@ -93,6 +95,33 @@ local function RefreshAllSlotIcons()
     for slotID in pairs(trackedSlots) do RefreshSlotIcon(slotID) end
 end
 
+-- Returns true if any tracked slot has an item but its icon is still the question mark.
+local function HasPendingIcons()
+    for slotID in pairs(trackedSlots) do
+        if not slotIconCache[slotID] and GetInventoryItemID("player", slotID) then
+            return true
+        end
+    end
+    return false
+end
+
+local function CancelIconRetry()
+    if iconRetryTimer then
+        iconRetryTimer:Cancel()
+        iconRetryTimer = nil
+    end
+end
+
+local function ScheduleIconRetry()
+    CancelIconRetry()
+    iconRetryTimer = C_Timer.NewTicker(5, function()
+        RefreshAllSlotIcons()
+        if not HasPendingIcons() then
+            CancelIconRetry()
+        end
+    end)
+end
+
 -- Update cooldown and glow state for a single tracked slot.
 local function UpdateSlot(slotID)
     if not trackedSlots[slotID] then return end
@@ -133,6 +162,7 @@ end
 
 -- Unregister all current icons and clear tracking state.
 local function UnloadSpec()
+    CancelIconRetry()
     for slotID in pairs(trackedSlots) do
         shmIcons:Unregister(ADDON_NAME, slotID)
     end
@@ -256,6 +286,7 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
         else
             UpdateAllSlots()
         end
+        if HasPendingIcons() then ScheduleIconRetry() end
 
     elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
         LoadSpec(GetCurrentSpecID())
@@ -269,6 +300,7 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
 
     elseif event == "GET_ITEM_INFO_RECEIVED" then
         RefreshAllSlotIcons()
+        if not HasPendingIcons() then CancelIconRetry() end
     end
 end)
 
