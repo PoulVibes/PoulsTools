@@ -60,6 +60,17 @@ function TriggerTracker_ForEachTrigger(specID, fn)
     end
 end
 
+-- Returns true if the player currently has all spells in entry.requiredTalents.
+-- An entry with no requiredTalents always returns true.
+function TriggerTracker_HasRequiredTalents(entry)
+    local req = entry and entry.requiredTalents
+    if not req then return true end
+    for spellID in pairs(req) do
+        if not IsSpellKnown(spellID) then return false end
+    end
+    return true
+end
+
 -- Returns a deep copy of a trigger entry suitable for editing.
 function TriggerTracker_CopyEntry(entry)
     if not entry then return {} end
@@ -82,7 +93,7 @@ function TriggerTracker_BuildSpellMap(specID)
     local map = {}
     local triggers = TriggerTracker_GetSpecDB(specID)
     for idx, entry in pairs(triggers) do
-        if entry.enabled ~= false then
+        if entry.enabled ~= false and TriggerTracker_HasRequiredTalents(entry) then
             local key = TriggerTracker_MakeKey(specID, idx)
             if entry.generators then
                 for spellID, amt in pairs(entry.generators) do

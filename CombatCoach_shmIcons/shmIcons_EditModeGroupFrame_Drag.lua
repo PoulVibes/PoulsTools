@@ -10,6 +10,12 @@ function shmIcons_AttachEditModeGroupDragScripts(ctx)
         return entry and entry.icon and entry.icon.frame
     end
 
+    local function SafeGetCenter(frame)
+        local ok, x, y = pcall(frame.GetCenter, frame)
+        if ok then return x, y end
+        return nil, nil
+    end
+
     ctx.frame:SetScript("OnDragStart", function(self)
         if not IsEditModeActive() then return end
         ctx.clickPending = false
@@ -89,11 +95,13 @@ function shmIcons_AttachEditModeGroupDragScripts(ctx)
                 local memberCY = virtualCY + entry.offsetY
                 for otherID, other in pairs(icons) do
                     if not ctx.groupIDSet[otherID] and other and other.frame and other.db and other.frame:IsShown() and not other.db.ctrlAttachedTo then
-                        local oCX, oCY = other.frame:GetCenter()
-                        local d = math.sqrt((memberCX - oCX)^2 + (memberCY - oCY)^2)
-                        if d < nearestDist then
-                            nearestDist = d
-                            nearestSize = math.floor(other.frame:GetHeight() + 0.5)
+                        local oCX, oCY = SafeGetCenter(other.frame)
+                        if oCX then
+                            local d = math.sqrt((memberCX - oCX)^2 + (memberCY - oCY)^2)
+                            if d < nearestDist then
+                                nearestDist = d
+                                nearestSize = math.floor(other.frame:GetHeight() + 0.5)
+                            end
                         end
                     end
                 end
@@ -121,17 +129,19 @@ function shmIcons_AttachEditModeGroupDragScripts(ctx)
                     if not ctx.groupIDSet[otherID] and other and other.frame and other.db and other.frame:IsShown()
                         and not other.db.ctrlAttachedTo
                         and math.abs(other.frame:GetHeight() - ctx.mySize) < 0.5 then
-                        local oCX, oCY = other.frame:GetCenter()
-                        for dx = -1, 1 do
-                            for dy = -1, 1 do
-                                if not (dx == 0 and dy == 0) then
-                                    local posX = oCX + dx * ctx.mySize
-                                    local posY = oCY + dy * ctx.mySize
-                                    local dist = math.sqrt((memberCX - posX)^2 + (memberCY - posY)^2)
-                                    if dist < SNAP_THRESHOLD and dist < bestDist then
-                                        bestDist = dist
-                                        bestSnapCX = virtualCX + (posX - memberCX)
-                                        bestSnapCY = virtualCY + (posY - memberCY)
+                        local oCX, oCY = SafeGetCenter(other.frame)
+                        if oCX then
+                            for dx = -1, 1 do
+                                for dy = -1, 1 do
+                                    if not (dx == 0 and dy == 0) then
+                                        local posX = oCX + dx * ctx.mySize
+                                        local posY = oCY + dy * ctx.mySize
+                                        local dist = math.sqrt((memberCX - posX)^2 + (memberCY - posY)^2)
+                                        if dist < SNAP_THRESHOLD and dist < bestDist then
+                                            bestDist = dist
+                                            bestSnapCX = virtualCX + (posX - memberCX)
+                                            bestSnapCY = virtualCY + (posY - memberCY)
+                                        end
                                     end
                                 end
                             end

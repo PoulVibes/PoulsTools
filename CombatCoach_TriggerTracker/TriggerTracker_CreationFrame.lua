@@ -95,10 +95,10 @@ local function EnsureCreationFrame()
     local FLY_W   = 720 - RIGHT_X - 14
 
     local activeTarget = "gen"
-    local targetBuffBtn, targetGenBtn, targetSpendBtn
+    local targetBuffBtn, targetGenBtn, targetSpendBtn, targetReqBtn
 
     local function UpdateTargetButtons()
-        local btns = { buff = targetBuffBtn, gen = targetGenBtn, spend = targetSpendBtn }
+        local btns = { buff = targetBuffBtn, gen = targetGenBtn, spend = targetSpendBtn, req = targetReqBtn }
         for key, btn in pairs(btns) do
             if not btn then break end
             if key == activeTarget then
@@ -193,11 +193,26 @@ local function EnsureCreationFrame()
     CF.dropTargets.onBuffDrop = SetBuffSpell
     UpdateTargetButtons()
 
+    -- ── Required Talents panel (below buff slot) ──────────────────────────
+    local REQ_H = 90
+    targetReqBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    targetReqBtn:SetSize(COL_W, TARGET_H)
+    targetReqBtn:SetPoint("TOPLEFT", buffSlot, "BOTTOMLEFT", 0, -8)
+    targetReqBtn:SetText("\226\150\182 Req. Talents")
+    targetReqBtn:SetScript("OnClick", function() activeTarget = "req"; UpdateTargetButtons() end)
+
+    local reqPanel = CF.CreateDropPanel(f, "Required Talents", COL_W, REQ_H,
+        "Talents that must be learned for this trigger to function.",
+        function() end)
+    reqPanel:SetPoint("TOPLEFT", targetReqBtn, "BOTTOMLEFT", 0, -4)
+    CF.dropTargets.reqPanel = reqPanel
+
     -- ── Flyout column ─────────────────────────────────────────────────────
     local function DispatchSpell(spellID, name, iconID)
         if activeTarget == "gen"   then genPanel:AddSpell(spellID, name, iconID)
         elseif activeTarget == "spend" then spendPanel:AddSpell(spellID, name, iconID)
-        elseif activeTarget == "buff"  then SetBuffSpell(spellID, name, iconID) end
+        elseif activeTarget == "buff"  then SetBuffSpell(spellID, name, iconID)
+        elseif activeTarget == "req"   then reqPanel:AddSpell(spellID, name, iconID) end
     end
 
     local flyout = CF.CreateFlyoutColumn(f, RIGHT_X, TOP_Y, FLY_W, DispatchSpell)
@@ -223,16 +238,20 @@ local function EnsureCreationFrame()
         local generators, spenders = {}, {}
         for _, e in ipairs(genEntries) do generators[e.spellID] = e.amount or 1 end
         for _, e in ipairs(spendEntries) do spenders[e.spellID] = true end
+        local reqEntries = reqPanel:GetEntries()
+        local requiredTalents = {}
+        for _, e in ipairs(reqEntries) do requiredTalents[e.spellID] = true end
         local entry = {
-            name         = name,
-            iconID       = selectedBuffIconID or 134400,
-            buffSpellID  = selectedBuffSpellID,
-            generators   = generators,
-            spenders     = spenders,
-            maxStacks    = maxStacks,
-            timer        = timer,
-            spendPerCast = spendDd.value,
-            enabled      = true,
+            name             = name,
+            iconID           = selectedBuffIconID or 134400,
+            buffSpellID      = selectedBuffSpellID,
+            generators       = generators,
+            spenders         = spenders,
+            maxStacks        = maxStacks,
+            timer            = timer,
+            spendPerCast     = spendDd.value,
+            requiredTalents  = next(requiredTalents) and requiredTalents or nil,
+            enabled          = true,
         }
         local specID = TT.currentSpecID
         if specID == 0 then specID = TriggerTracker_GetCurrentSpecID() end
@@ -266,7 +285,7 @@ local function EnsureCreationFrame()
         selectedBuffSpellID = nil; selectedBuffIconID = nil; selectedBuffName = nil
         nameBox:SetText(""); maxBox:SetText("5"); timerBox:SetText("0")
         buffIconTex:SetTexture(134400); buffNameLbl:SetText("|cff667788(none set)|r")
-        genPanel:Clear(); spendPanel:Clear()
+        genPanel:Clear(); spendPanel:Clear(); reqPanel:Clear()
         flyout.ResetCache(); flyout.ResetToSpellTab()
         activeTarget = "gen"; spendDd:SetValue(1)
         UpdateTargetButtons(); flyout.Refresh()
@@ -282,6 +301,7 @@ local function EnsureCreationFrame()
         timerBox:SetText(tostring(entry.timer or 0))
         buffIconTex:SetTexture(entry.iconID or 134400); buffNameLbl:SetText(entry.name or "(none set)")
         genPanel:LoadFromSet(entry.generators); spendPanel:LoadFromSet(entry.spenders)
+        reqPanel:LoadFromSet(entry.requiredTalents)
         flyout.ResetCache(); flyout.ResetToSpellTab()
         activeTarget = "gen"; spendDd:SetValue(entry.spendPerCast or 1)
         UpdateTargetButtons(); flyout.Refresh()

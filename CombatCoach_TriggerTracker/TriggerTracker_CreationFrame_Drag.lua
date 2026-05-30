@@ -13,6 +13,7 @@ local BORDER_NORMAL = { 0.22, 0.38, 0.58, 0.85 }
 local BORDER_GEN    = { 0.3,  1.0,  0.4,  1.0  }
 local BORDER_SPEND  = { 1.0,  0.5,  0.1,  1.0  }
 local BORDER_BUFF   = { 1.0,  0.85, 0.0,  1.0  }
+local BORDER_REQ    = { 0.8,  0.3,  1.0,  1.0  }
 
 local dragIcon = nil
 CF.dragSpellID   = nil
@@ -47,6 +48,8 @@ local function EnsureDragIcon()
             dt.spendPanel and dt.spendPanel:IsMouseOver() and BORDER_SPEND or BORDER_NORMAL)
         SetPanelBorder(dt.buffSlot,
             dt.buffSlot and dt.buffSlot:IsMouseOver() and BORDER_BUFF or BORDER_NORMAL)
+        SetPanelBorder(dt.reqPanel,
+            dt.reqPanel and dt.reqPanel:IsMouseOver() and BORDER_REQ or BORDER_NORMAL)
     end)
 end
 
@@ -65,6 +68,7 @@ local function EndDrag()
     SetPanelBorder(dt.genPanel,   BORDER_NORMAL)
     SetPanelBorder(dt.spendPanel, BORDER_NORMAL)
     SetPanelBorder(dt.buffSlot,   BORDER_NORMAL)
+    SetPanelBorder(dt.reqPanel,   BORDER_NORMAL)
     CF.dragSpellID   = nil
     CF.dragSpellName = nil
     CF.dragSpellIcon = nil
@@ -151,6 +155,8 @@ CF.CreateScrollList = function(parent, w, h, onDispatch)
                             dt.spendPanel:AddSpell(sid, sn, si)
                         elseif dt.buffSlot and dt.buffSlot:IsMouseOver() then
                             if dt.onBuffDrop then dt.onBuffDrop(sid, sn, si) end
+                        elseif dt.reqPanel and dt.reqPanel:IsMouseOver() then
+                            dt.reqPanel:AddSpell(sid, sn, si)
                         end
                     else
                         EndDrag()
