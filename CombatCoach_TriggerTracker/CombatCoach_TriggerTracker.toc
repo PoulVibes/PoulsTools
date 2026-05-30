@@ -1,5 +1,6 @@
 ## Interface: 120005
 ## Title: CombatCoach_TriggerTracker
+/
 ## Notes: Creates shmIcons that track buff stacks generated and consumed by player abilities.
 ## Version: 1.0.1
 ## Author: Poul
