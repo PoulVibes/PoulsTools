@@ -60,6 +60,8 @@ M.COND_TYPES = {
               return ("(C_Spell.GetSpellCharges(%d) ~= nil and not C_Spell.GetSpellCharges(%d).isActive)"):format(id, id)
           elseif v == "1" or v == 1 then
               return ("(C_Spell.GetSpellCharges(%d) ~= nil and C_Spell.GetSpellCharges(%d).isActive and (not C_Spell.GetSpellCooldown(%d).isActive or C_Spell.GetSpellCooldown(%d).isOnGCD))"):format(id, id, id, id)
+          elseif v == ">1" then
+              return ("C_Spell.GetSpellCooldown(%d) ~= nil and not C_Spell.GetSpellCooldown(%d).isActive or C_Spell.GetSpellCooldown(%d).isOnGCD")
           else
               return ("(C_Spell.GetSpellCooldown(%d) ~= nil and C_Spell.GetSpellCooldown(%d).isActive and not C_Spell.GetSpellCooldown(%d).isOnGCD)"):format(id, id, id)
           end

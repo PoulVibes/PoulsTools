@@ -24,6 +24,7 @@ M.PROC_MODE_LIST = {
 M.STACKS_VALUE_LIST = {
     { id = "0", label = "0 (None)" },
     { id = "1", label = "1" },
+    { id = ">1", label = ">1" },
     { id = "max", label = "Max" },
 }
 
