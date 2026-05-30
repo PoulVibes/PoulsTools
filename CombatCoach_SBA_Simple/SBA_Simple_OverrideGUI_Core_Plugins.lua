@@ -93,10 +93,5 @@ function M.BuildPluginSummary(cond)
         return ttreg.label .. " Active"
     end
 
-    local meta = M.PROC_PLUGIN_BY_ID[plugin]
-    if not meta then return plugin or "?" end
-    if M.IsCompOp(op) then
-        return meta.label .. " " .. op .. " " .. tostring(value or 4)
-    end
-    return meta.label .. " Active"
+    return plugin or "?"
 end

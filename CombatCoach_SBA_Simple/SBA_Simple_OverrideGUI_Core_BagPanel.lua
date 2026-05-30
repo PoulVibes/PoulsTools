@@ -210,20 +210,32 @@ function M.CreateBagPanel(f, deps)
     end
     f._refreshBagPanel = RefreshBagPanel
 
-    local function OpenBagPanel()
-        RefreshBagPanel()
-        stubBtn:Hide()
-        panel:Show()
-    end
-
     local function CloseBagPanel()
         panel:Hide()
         stubBtn:Show()
+        if f._spellFlyout then
+            f._spellFlyout.stubBtn:ClearAllPoints()
+            f._spellFlyout.stubBtn:SetPoint("TOPLEFT", f, "TOPLEFT", -TAB_W, -14)
+        end
+    end
+
+    local function OpenBagPanel()
+        if f._spellFlyout and f._spellFlyout.panel:IsShown() then
+            f._spellFlyout.ClosePanel()
+        end
+        RefreshBagPanel()
+        stubBtn:Hide()
+        panel:Show()
+        if f._spellFlyout then
+            f._spellFlyout.stubBtn:ClearAllPoints()
+            f._spellFlyout.stubBtn:SetPoint("TOP", tabBtn, "BOTTOM", 0, -4)
+        end
     end
 
     tabBtn:SetScript("OnClick", function() CloseBagPanel() end)
     stubBtn:SetScript("OnClick", function() OpenBagPanel() end)
     stubBtn:Show()
+    f._bagFlyout = { panel = panel, tabBtn = tabBtn, stubBtn = stubBtn, ClosePanel = CloseBagPanel }
 
     f:HookScript("OnSizeChanged", function(self) panel:SetHeight(self:GetHeight()) end)
 

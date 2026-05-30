@@ -250,20 +250,32 @@ function M.CreateSpellbookPanel(f, leftSF, deps)
 
     searchBox:SetScript("OnTextChanged", function(self) PopulatePanel(self:GetText()) end)
 
-    local function OpenPanel()
-        RefreshSpellbookPanel()
-        stubBtn:Hide()
-        panel:Show()
-    end
-
     local function ClosePanel()
         panel:Hide()
         stubBtn:Show()
+        if f._bagFlyout then
+            f._bagFlyout.stubBtn:ClearAllPoints()
+            f._bagFlyout.stubBtn:SetPoint("TOPLEFT", f, "TOPLEFT", -TAB_W, -(14 + TAB_H + 4))
+        end
+    end
+
+    local function OpenPanel()
+        if f._bagFlyout and f._bagFlyout.panel:IsShown() then
+            f._bagFlyout.ClosePanel()
+        end
+        RefreshSpellbookPanel()
+        stubBtn:Hide()
+        panel:Show()
+        if f._bagFlyout then
+            f._bagFlyout.stubBtn:ClearAllPoints()
+            f._bagFlyout.stubBtn:SetPoint("TOP", tabBtn, "BOTTOM", 0, -4)
+        end
     end
 
     tabBtn:SetScript("OnClick", function() ClosePanel() end)
     stubBtn:SetScript("OnClick", function() OpenPanel() end)
     stubBtn:Show()
+    f._spellFlyout = { panel = panel, tabBtn = tabBtn, stubBtn = stubBtn, ClosePanel = ClosePanel }
 
     f:HookScript("OnSizeChanged", function(self) panel:SetHeight(self:GetHeight()) end)
 
