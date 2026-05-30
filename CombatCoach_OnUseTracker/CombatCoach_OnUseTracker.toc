@@ -6,8 +6,6 @@
 ## SavedVariables: OnUseTrackerDB
 ## Dependencies: CombatCoach_shmIcons
 ## IconTexture: Interface\Icons\inv_ability_monk_weaponsoforder
-## Category-enUS: CombatCoach
-## Group: CombatCoach
 
 OnUseTracker.lua
 OnUseTracker_Monk.lua

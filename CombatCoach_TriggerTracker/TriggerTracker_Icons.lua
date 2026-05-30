@@ -3,6 +3,14 @@
 
 local TT = TriggerTracker
 
+-- Maps trigger key -> entry table so runtime functions can check entry.enabled.
+local entryByKey = {}
+
+local function IsIconEnabled(key)
+    local e = entryByKey[key]
+    return e and e.enabled ~= false
+end
+
 -- Forward declarations for SBAS condition helpers (defined later in this file).
 local RegisterSBASConditions, UnregisterSBASConditions
 
@@ -10,6 +18,7 @@ local RegisterSBASConditions, UnregisterSBASConditions
 function TriggerTracker_RegisterIcon(specID, idx, entry)
     local key  = TriggerTracker_MakeKey(specID, idx)
     local ADDON = TT.ADDON_NAME
+    entryByKey[key] = entry
 
     -- Ensure the entry has a DB-style position table that shmIcons can write into.
     entry.x     = entry.x     or 0
@@ -41,8 +50,10 @@ end
 
 -- Unregisters the shmIcon for one trigger entry.
 function TriggerTracker_UnregisterIcon(specID, idx)
+    local key = TriggerTracker_MakeKey(specID, idx)
+    entryByKey[key] = nil
     pcall(function()
-        shmIcons:Unregister(TT.ADDON_NAME, TriggerTracker_MakeKey(specID, idx))
+        shmIcons:Unregister(TT.ADDON_NAME, key)
     end)
     if shmIcons.MarkCombatCoachListDirty then
         shmIcons.MarkCombatCoachListDirty()
@@ -60,6 +71,8 @@ function TriggerTracker_LoadSpec(specID)
     TT.timerEnd     = {}
 
     if specID == 0 then return end
+
+    TriggerTracker_ApplyDefaults(specID)
 
     TriggerTracker_ForEachTrigger(specID, function(idx, entry)
         TriggerTracker_RegisterIcon(specID, idx, entry)
@@ -84,6 +97,7 @@ function TriggerTracker_UnloadSpec()
     TT.timerHandles = {}
     TT.timerEnd     = {}
     TT.spellMap     = {}
+    entryByKey      = {}
     UnregisterSBASConditions(TT.currentSpecID)
 end
 
@@ -94,9 +108,11 @@ function TriggerTracker_AddStack(key, maxStacks, timerDuration, amount)
     cur = math.min(cur + (tonumber(amount) or 1), maxS)
     TT.activeStacks[key] = cur
 
-    shmIcons:SetStacks(TT.ADDON_NAME, key, cur)
-    shmIcons:SetGlow(TT.ADDON_NAME, key, true)
-    shmIcons:SetVisible(TT.ADDON_NAME, key, true)
+    if IsIconEnabled(key) then
+        shmIcons:SetStacks(TT.ADDON_NAME, key, cur)
+        shmIcons:SetGlow(TT.ADDON_NAME, key, true)
+        shmIcons:SetVisible(TT.ADDON_NAME, key, true)
+    end
 
     if timerDuration and timerDuration > 0 then
         TriggerTracker_StartTimer(key, timerDuration)
@@ -115,12 +131,16 @@ function TriggerTracker_SpendStack(key, amount)
     TT.activeStacks[key] = cur
 
     if cur <= 0 then
-        shmIcons:SetStacks(TT.ADDON_NAME, key, 0)
-        shmIcons:SetGlow(TT.ADDON_NAME, key, false)
-        shmIcons:SetVisible(TT.ADDON_NAME, key, false)
+        if IsIconEnabled(key) then
+            shmIcons:SetStacks(TT.ADDON_NAME, key, 0)
+            shmIcons:SetGlow(TT.ADDON_NAME, key, false)
+            shmIcons:SetVisible(TT.ADDON_NAME, key, false)
+        end
         TriggerTracker_CancelTimer(key)
     else
-        shmIcons:SetStacks(TT.ADDON_NAME, key, cur)
+        if IsIconEnabled(key) then
+            shmIcons:SetStacks(TT.ADDON_NAME, key, cur)
+        end
     end
 end
 
@@ -130,16 +150,20 @@ function TriggerTracker_StartTimer(key, duration)
     local endTime = GetTime() + duration
     TT.timerEnd[key] = endTime
     local start = GetTime()
-    shmIcons:SetCooldownRaw(TT.ADDON_NAME, key, start, duration)
+    if IsIconEnabled(key) then
+        shmIcons:SetCooldownRaw(TT.ADDON_NAME, key, start, duration)
+    end
 
     TT.timerHandles[key] = C_Timer.NewTimer(duration, function()
         TT.timerHandles[key] = nil
         TT.timerEnd[key]     = nil
         TT.activeStacks[key] = 0
-        shmIcons:SetStacks(TT.ADDON_NAME, key, 0)
-        shmIcons:SetGlow(TT.ADDON_NAME, key, false)
-        shmIcons:SetVisible(TT.ADDON_NAME, key, false)
-        shmIcons:SetCooldownRaw(TT.ADDON_NAME, key, 0, 0)
+        if IsIconEnabled(key) then
+            shmIcons:SetStacks(TT.ADDON_NAME, key, 0)
+            shmIcons:SetGlow(TT.ADDON_NAME, key, false)
+            shmIcons:SetVisible(TT.ADDON_NAME, key, false)
+            shmIcons:SetCooldownRaw(TT.ADDON_NAME, key, 0, 0)
+        end
     end)
 end
 
@@ -150,7 +174,9 @@ function TriggerTracker_CancelTimer(key)
         TT.timerHandles[key] = nil
     end
     TT.timerEnd[key] = nil
-    shmIcons:SetCooldownRaw(TT.ADDON_NAME, key, 0, 0)
+    if IsIconEnabled(key) then
+        shmIcons:SetCooldownRaw(TT.ADDON_NAME, key, 0, 0)
+    end
 end
 
 -- Public accessor: returns current stack count for a trigger key (safe to call from generated Lua).

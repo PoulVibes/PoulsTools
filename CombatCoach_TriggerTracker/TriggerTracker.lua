@@ -118,6 +118,9 @@ SlashCmdList["TRIGGERTRACKER"] = function(msg)
                 tostring(entry.timer or 0) .. "s"))
         end)
 
+    elseif msg == "export" then
+        TriggerTracker_OpenExportWindow()
+
     elseif msg == "reset" then
         local specID = TT.currentSpecID
         if specID == 0 then return end
@@ -135,6 +138,7 @@ SlashCmdList["TRIGGERTRACKER"] = function(msg)
         print("|cFF00CCFFTriggerTracker commands:|r")
         print("  /tt new       — open Create Trigger frame")
         print("  /tt list      — list triggers for this spec")
+        print("  /tt export    — export all saved triggers as Lua")
         print("  /tt reset     — reset all stack counts")
         print("  /tt lock      — toggle icon lock")
     end

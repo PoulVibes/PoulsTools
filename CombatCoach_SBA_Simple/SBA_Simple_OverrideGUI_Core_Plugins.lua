@@ -4,20 +4,6 @@
 local M = _G.SBAS_GUI or {}
 _G.SBAS_GUI = M
 
-M.PROC_PLUGIN_BY_ID = M.PROC_PLUGIN_BY_ID or {
-    withering_fire = { label = "Withering Fire", activeFlag = "WitheringFireActiveTracker", timerVar = "WitheringFireRemaining" },
-    bestial_wrath_cooldown = { label = "Bestial Wrath Cooldown", activeFlag = "BestialWrathCooldownActiveTracker", timerVar = "BestialWrathCooldownRemaining" },
-    barbed_shot_debuff = { label = "Barbed Shot Debuff", activeFlag = "BarbedShotDebuffActiveTracker", timerVar = "BarbedShotDebuffRemaining" },
-    natures_ally = { label = "Nature's Ally", activeFlag = "NaturesAllyActiveTracker" },
-    beast_cleave = { label = "Beast Cleave", activeFlag = "BeastCleaveActiveTracker", timerVar = "BeastCleaveRemaining" },
-    vivify_proc = { label = "Vivify Proc", activeFlag = "VivifyProcActiveTracker", timerVar = "VivifyProcRemaining" },
-    hojs = { label = "Heart of the Jade Serpent", activeFlag = "HojsActiveTracker", timerVar = "HojsRemaining" },
-    tots_stacks = { label = "Tip of the Spear Stacks", timerVar = "TipOfTheSpearStacks" },
-    tots_timer = { label = "Tip of the Spear Timer", activeFlag = "TipOfTheSpearTimerActive", timerVar = "TipOfTheSpearRemaining" },
-    takedown_buff = { label = "Takedown Buff", activeFlag = "TakedownBuffActive", timerVar = "TakedownBuffRemaining" },
-    raptor_swipe_override = { label = "Raptor Swipe Override", activeFlag = "RaptorSwipeOverrideActive" },
-}
-
 M.VALID_COMP_OPS = M.VALID_COMP_OPS or {
     [">="] = true,
     ["<="] = true,
@@ -40,12 +26,12 @@ end
 
 local function GetDynamicPluginRegistry(pluginID)
     if _G.SBAS_DynBuffRegistry and _G.SBAS_DynBuffRegistry[pluginID] then
-        return _G.SBAS_DynBuffRegistry[pluginID]
+        return _G.SBAS_DynBuffRegistry[pluginID], "DBT"
     end
     if _G.SBAS_DynActivationRegistry and _G.SBAS_DynActivationRegistry[pluginID] then
-        return _G.SBAS_DynActivationRegistry[pluginID]
+        return _G.SBAS_DynActivationRegistry[pluginID], "DAT"
     end
-    return nil
+    return nil, nil
 end
 
 local function GetTriggerTrackerEntry(pluginID)
@@ -57,9 +43,6 @@ end
 
 function M.BuildPluginConditionExpr(cond, ruleSpellID)
     local plugin, op, value = M.NormalizePluginState(cond)
-    if plugin == "zenith" then return "ZenithActiveTracker" end
-    if plugin == "bestial_wrath_active" then return "BestialWrathActiveTracker" end
-    if plugin == "withering_fire_active" then return "WitheringFireActiveTracker" end
     if plugin == "last_combo_eq" then
         return ("LastComboStrikeSpellID == %d"):format(ruleSpellID or 0)
     end
@@ -81,38 +64,20 @@ function M.BuildPluginConditionExpr(cond, ruleSpellID)
                 return ("TriggerTracker_GetActiveStacks(%q) %s %d"):format(ttreg.key, op, value or 0)
             end
         end
+        if ttreg.hasTimer then
+            return ("TriggerTracker_GetTimerRemaining(%q) > 0"):format(ttreg.key)
+        end
         return ("TriggerTracker_GetActiveStacks(%q) > 0"):format(ttreg.key)
     end
 
-    local meta = M.PROC_PLUGIN_BY_ID[plugin]
-    if not meta then return "false" end
-    if M.IsCompOp(op) then
-        if plugin == "withering_fire" then return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 10) end
-        if plugin == "bestial_wrath_cooldown" then return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 90) end
-        if plugin == "barbed_shot_debuff" then return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 12) end
-        if plugin == "beast_cleave" then return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 8) end
-        if plugin == "tots_timer" then return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 5) end
-        if plugin == "takedown_buff" then return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 5) end
-        return ("(tonumber(%s) or 0) %s %d"):format(meta.timerVar, op, value or 4)
-    end
-
-    if plugin == "tots_stacks" then
-        return ("(tonumber(%s) or 0) > 0"):format(meta.timerVar)
-    end
-    if plugin == "tots_timer" then
-        return ("(%s == true)"):format(meta.activeFlag)
-    end
-    return ("(%s == true)"):format(meta.activeFlag)
+    return "false"
 end
 
 function M.BuildPluginSummary(cond)
     local plugin, op, value = M.NormalizePluginState(cond)
-    if plugin == "zenith" then return "Zenith" end
-    if plugin == "bestial_wrath_active" then return "Bestial Wrath Active" end
-    if plugin == "withering_fire_active" then return "Withering Fire Active" end
     if plugin == "last_combo_eq" then return "Combo" end
 
-    local reg = GetDynamicPluginRegistry(plugin)
+    local reg, src = GetDynamicPluginRegistry(plugin)
     if reg then
         if M.IsCompOp(op) and reg.timerVar then
             return reg.label .. " " .. op .. " " .. tostring(value or "")

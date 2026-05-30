@@ -4,6 +4,10 @@ local frame = CreateFrame("Frame", "EnergyGuesstimatorLogicFrame")
 local TIGER_PALM_ID = 100780
 local VIVIFY_ID = 116670
 local CJL_ID = 117952
+local RSK_ID  = 107428
+local RWK_ID  = 467307
+local VIVACIOUS_VIVIFICATION_WW = 388812
+local VIVIFY_PROC_DURATION = 20
 
 local ENERGY_COST_TP = 60
 local ENERGY_COST_VIVIFY_NORMAL = 30
@@ -20,6 +24,8 @@ _G.GuesstimatedHaste = _G.GuesstimatedHaste or 0.21
 local REQUIRED_CLASS = "MONK"
 local REQUIRED_SPEC_ID = 269
 local addonEnabled = false
+local vivifyProcActive = false
+local vivifyProcTimer  = nil
 local ui -- forward declaration; assigned below after CreateFrame
 
 local function IsPlayerClass(token)
@@ -51,6 +57,9 @@ local function DisableAddon()
     frame:UnregisterEvent("UNIT_POWER_UPDATE")
     frame:UnregisterEvent("PLAYER_REGEN_ENABLED")
     frame:UnregisterEvent("UNIT_MAXPOWER")
+    vivifyProcActive = false
+    if vivifyProcTimer then vivifyProcTimer:Cancel() end
+    vivifyProcTimer = nil
     ui:Hide()
     --print("[Guesstimator] disabled (not required spec)")
 end
@@ -94,13 +103,9 @@ ui.text = ui:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 ui.text:SetPoint("CENTER", 0, 0)
 ui.text:SetTextColor(1, 0.8, 0)
 
-_G.VivifyProc_OnEvent = function(event)
-    if event == "VIVIFY_PROC_CONSUMED" then
-        currentEnergy = math.max(0, currentEnergy - ENERGY_COST_VIVIFY_PROC)
-    elseif event == "VIVIFY_NORMAL_CAST" then
-        currentEnergy = math.max(0, currentEnergy - ENERGY_COST_VIVIFY_NORMAL)
-    end
-end
+-- Null out the legacy OnUseTracker callback to prevent double-deduction
+-- if OnUseTracker is still loaded alongside this addon.
+_G.VivifyProc_OnEvent = nil
 
 local function OnInitialize()
     ui:Hide()
@@ -148,6 +153,23 @@ frame:SetScript("OnEvent", function(self, event, ...)
         local spellID = select(3, ...)
         if spellID == TIGER_PALM_ID then
             currentEnergy = math.max(0, currentEnergy - ENERGY_COST_TP)
+        elseif (spellID == RSK_ID or spellID == RWK_ID) and IsPlayerSpell(VIVACIOUS_VIVIFICATION_WW) then
+            -- RSK / RWK with talent → start a fresh proc window
+            vivifyProcActive = true
+            if vivifyProcTimer then vivifyProcTimer:Cancel() end
+            vivifyProcTimer = C_Timer.NewTimer(VIVIFY_PROC_DURATION, function()
+                vivifyProcActive = false
+                vivifyProcTimer  = nil
+            end)
+        elseif spellID == VIVIFY_ID then
+            if vivifyProcActive then
+                vivifyProcActive = false
+                if vivifyProcTimer then vivifyProcTimer:Cancel() end
+                vivifyProcTimer = nil
+                currentEnergy = math.max(0, currentEnergy - ENERGY_COST_VIVIFY_PROC)
+            else
+                currentEnergy = math.max(0, currentEnergy - ENERGY_COST_VIVIFY_NORMAL)
+            end
         end
     elseif event == "UNIT_POWER_UPDATE" then
         local powerType = select(2, ...)

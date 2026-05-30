@@ -93,7 +93,7 @@ function TriggerTracker_BuildSpellMap(specID)
     local map = {}
     local triggers = TriggerTracker_GetSpecDB(specID)
     for idx, entry in pairs(triggers) do
-        if entry.enabled ~= false and TriggerTracker_HasRequiredTalents(entry) then
+        if TriggerTracker_HasRequiredTalents(entry) then
             local key = TriggerTracker_MakeKey(specID, idx)
             if entry.generators then
                 for spellID, amt in pairs(entry.generators) do

@@ -53,22 +53,15 @@ function M.RenderRightPanelFooter(rule, yBase, deps)
                 end
                 newCond.plugin = pid
                 local mode = condInputArea.GetProcMode()
-                if deps.procPluginByID[pid] then
+                local reg = (_G.SBAS_DynBuffRegistry and _G.SBAS_DynBuffRegistry[pid])
+                    or (_G.SBAS_DynActivationRegistry and _G.SBAS_DynActivationRegistry[pid])
+                if reg and reg.timerVar and deps.isCompOp(mode) then
+                    newCond.operator = mode
+                    newCond.value = condInputArea.GetValue() or 4
+                elseif _G.SBAS_TriggerTrackerRegistry and _G.SBAS_TriggerTrackerRegistry[pid] then
                     if deps.isCompOp(mode) then
                         newCond.operator = mode
-                        newCond.value = condInputArea.GetValue() or 4
-                    end
-                else
-                    local reg = (_G.SBAS_DynBuffRegistry and _G.SBAS_DynBuffRegistry[pid])
-                        or (_G.SBAS_DynActivationRegistry and _G.SBAS_DynActivationRegistry[pid])
-                    if reg and reg.timerVar and deps.isCompOp(mode) then
-                        newCond.operator = mode
-                        newCond.value = condInputArea.GetValue() or 4
-                    elseif _G.SBAS_TriggerTrackerRegistry and _G.SBAS_TriggerTrackerRegistry[pid] then
-                        if deps.isCompOp(mode) then
-                            newCond.operator = mode
-                            newCond.value = condInputArea.GetValue() or 1
-                        end
+                        newCond.value = condInputArea.GetValue() or 1
                     end
                 end
             end

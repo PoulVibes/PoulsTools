@@ -18,7 +18,6 @@ Profiles.knownDBs = {
     { dbName = "SBA_SimpleDB",        label = "CombatCoach_SBA_Simple"        },
     { dbName = "TrinketTrackerDB",    label = "CombatCoach_TrinketTracker"    },
     { dbName = "VivifyProcTrackerDB", label = "CombatCoach_VivifyProcTracker" },
-    { dbName = "OnUseTrackerDB",      label = "On Use Tracker"                },
 }
 
 -- Define the reload-after-import static popup once at load time

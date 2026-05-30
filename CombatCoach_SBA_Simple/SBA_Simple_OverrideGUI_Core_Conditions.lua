@@ -45,60 +45,17 @@ M.SPEC_SECONDARY = M.SPEC_SECONDARY or {
 }
 
 M.PLUGIN_OPTS_WW = M.PLUGIN_OPTS_WW or {
-    { id = "zenith", label = "Zenith" },
-    { id = "last_combo_eq", label = "Combo" },
-    { id = "vivify_proc", label = "Vivify Proc", supportsProcMode = true, default = 20 },
-    { id = "hojs", label = "Heart of the Jade Serpent", supportsProcMode = true, default = 4 },
-}
-
-M.PLUGIN_OPTS_BM = M.PLUGIN_OPTS_BM or {
-    { id = "bestial_wrath_active", label = "Bestial Wrath Active" },
-    { id = "bestial_wrath_cooldown", label = "Bestial Wrath Cooldown", supportsProcMode = true, default = 90 },
-    { id = "barbed_shot_debuff", label = "Barbed Shot Debuff", supportsProcMode = true, default = 12 },
-    { id = "withering_fire_active", label = "Withering Fire Active" },
-    { id = "withering_fire", label = "Withering Fire", supportsProcMode = true, default = 10 },
-    { id = "natures_ally", label = "Nature's Ally Active" },
-    { id = "beast_cleave", label = "Beast Cleave", supportsProcMode = true, default = 8 },
-}
-
-M.PLUGIN_OPTS_SV = M.PLUGIN_OPTS_SV or {
-    { id = "tots_stacks", label = "Tip of the Spear Stacks", supportsProcMode = true, default = 1, valueLabel = "Stacks", procCompareOnly = true },
-    { id = "tots_timer", label = "Tip of the Spear Timer", supportsProcMode = true, default = 5 },
-    { id = "takedown_buff", label = "Takedown Buff", supportsProcMode = true, default = 5 },
-    { id = "raptor_swipe_override", label = "Raptor Swipe Override" },
-}
-
-M.PLUGIN_OPTS_VIVIFY_MONK = M.PLUGIN_OPTS_VIVIFY_MONK or {
-    { id = "vivify_proc", label = "Vivify Proc", supportsProcMode = true, default = 20 },
+    { id = "last_combo_eq", label = "Combo (CT)" },
 }
 
 M.WINDWALKER_SPEC_ID = M.WINDWALKER_SPEC_ID or 269
-M.BM_HUNTER_SPEC_ID = M.BM_HUNTER_SPEC_ID or 253
-M.SURVIVAL_HUNTER_SPEC_ID = M.SURVIVAL_HUNTER_SPEC_ID or 255
-M.BM_MONK_SPEC_ID = M.BM_MONK_SPEC_ID or 268
-M.MW_MONK_SPEC_ID = M.MW_MONK_SPEC_ID or 270
 
 function M.IsWindwalkerGUI()
     return M.GetEditSpecID() == M.WINDWALKER_SPEC_ID
 end
 
-function M.IsBeastMasteryHunterGUI()
-    return M.GetEditSpecID() == M.BM_HUNTER_SPEC_ID
-end
-
-function M.IsSurvivalHunterGUI()
-    return M.GetEditSpecID() == M.SURVIVAL_HUNTER_SPEC_ID
-end
-
-function M.IsVivifyMonkGUI()
-    local sid = M.GetEditSpecID()
-    return sid == M.BM_MONK_SPEC_ID or sid == M.MW_MONK_SPEC_ID
-end
-
 function M.SupportsPluginGUI()
-    if M.IsWindwalkerGUI() or M.IsBeastMasteryHunterGUI() or M.IsSurvivalHunterGUI() or M.IsVivifyMonkGUI() then
-        return true
-    end
+    if M.IsWindwalkerGUI() then return true end
     if _G.SBAS_DynBuffRegistry then
         for _, entry in pairs(_G.SBAS_DynBuffRegistry) do
             if entry.specID == M.GetEditSpecID() then return true end
@@ -121,22 +78,16 @@ function M.GetVisiblePluginOptions()
     local base
     if M.IsWindwalkerGUI() then
         base = M.PLUGIN_OPTS_WW
-    elseif M.IsBeastMasteryHunterGUI() then
-        base = M.PLUGIN_OPTS_BM
-    elseif M.IsSurvivalHunterGUI() then
-        base = M.PLUGIN_OPTS_SV
-    elseif M.IsVivifyMonkGUI() then
-        base = M.PLUGIN_OPTS_VIVIFY_MONK
     end
 
     local dynOpts = {}
     local seenDyn = {}
-    local function AddDynOpts(registry)
+    local function AddDynOpts(registry, acronym)
         if not registry then return end
         for pluginID, entry in pairs(registry) do
             if entry.specID == M.GetEditSpecID() and not seenDyn[pluginID] then
                 seenDyn[pluginID] = true
-                local opt = { id = pluginID, label = entry.label }
+                local opt = { id = pluginID, label = entry.label .. " (" .. acronym .. ")" }
                 if entry.timerVar then opt.supportsProcMode = true end
                 dynOpts[#dynOpts + 1] = opt
             end
@@ -144,8 +95,8 @@ function M.GetVisiblePluginOptions()
     end
 
     if _G.SBAS_DynBuffRegistry or _G.SBAS_DynActivationRegistry then
-        AddDynOpts(_G.SBAS_DynBuffRegistry)
-        AddDynOpts(_G.SBAS_DynActivationRegistry)
+        AddDynOpts(_G.SBAS_DynBuffRegistry, "DBT")
+        AddDynOpts(_G.SBAS_DynActivationRegistry, "DAT")
         table.sort(dynOpts, function(a, b) return a.label < b.label end)
     end
 
@@ -157,7 +108,7 @@ function M.GetVisiblePluginOptions()
                 seenDyn[pluginID] = true
                 ttOpts[#ttOpts + 1] = {
                     id             = pluginID,
-                    label          = entry.label,
+                    label          = entry.label .. " (TT)",
                     supportsProcMode = true,
                     default        = entry.hasTimer and 3 or 1,
                     valueLabel     = entry.hasTimer and "Sec" or "Stacks",
