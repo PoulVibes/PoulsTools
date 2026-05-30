@@ -109,6 +109,11 @@ function M.SupportsPluginGUI()
             if entry.specID == M.GetEditSpecID() then return true end
         end
     end
+    if _G.SBAS_TriggerTrackerRegistry then
+        for _, entry in pairs(_G.SBAS_TriggerTrackerRegistry) do
+            if entry.specID == M.GetEditSpecID() then return true end
+        end
+    end
     return false
 end
 
@@ -142,6 +147,25 @@ function M.GetVisiblePluginOptions()
         AddDynOpts(_G.SBAS_DynBuffRegistry)
         AddDynOpts(_G.SBAS_DynActivationRegistry)
         table.sort(dynOpts, function(a, b) return a.label < b.label end)
+    end
+
+    if _G.SBAS_TriggerTrackerRegistry then
+        local ttOpts = {}
+        local specID = M.GetEditSpecID()
+        for pluginID, entry in pairs(_G.SBAS_TriggerTrackerRegistry) do
+            if entry.specID == specID and not seenDyn[pluginID] then
+                seenDyn[pluginID] = true
+                ttOpts[#ttOpts + 1] = {
+                    id             = pluginID,
+                    label          = entry.label,
+                    supportsProcMode = true,
+                    default        = entry.hasTimer and 3 or 1,
+                    valueLabel     = entry.hasTimer and "Sec" or "Stacks",
+                }
+            end
+        end
+        table.sort(ttOpts, function(a, b) return a.label < b.label end)
+        for _, opt in ipairs(ttOpts) do dynOpts[#dynOpts + 1] = opt end
     end
 
     if #dynOpts == 0 then return base or {} end

@@ -48,6 +48,13 @@ local function GetDynamicPluginRegistry(pluginID)
     return nil
 end
 
+local function GetTriggerTrackerEntry(pluginID)
+    if _G.SBAS_TriggerTrackerRegistry then
+        return _G.SBAS_TriggerTrackerRegistry[pluginID]
+    end
+    return nil
+end
+
 function M.BuildPluginConditionExpr(cond, ruleSpellID)
     local plugin, op, value = M.NormalizePluginState(cond)
     if plugin == "zenith" then return "ZenithActiveTracker" end
@@ -63,6 +70,18 @@ function M.BuildPluginConditionExpr(cond, ruleSpellID)
             return ("(tonumber(%s) or 0) %s %d"):format(reg.timerVar, op, value or 0)
         end
         return ("(%s == true)"):format(reg.activeFlag)
+    end
+
+    local ttreg = GetTriggerTrackerEntry(plugin)
+    if ttreg then
+        if M.IsCompOp(op) then
+            if ttreg.hasTimer then
+                return ("TriggerTracker_GetTimerRemaining(%q) %s %d"):format(ttreg.key, op, value or 0)
+            else
+                return ("TriggerTracker_GetActiveStacks(%q) %s %d"):format(ttreg.key, op, value or 0)
+            end
+        end
+        return ("TriggerTracker_GetActiveStacks(%q) > 0"):format(ttreg.key)
     end
 
     local meta = M.PROC_PLUGIN_BY_ID[plugin]
@@ -99,6 +118,14 @@ function M.BuildPluginSummary(cond)
             return reg.label .. " " .. op .. " " .. tostring(value or "")
         end
         return reg.label .. " Active"
+    end
+
+    local ttreg = GetTriggerTrackerEntry(plugin)
+    if ttreg then
+        if M.IsCompOp(op) then
+            return ttreg.label .. " " .. op .. " " .. tostring(value or 0)
+        end
+        return ttreg.label .. " Active"
     end
 
     local meta = M.PROC_PLUGIN_BY_ID[plugin]
