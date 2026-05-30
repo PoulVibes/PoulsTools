@@ -77,7 +77,7 @@ function Profiles:GetExportFrame()
     -- Title
     local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("LEFT", hdr, "LEFT", 10, 0)
-    title:SetText("|cFF00CCFFExport Profile|r")
+    title:SetText("|cFF00CCFFExport Spec Profile|r")
     title:SetFont("Fonts\\FRIZQT__.TTF", 14, "OUTLINE")
 
     -- Instructions
@@ -121,7 +121,7 @@ end
 
 function Profiles:ShowExportFrame()
     local f = self:GetExportFrame()
-    local str, payload = self:Serialize()
+    local str, payload, specID, specName = self:SerializeSpec()
     if not str then
         print("|cFFFF4444CombatCoach Profiles:|r " .. tostring(payload))
         return
@@ -129,7 +129,8 @@ function Profiles:ShowExportFrame()
     f.editBox:SetText(str)
     f.editBox:HighlightText()
     if f.infoLabel then
-        f.infoLabel:SetText("Contains: " .. table.concat(payload, ", "))
+        local specLabel = specName and (specName .. " (" .. specID .. ")") or tostring(specID)
+        f.infoLabel:SetText("Spec: " .. specLabel .. "  |  " .. table.concat(payload, ", "))
     end
     f:Show()
     f.editBox:SetFocus()
@@ -146,7 +147,7 @@ function Profiles:GetImportFrame()
     -- Title
     local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("LEFT", hdr, "LEFT", 10, 0)
-    title:SetText("|cFF00CCFFImport Profile|r")
+    title:SetText("|cFF00CCFFImport Spec Profile|r")
     title:SetFont("Fonts\\FRIZQT__.TTF", 14, "OUTLINE")
 
     -- Instructions

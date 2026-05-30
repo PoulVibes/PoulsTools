@@ -17,12 +17,12 @@ function Profiles:AddButtonsToMainPanel()
         id        = "CombatCoach_Profiles",
         order     = 1,
         icon      = "Interface\\Icons\\inv_scroll_03",
-        desc      = "Export and import CombatCoach layout.",
+        desc      = "Export and import CombatCoach layout for the current spec.",
         OnBuildUI = function(parent)
             local exportBtn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
             exportBtn:SetPoint("TOPLEFT", parent, "TOPLEFT", 16, -16)
             exportBtn:SetSize(130, 24)
-            exportBtn:SetText("Export Profile")
+            exportBtn:SetText("Export Spec")
             exportBtn:SetScript("OnClick", function()
                 Profiles:ShowExportFrame()
             end)
@@ -30,7 +30,7 @@ function Profiles:AddButtonsToMainPanel()
             local importBtn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
             importBtn:SetPoint("LEFT", exportBtn, "RIGHT", 6, 0)
             importBtn:SetSize(130, 24)
-            importBtn:SetText("Import Profile")
+            importBtn:SetText("Import Spec")
             importBtn:SetScript("OnClick", function()
                 Profiles:ShowImportFrame()
             end)

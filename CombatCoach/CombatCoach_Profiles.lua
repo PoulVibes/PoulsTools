@@ -10,14 +10,15 @@ local Profiles = CombatCoach.Profiles
 Profiles.VERSION = 1
 
 -- Known addon SavedVariable globals included in a profile.
+-- specKeys: top-level fields in the DB keyed by [specID]; omit for globals-only DBs.
 Profiles.knownDBs = {
-    { dbName = "ComboTrackerDB",      label = "CombatCoach_ComboTracker"      },
-    { dbName = "CooldownTrackerDB",   label = "CombatCoach_CooldownTracker"   },
-    { dbName = "ItemTrackerDB",       label = "CombatCoach_ItemTracker"       },
-    { dbName = "SpellGlowTrackerDB",  label = "CombatCoach_SpellGlowTracker"  },
-    { dbName = "SBA_SimpleDB",        label = "CombatCoach_SBA_Simple"        },
-    { dbName = "TrinketTrackerDB",    label = "CombatCoach_TrinketTracker"    },
-    { dbName = "VivifyProcTrackerDB", label = "CombatCoach_VivifyProcTracker" },
+    { dbName = "ComboTrackerDB",      label = "CombatCoach_ComboTracker"                                                         },
+    { dbName = "CooldownTrackerDB",   label = "CombatCoach_CooldownTracker",  specKeys = { "specs" }                             },
+    { dbName = "ItemTrackerDB",       label = "CombatCoach_ItemTracker",       specKeys = { "specs" }                            },
+    { dbName = "SpellGlowTrackerDB",  label = "CombatCoach_SpellGlowTracker"                                                     },
+    { dbName = "SBA_SimpleDB",        label = "CombatCoach_SBA_Simple",        specKeys = { "gui", "guiTabs", "tabNames", "tabCount", "specs" } },
+    { dbName = "TrinketTrackerDB",    label = "CombatCoach_TrinketTracker",    specKeys = { "specs" }                            },
+    { dbName = "VivifyProcTrackerDB", label = "CombatCoach_VivifyProcTracker"                                                    },
 }
 
 -- Define the reload-after-import static popup once at load time
@@ -68,6 +69,58 @@ local function serializeValue(val, depth)
         return "{\n" .. table.concat(parts, ",\n") .. "\n" .. clos .. "}"
     end
     return "nil"
+end
+
+-- Returns the numeric spec ID for the active specialization, or 0.
+local function GetCurrentSpecID()
+    local specIndex = GetSpecialization and GetSpecialization()
+    if not specIndex then return 0 end
+    local specID = select(1, GetSpecializationInfo(specIndex))
+    return specID or 0
+end
+
+-- Snapshots the current spec's data from all spec-aware DBs.
+-- Returns (serializedString, labelList, specID, specName) or (nil, errMsg).
+function Profiles:SerializeSpec()
+    local specIndex = GetSpecialization and GetSpecialization()
+    if not specIndex then
+        return nil, "No active specialization found."
+    end
+    local specID, specName = GetSpecializationInfo(specIndex)
+    if not specID or specID == 0 then
+        return nil, "Could not determine current specialization."
+    end
+    local profile = {
+        _addon   = "CombatCoach",
+        _version = self.VERSION,
+        _date    = date("%Y-%m-%d"),
+        _specID  = specID,
+    }
+    local included = {}
+    for _, entry in ipairs(self.knownDBs) do
+        if entry.specKeys then
+            local db = _G[entry.dbName]
+            if db ~= nil then
+                local specData = {}
+                local hasData  = false
+                for _, key in ipairs(entry.specKeys) do
+                    if db[key] ~= nil and db[key][specID] ~= nil then
+                        local v = db[key][specID]
+                        specData[key] = type(v) == "table" and CopyTable(v) or v
+                        hasData = true
+                    end
+                end
+                if hasData then
+                    profile[entry.dbName]        = specData
+                    included[#included + 1] = entry.label
+                end
+            end
+        end
+    end
+    if #included == 0 then
+        return nil, "No spec data found for the current specialization."
+    end
+    return serializeValue(profile), included, specID, specName
 end
 
 -- Snapshots all currently-loaded addon DBs; returns (serializedString, labelList) or (nil, error).
@@ -132,12 +185,46 @@ function Profiles:Deserialize(str)
 end
 
 -- Copies each known DB from the profile into the matching global; returns label list.
+-- Routes spec-scoped profiles (those with _specID) to _ApplySpec.
 function Profiles:Apply(profileData)
+    if profileData._specID then
+        return self:_ApplySpec(profileData)
+    end
     local applied = {}
     for _, entry in ipairs(self.knownDBs) do
         if type(profileData[entry.dbName]) == "table" then
             _G[entry.dbName] = CopyTable(profileData[entry.dbName])
             applied[#applied + 1] = entry.label
+        end
+    end
+    return applied
+end
+
+-- Writes spec-scoped profile data back into the matching per-spec DB slots.
+function Profiles:_ApplySpec(profileData)
+    local specID  = profileData._specID
+    local applied = {}
+    for _, entry in ipairs(self.knownDBs) do
+        if entry.specKeys and type(profileData[entry.dbName]) == "table" then
+            local db  = _G[entry.dbName]
+            if not db then
+                _G[entry.dbName] = {}
+                db = _G[entry.dbName]
+            end
+            local src       = profileData[entry.dbName]
+            local didApply  = false
+            for _, key in ipairs(entry.specKeys) do
+                if src[key] ~= nil then
+                    db[key] = db[key] or {}
+                    db[key][specID] = type(src[key]) == "table"
+                        and CopyTable(src[key])
+                        or  src[key]
+                    didApply = true
+                end
+            end
+            if didApply then
+                applied[#applied + 1] = entry.label
+            end
         end
     end
     return applied

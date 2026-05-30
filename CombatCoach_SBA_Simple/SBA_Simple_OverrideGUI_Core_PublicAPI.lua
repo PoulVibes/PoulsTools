@@ -51,7 +51,7 @@ function M.InstallOverrideGUIPublicAPI(deps)
         end
         local rules, err = deps.deserializeRulesFromExport(importText, specID)
         if not rules then return nil, err or "parse error" end
-        return deps.serializeRulesForExportV2(specID, rules)
+        return deps.serializeAllTabsForExport(specID, { rules }, 1)
     end
 
     _G.SBAS_LoadRulesIntoOverrideGUI = function(specID, displayName, rules)

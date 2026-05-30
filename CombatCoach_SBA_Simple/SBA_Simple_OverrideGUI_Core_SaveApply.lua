@@ -48,14 +48,9 @@ function M.HandleSaveAndApply(state, deps)
           .. deps.getSpecName(state.editSpecID))
 
     if type(_G.SBAS_OnGuiSaveAndApply) == "function" then
-        local savedExport
-        if state.tabCount > 1 then
-            local tabsRules = {}
-            for t = 1, state.tabCount do tabsRules[t] = state.allTabRules[t] or {} end
-            savedExport = deps.serializeAllTabsForExport(state.editSpecID, tabsRules, state.tabCount)
-        else
-            savedExport = deps.serializeRulesForExportV2(state.editSpecID, state.allTabRules[1] or {})
-        end
+        local tabsRules = {}
+        for t = 1, state.tabCount do tabsRules[t] = state.allTabRules[t] or {} end
+        local savedExport = deps.serializeAllTabsForExport(state.editSpecID, tabsRules, state.tabCount)
         _G.SBAS_OnGuiSaveAndApply(state.editSpecID, savedExport)
     end
 
