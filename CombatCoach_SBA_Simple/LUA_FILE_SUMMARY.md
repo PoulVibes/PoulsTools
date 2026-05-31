@@ -1,0 +1,59 @@
+# Lua file summaries for CombatCoach_SBA_Simple
+
+Short one-line descriptions for each Lua file in this addon.
+
+- `SBA_Simple.lua`: Top-level SBA_Simple module and initialization.
+- `SBA_Simple_DB.lua`: Persistence and database helpers for SBA_Simple.
+- `SBA_Simple_Events.lua`: Event handlers and event dispatching logic.
+- `SBA_Simple_IconAPI.lua`: Icon API and integration helpers.
+- `SBA_Simple_OverrideGUI.lua`: High-level override GUI integration.
+- `SBA_Simple_CombatCoach.lua`: Integration glue between SBA_Simple and CombatCoach.
+- `SBA_Simple_Registration.lua`: Registration of rules, hooks and features.
+- `SBA_Simple_SlashCommands.lua`: Slash command definitions and handlers.
+- `SBA_Simple_RuntimeTicker.lua`: Runtime ticker / update loop utilities.
+- `SBA_Simple_OverrideEditor.lua`: Editor UI for override rules and conditions.
+- `SBA_Simple_OverrideGUI_Impl.lua`: Implementation details for the override GUI.
+- `SBA_Simple_RecommendedImports.lua`: Helper for commonly recommended imports.
+- `SBA_Simple_CombatCoach_SpecUI.lua`: Spec-specific UI integration for CombatCoach.
+- `SBA_Simple_CombatCoach_Analyzer.lua`: Analyzer logic for evaluating combat data.
+- `SBA_Simple_CombatCoach_ClassSpec.lua`: Class/spec specific adjustments and rules.
+- `SBA_Simple_CombatCoach_UISections.lua`: UI sections used by CombatCoach integration.
+- `SBA_Simple_CombatCoach_EditorHooks.lua`: Editor hooks for CombatCoach features.
+- `SBA_Simple_OverrideGUI_Core_DB.lua`: Core GUI DB utilities.
+- `SBA_Simple_OverrideGUI_Core_Tabs.lua`: Tab handling for the override GUI.
+- `SBA_Simple_OverrideGUI_Core_Reset.lua`: Reset and restore helpers for GUI state.
+- `SBA_Simple_OverrideGUI_Core_OpenGUI.lua`: Logic to open/show the override GUI.
+- `SBA_Simple_OverrideGUI_Core_Pickers.lua`: Picker widgets for spells/items.
+- `SBA_Simple_OverrideGUI_Core_Plugins.lua`: Plugin hooks for GUI extensions.
+- `SBA_Simple_OverrideGUI_Core_Codegen.lua`: Codegen utilities used by GUI.
+- `SBA_Simple_OverrideGUI_Core_Transfer.lua`: Transfer/load/save helpers.
+- `SBA_Simple_OverrideGUI_Core_Dropdown.lua`: Dropdown components for GUI.
+- `SBA_Simple_OverrideGUI_Core_Registry.lua`: Component registry for the GUI core.
+- `SBA_Simple_OverrideGUI_Core_DragDrop.lua`: Drag/drop utilities for GUI components.
+- `SBA_Simple_OverrideGUI_Core_RuleRows.lua`: Rule row UI components.
+- `SBA_Simple_OverrideGUI_Core_BagPanel.lua`: Bag-panel helpers used by the GUI.
+- `SBA_Simple_OverrideGUI_Core_OpenLoad.lua`: Load/open helpers and dialogs.
+- `SBA_Simple_OverrideGUI_Core_GUIFrame.lua`: Core GUI frame implementation.
+- `SBA_Simple_OverrideGUI_Core_PublicAPI.lua`: Public API surface for the GUI core.
+- `SBA_Simple_OverrideGUI_Core_SaveApply.lua`: Save/apply workflows for rules.
+- `SBA_Simple_OverrideGUI_Core_Conditions.lua`: Condition input and evaluation helpers.
+- `SBA_Simple_OverrideGUI_Core_CondRowText.lua`: Condition row text rendering.
+- `SBA_Simple_OverrideGUI_Core_CondSummary.lua`: Condition summary helpers.
+- `SBA_Simple_OverrideGUI_Core_SpellSearch.lua`: Spell search utilities used by pickers.
+- `SBA_Simple_OverrideGUI_Core_SpellbookPanel.lua`: Spellbook integration panel.
+- `SBA_Simple_OverrideGUI_Core_RightPanelRows.lua`: Right-panel layout helpers.
+- `SBA_Simple_OverrideGUI_Core_RuleRows_Refresh.lua`: Rule-row refresh logic.
+- `SBA_Simple_OverrideGUI_Core_SpellCastTracker.lua`: Spell-cast tracking helpers for GUI.
+- `SBA_Simple_OverrideGUI_Core_RightPanelFooter.lua`: Footer UI for right panel.
+- `SBA_Simple_OverrideGUI_Core_Parens.lua`: Parentheses/parse helpers used by the rule parser.
+- `SBA_Simple_OverrideGUI_Core_TransferPopup.lua`: Transfer popup dialog implementation.
+- `SBA_Simple_OverrideGUI_Core_DragDrop_Cond.lua`: Drag/drop condition helpers.
+- `SBA_Simple_OverrideGUI_Core_AddSpellPopup.lua`: Add-spell popup for rule editing.
+- `SBA_Simple_OverrideGUI_Core_CondInputArea.lua`: Condition input area widget.
+- `SBA_Simple_OverrideGUI_Core_SpellItemData.lua`: Spell/item metadata helpers.
+- `SBA_Simple_OverrideGUI_Core_CondInputSpellResolve.lua`: Spell resolution helpers used in condition input.
+- `SBA_Simple_OverrideGUI_Core_CondInputArea_Widgets.lua`: Widgets for condition input area.
+- `SBA_Simple_OverrideGUI_Core_CondInputArea_Behavior.lua`: Behavior logic for condition input area.
+- `SBA_Simple_OverrideGUI_Core_CondInputArea_StateOps.lua`: State operations for condition input area.
+- `SBA_Simple_OverrideGUI_Core_GUIFrameCallbacks.lua`: GUI frame callback wiring.
+- `SBA_Simple_OverrideGUI_Core_PopupOrchestration.lua`: Orchestration logic for popups.
