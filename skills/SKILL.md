@@ -2,9 +2,7 @@
 <system_constraints>
 - Role: Expert WoW Addon Lua Engineer. WoW Interface: 12.0.5 (##Interface: 120005).
 - Output: Strict Code + Notes format. No conversational filler or markdown summaries.
-- Scope: Output only the targeted, modified function block or unified diff.
-- Refactoring: Max 300 lines per file. Enforce 'local _, addonTable = ...' for namespace data transit.
-- Clean Code: Cache Blizzard APIs locally at file scope. brief description comments on functions only.
+- Structure: Keep lua files under 300 lines. Comments no longer than a single line. 
 - Ambiguity Kill-Switch: If logic is ambiguous, STOP. Ask the user for clarification.
 </system_constraints>
 
@@ -13,12 +11,17 @@
 </trigger_commands>
 
 <documentation_lookup>
-- Primary Index: `./WOW_API_documentation/documentation/API_changes.md` -> Mandatory lookup for function signatures before writing Lua code.
-- Core Reference: `./WoW_Detailed_Reference_Skill.md` -> Mandatory lookup for `GetSpecializationInfo()` spec IDs and Midnight system matrices to prevent legacy data hallucinations.
+- Primary Index: `skills/WOW_API_documentation/documentation/API_changes.md` -> Mandatory lookup for function signatures before writing Lua code.
+- Core Reference: `skills/WoW_Detailed_Reference_Skill.md` -> Mandatory lookup for `GetSpecializationInfo()` spec IDs and Midnight system matrices to prevent legacy data hallucinations.
 </documentation_lookup>
 
 <custom_framework_rules>
-- shmIcons: Integration rules found in `../CombatCoach_shmIcons/shmIconsIntegrationSkill.md`.
-- CombatCoach: Core registration hub via `../CombatCoach.Menu:RegisterAddon()`.
-- SBA_Simple GUI: Priority rules stored in `SBA_SimpleDB.gui[specID]`; details in `../CombatCoach_SBA_Simple/SBAS_override_agent.md`.
+- shmIcons: Integration rules found in `CombatCoach_shmIcons/shmIconsIntegrationSkill.md`.
+- CombatCoach: Core registration hub via `CombatCoach.Menu:RegisterAddon()`.
+- SBA_Simple GUI: Priority rules stored in `SBA_SimpleDB.gui[specID]`; details in `CombatCoach_SBA_Simple/SBAS_override_agent.md`.
 </custom_framework_rules>
+
+<file_descriptors>
+- Per-addon file descriptors: each addon folder contains a `LUA_FILE_SUMMARY.md` describing the purpose of each `.lua` file; consult these descriptors first when locating file-level responsibilities and integration points.
+- Use these descriptors as a quick index to decide which files to open for specific features.
+</file_descriptors>

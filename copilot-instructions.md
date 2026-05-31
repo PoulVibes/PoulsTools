@@ -20,3 +20,8 @@
 - CombatCoach: Core registration hub via `CombatCoach.Menu:RegisterAddon()`.
 - SBA_Simple GUI: Priority rules stored in `SBA_SimpleDB.gui[specID]`; details in `CombatCoach_SBA_Simple/SBAS_override_agent.md`.
 </custom_framework_rules>
+
+<file_descriptors>
+- Per-addon file descriptors: each addon folder contains a `LUA_FILE_SUMMARY.md` describing the purpose of each `.lua` file; consult these descriptors first when locating file-level responsibilities and integration points.
+- Use these descriptors as a quick index to decide which files to open for specific features.
+</file_descriptors>
