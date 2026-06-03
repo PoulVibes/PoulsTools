@@ -25,6 +25,7 @@ TriggerTracker_Defaults[253] = {
         spenders = {
 
         },
+        strata = "MEDIUM",
         timer = 15,
     },
     [2] = {
@@ -42,6 +43,7 @@ TriggerTracker_Defaults[253] = {
         spenders = {
 
         },
+        strata = "MEDIUM",
         timer = 30,
     },
     [3] = {
@@ -59,6 +61,7 @@ TriggerTracker_Defaults[253] = {
         spenders = {
 
         },
+        strata = "MEDIUM",
         timer = 15,
     },
     [4] = {
@@ -76,14 +79,37 @@ TriggerTracker_Defaults[253] = {
         spenders = {
 
         },
+        strata = "MEDIUM",
         timer = 10,
+    },
+    [5] = {
+        buffSpellID = 1273126,
+        enabled = true,
+        generators = {
+            [193455] = 1,
+            [217200] = 1,
+            [466930] = 1,
+        },
+        glow_enabled = false,
+        iconID = 132174,
+        maxStacks = 0,
+        name = "Nature's Ally - Rank 4",
+        requiredTalents = {
+            [1273126] = true,
+        },
+        spellName = "Nature's Ally - Rank 4",
+        spendPerCast = 1,
+        spenders = {
+            [34026] = true,
+        },
+        timer = 0,
     },
 }
 
 TriggerTracker_Defaults[255] = {
     [1] = {
         buffSpellID = 260285,
-        enabled = false,
+        enabled = true,
         generators = {
             [259489] = 2,
             [1250646] = 3,
