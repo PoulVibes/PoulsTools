@@ -46,6 +46,14 @@
         "FauxScrollFrame_GetOffset",
         "ScrollingEdit_OnUpdate",
         "UISpecialFrames",
-        "MouseIsOver"
+        "MouseIsOver",
+        "Settings",
+        "UIDropDownMenu_SetText",
+        "UIDropDownMenu_SetSelectedValue",
+        "SettingsPanel",
+        "UIParentLoadAddOn",
+        "INVSLOT_MAINHAND",
+        "DEFAULT_CHAT_FRAME",
+        "EditModeManagerFrame"
     ]
 }

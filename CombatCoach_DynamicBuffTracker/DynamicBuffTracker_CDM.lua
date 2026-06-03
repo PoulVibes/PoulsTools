@@ -4,6 +4,8 @@
 
 local DBT = DynamicBuffTracker
 
+local prevAuraInstanceID = {} -- [frame] -> last seen auraInstanceID
+
 -- ============================================================
 -- Spell-ID resolution from a CDM child frame
 -- ============================================================
@@ -246,6 +248,27 @@ function DynamicBuffTracker_HookCDMFrame(frame)
     DBT.cdmFrames[frame] = true
 
     hooksecurefunc(frame, "SetAuraInstanceInfo", function(f, _)
+        local newID = f.auraInstanceID
+        if newID ~= prevAuraInstanceID[f] then
+            local oldID = prevAuraInstanceID[f]
+            prevAuraInstanceID[f] = newID
+            if newID then
+                local sid = GetFrameSpellID(f)
+                local spellName = "?"
+                if sid then
+                    local ok, si = pcall(C_Spell.GetSpellInfo, sid)
+                    if ok and si and si.name then spellName = si.name end
+                end
+                local npNum = "?"
+                for i = 1, 40 do
+                    local unit = "nameplate" .. i
+                    local ok, ad = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID, unit, newID)
+                    if ok and ad then npNum = i break end
+                end
+                print(string.format("[DBT]%s - id: %s->%s - np: %s",
+                    spellName, tostring(oldID), tostring(newID), tostring(npNum)))
+            end
+        end
         ProcessFrameCurrentSpell(f)
     end)
 

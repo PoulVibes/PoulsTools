@@ -12,23 +12,6 @@ local function IsOverlayEnabled()
 end
 
 -- ---------------------------------------------------------------------------
--- Snapshot DBT: register new instanceIDs
--- ---------------------------------------------------------------------------
-
-local function SnapshotDBT()
-    local DBT = _G.DynamicBuffTracker
-    if not DBT or not DBT.cdmSpellToFrame then return end
-    for spellID, child in pairs(DBT.cdmSpellToFrame) do
-        if child and child.auraInstanceID then
-            local id = child.auraInstanceID
-            if not instanceToSpell[id] then
-                instanceToSpell[id] = spellID
-            end
-        end
-    end
-end
-
--- ---------------------------------------------------------------------------
 -- Scan all visible nameplates for a given instanceID
 -- ---------------------------------------------------------------------------
 
@@ -43,6 +26,26 @@ local function FindUnitForInstance(instanceID)
         end
     end
     return nil
+end
+
+-- ---------------------------------------------------------------------------
+-- Snapshot DBT: register new instanceIDs
+-- ---------------------------------------------------------------------------
+
+local function SnapshotDBT()
+    local DBT = _G.DynamicBuffTracker
+    if not DBT or not DBT.cdmSpellToFrame then return end
+    -- Only register an instanceID if it is confirmed live on a nameplate unit.
+    -- This prevents stale IDs left on CDM frames from a previous target from
+    -- corrupting the map when tabbing between targets.
+    for spellID, child in pairs(DBT.cdmSpellToFrame) do
+        if child and child.auraInstanceID then
+            local id = child.auraInstanceID
+            if FindUnitForInstance(id) then
+                instanceToSpell[id] = spellID
+            end
+        end
+    end
 end
 
 -- ---------------------------------------------------------------------------
@@ -198,68 +201,76 @@ local function RefreshDebuffStates()
 
     for i = 1, 80 do
         local f = _G["ECT_UnitFrame" .. i]
-        if f and f:IsShown() and f.unit then
-            local matches = {}
-            local seenSpell = {}  -- spellID -> index in matches
+        if f then
+            if not f:IsShown() or not f.unit then
+                -- Frame is hidden or unassigned: clear any leftover slots.
+                if f.ectSlots then
+                    for _, slot in ipairs(f.ectSlots) do ClearSlot(f, slot) end
+                end
+                if f.targetGlow then f.targetGlow:Hide() end
+            else
+                local matches = {}
+                local seenSpell = {}  -- spellID -> index in matches
 
-            for id, spellID in pairs(instanceToSpell) do
-                if not assignedST[spellID] then
-                    local ok, ad = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID, f.unit, id)
-                    if ok and ad then
-                        local existingIdx = seenSpell[spellID]
-                        if existingIdx then
-                            -- Duplicate spellID on this frame: rescan to find where the
-                            -- existing instanceID actually lives now.
-                            local existingID = matches[existingIdx].id
-                            local realUnit = FindUnitForInstance(existingID)
-                            if realUnit == nil or realUnit == f.unit then
-                                -- Existing is expired or a stale copy: remove it.
-                                instanceToSpell[existingID] = nil
+                for id, spellID in pairs(instanceToSpell) do
+                    if not assignedST[spellID] then
+                        local ok, ad = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID, f.unit, id)
+                        if ok and ad then
+                            local existingIdx = seenSpell[spellID]
+                            if existingIdx then
+                                -- Duplicate spellID on this frame: rescan to find where the
+                                -- existing instanceID actually lives now.
+                                local existingID = matches[existingIdx].id
+                                local realUnit = FindUnitForInstance(existingID)
+                                if realUnit == nil or realUnit == f.unit then
+                                    -- Existing is expired or a stale copy: remove it.
+                                    instanceToSpell[existingID] = nil
+                                end
+                                -- Current 'id' is the live one for this unit; replace the slot.
+                                matches[existingIdx] = { id = id, spellID = spellID, ad = ad }
+                            else
+                                matches[#matches + 1] = { id = id, spellID = spellID, ad = ad }
+                                seenSpell[spellID] = #matches
                             end
-                            -- Current 'id' is the live one for this unit; replace the slot.
-                            matches[existingIdx] = { id = id, spellID = spellID, ad = ad }
-                        else
-                            matches[#matches + 1] = { id = id, spellID = spellID, ad = ad }
-                            seenSpell[spellID] = #matches
                         end
                     end
                 end
-            end
 
-            table.sort(matches, function(a, b) return a.spellID < b.spellID end)
+                table.sort(matches, function(a, b) return a.spellID < b.spellID end)
 
-            -- Claim single-target spells so no subsequent frame can show them
-            for _, m in ipairs(matches) do
-                if stSpells[m.spellID] then assignedST[m.spellID] = true end
-            end
-
-            if #matches > 0 then
-                local glow = GetOrCreateTargetGlow(f)
-                if UnitIsUnit("target", f.unit) then glow:Show() else glow:Hide() end
-                f:SetBackdropBorderColor(0.8, 0.3, 1.0, 1)
-                f:SetBackdropColor(0.35, 0.05, 0.45, 0.9)
-                for idx, m in ipairs(matches) do
-                    local slot = GetOrCreateSlot(f, idx)
-                    local ok, dur = pcall(C_UnitAuras.GetAuraDuration, f.unit, m.id)
-                    ActivateSlot(f, slot, m.spellID, m.ad, ok and dur or nil)
+                -- Claim single-target spells so no subsequent frame can show them
+                for _, m in ipairs(matches) do
+                    if stSpells[m.spellID] then assignedST[m.spellID] = true end
                 end
-                if f.ectSlots then
-                    for idx = #matches + 1, #f.ectSlots do
-                        ClearSlot(f, f.ectSlots[idx])
+
+                if #matches > 0 then
+                    local glow = GetOrCreateTargetGlow(f)
+                    if UnitIsUnit("target", f.unit) then glow:Show() else glow:Hide() end
+                    f:SetBackdropBorderColor(0.8, 0.3, 1.0, 1)
+                    f:SetBackdropColor(0.35, 0.05, 0.45, 0.9)
+                    for idx, m in ipairs(matches) do
+                        local slot = GetOrCreateSlot(f, idx)
+                        local ok, dur = pcall(C_UnitAuras.GetAuraDuration, f.unit, m.id)
+                        ActivateSlot(f, slot, m.spellID, m.ad, ok and dur or nil)
+                    end
+                    if f.ectSlots then
+                        for idx = #matches + 1, #f.ectSlots do
+                            ClearSlot(f, f.ectSlots[idx])
+                        end
+                    end
+                else
+                    local glow = GetOrCreateTargetGlow(f)
+                    if UnitIsUnit("target", f.unit) then glow:Show() else glow:Hide() end
+                    f:SetBackdropBorderColor(0.9, 0.3, 0.3, 1)
+                    f:SetBackdropColor(0.6, 0.1, 0.1, 0.85)
+                    if f.ectSlots then
+                        for _, slot in ipairs(f.ectSlots) do
+                            ClearSlot(f, slot)
+                        end
                     end
                 end
-            else
-                local glow = GetOrCreateTargetGlow(f)
-                if UnitIsUnit("target", f.unit) then glow:Show() else glow:Hide() end
-                f:SetBackdropBorderColor(0.9, 0.3, 0.3, 1)
-                f:SetBackdropColor(0.6, 0.1, 0.1, 0.85)
-                if f.ectSlots then
-                    for _, slot in ipairs(f.ectSlots) do
-                        ClearSlot(f, slot)
-                    end
-                end
-            end
-        end
+            end -- else (f:IsShown and f.unit)
+        end -- if f
     end
 end
 
