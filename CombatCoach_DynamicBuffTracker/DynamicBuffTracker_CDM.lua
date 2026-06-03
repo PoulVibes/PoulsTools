@@ -265,8 +265,8 @@ function DynamicBuffTracker_HookCDMFrame(frame)
                     local ok, ad = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID, unit, newID)
                     if ok and ad then npNum = i break end
                 end
-                print(string.format("[DBT]%s - id: %s->%s - np: %s",
-                    spellName, tostring(oldID), tostring(newID), tostring(npNum)))
+                --print(string.format("[DBT]%s - id: %s->%s - np: %s",
+                --    spellName, tostring(oldID), tostring(newID), tostring(npNum)))
             end
         end
         ProcessFrameCurrentSpell(f)
