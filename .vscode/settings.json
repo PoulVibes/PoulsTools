@@ -55,5 +55,8 @@
         "INVSLOT_MAINHAND",
         "DEFAULT_CHAT_FRAME",
         "EditModeManagerFrame"
+    ],
+    "Lua.diagnostics.disable": [
+        "assign-type-mismatch"
     ]
 }

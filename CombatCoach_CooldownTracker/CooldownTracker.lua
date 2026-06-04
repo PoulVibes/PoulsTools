@@ -122,8 +122,7 @@ local function UpdateTracker(key, updateStacks, skipCooldownApi)
     local entry = tracked[key]
     if not entry then return end
     if entry.dormant or not entry.spellID then return end
-    local spellInfo  = C_Spell.GetSpellInfo(entry.spellID)
-    shmIcons:SetIcon(ADDON_NAME, key, spellInfo and spellInfo.iconID or 134400)
+    shmIcons:SetIcon(ADDON_NAME, key, entry.iconID or 134400)
 
     local cdInfo         = C_Spell.GetSpellCooldown(entry.spellID)
     local chargeInfo     = C_Spell.GetSpellCharges(entry.spellID)
@@ -307,7 +306,8 @@ local function AddTracker(spellName, specID)
     shmIcons:SetDisplayHotkey(ADDON_NAME, key, db.show_hotkey == true)
 
     if spellID then
-        tracked[key] = { spellName = spellName, spellID = spellID }
+        local si = C_Spell.GetSpellInfo(spellID)
+        tracked[key] = { spellName = spellName, spellID = spellID, iconID = si and si.iconID or 134400 }
         UpdateTracker(key, true)
     else
         -- Spell not found — talent likely unlearned. Create a dormant tracker;
@@ -343,6 +343,8 @@ local function TryRemapDormant()
             if spellID then
                 entry.spellID = spellID
                 entry.dormant = false
+                local si = C_Spell.GetSpellInfo(spellID)
+                entry.iconID = si and si.iconID or 134400
                 local db = GetSpecSpells(CT.currentSpecID)[key]
                 if db then db.spellID = spellID end
                 shmIcons:SetEnabled(ADDON_NAME, key, true)
@@ -398,6 +400,7 @@ local function UnloadSpec()
         shmIcons:Unregister(ADDON_NAME, key)
         tracked[key] = nil
     end
+    wipe(warnedDormant)
     EnsureTickerState()
     NotifyChangeListeners()
 end
@@ -532,8 +535,6 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
     elseif event == "SPELL_UPDATE_COOLDOWN" then
         for key, entry in pairs(tracked) do
             if not entry.dormant and entry.spellID then
-                local cd = C_Spell.GetSpellCooldown(entry.spellID)
-                tracked[key].isOnGCD = cd and cd.isOnGCD or false
                 UpdateTracker(key)
             end
         end

@@ -17,9 +17,10 @@ DBT.trackedSpells   = {}
 DBT.hookedChildren  = {}
 DBT.retryCount      = 0
 DBT.retryPending    = false
-DBT.cdmFrames       = {}
-DBT.cdmSpellToFrame = {}
-DBT.cdmFrameToSpell = {}
+DBT.cdmFrames         = {}
+DBT.cdmSpellToFrame   = {}
+DBT.cdmFrameToSpell   = {}
+DBT.frameScriptHooked = {}  -- frames that already have OnHide/OnShow hooked; never wiped
 DBT.buffTimerStart  = {}  -- [spellIDStr] -> GetTime() recorded when buff became active
 DBT.buffTimerHandles = {} -- [spellIDStr] -> { ticker=..., endTime=..., timerVar=..., specID=... }
 DBT.iconShown = {}        -- [spellIDStr] -> true when shmIcon is currently shown

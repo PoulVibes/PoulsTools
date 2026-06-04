@@ -126,48 +126,52 @@ end)
 
 function DynamicBuffTracker_HookViewerChild(spellID, child)
     local spellIDStr = tostring(spellID)
-    if DBT.hookedChildren[spellIDStr] == child then return end
+    -- Always update ownership so the persistent callbacks route to the right spell.
     DBT.hookedChildren[spellIDStr] = child
 
-    local hookSpecID = DBT.currentSpecID
-    local activeFlag = DynamicBuffTracker_MakeActiveFlag(hookSpecID, spellID)
-    local key        = DynamicBuffTracker_MakeKey(spellID)
-    local ADDON      = DBT.ADDON_NAME
+    -- Wire up HookScript only once per frame object to prevent closure accumulation
+    -- across spec changes. DBT.frameScriptHooked is never wiped by UnloadSpec.
+    if not DBT.frameScriptHooked[child] then
+        DBT.frameScriptHooked[child] = true
 
-    local function IsOwner()
-        return DBT.currentSpecID == hookSpecID and DBT.cdmFrameToSpell[child] == spellID
-    end
-
-    local function UpdateFromChild()
-        if not IsOwner() then return end
-        DynamicBuffTracker_SyncIconFromCDMFrame(spellID, hookSpecID)
-    end
-
-    local hideTimer = nil
-    child:HookScript("OnHide", function()
-        if not IsOwner() then return end
-        hideTimer = C_Timer.NewTimer(0.1, function()
-            hideTimer = nil
-            if not IsOwner() then return end
-            _G[activeFlag] = false
-            DBT.iconShown = DBT.iconShown or {}
-            DBT.iconShown[tostring(spellID)] = nil
-            DynamicBuffTracker_StopBuffTimer(hookSpecID, spellID, "child_hide")
-            shmIcons:SetVisible(ADDON, key, false)
-            shmIcons:SetGlow(ADDON, key, false)
-            shmIcons:SetStacks(ADDON, key, 0)
-            shmIcons:SetCooldown(ADDON, key, nil)
+        local hideTimer = nil
+        child:HookScript("OnHide", function()
+            -- Resolve ownership at fire time, not at hook time.
+            local sid = DBT.cdmFrameToSpell[child]
+            if not sid then return end
+            if DBT.hookedChildren[tostring(sid)] ~= child then return end
+            local specID = DBT.currentSpecID
+            local ADDON  = DBT.ADDON_NAME
+            local key    = DynamicBuffTracker_MakeKey(sid)
+            local flag   = DynamicBuffTracker_MakeActiveFlag(specID, sid)
+            hideTimer = C_Timer.NewTimer(0.1, function()
+                hideTimer = nil
+                -- Re-check ownership after the delay.
+                if DBT.hookedChildren[tostring(sid)] ~= child then return end
+                _G[flag] = false
+                DBT.iconShown = DBT.iconShown or {}
+                DBT.iconShown[tostring(sid)] = nil
+                DynamicBuffTracker_StopBuffTimer(specID, sid, "child_hide")
+                shmIcons:SetVisible(ADDON, key, false)
+                shmIcons:SetGlow(ADDON, key, false)
+                shmIcons:SetStacks(ADDON, key, 0)
+                shmIcons:SetCooldown(ADDON, key, nil)
+            end)
         end)
-    end)
-    child:HookScript("OnShow", function()
-        if hideTimer then hideTimer:Cancel() hideTimer = nil end
-        if not IsOwner() then return end
-        UpdateFromChild()
-    end)
+        child:HookScript("OnShow", function()
+            if hideTimer then hideTimer:Cancel(); hideTimer = nil end
+            local sid = DBT.cdmFrameToSpell[child]
+            if not sid then return end
+            if DBT.hookedChildren[tostring(sid)] ~= child then return end
+            DynamicBuffTracker_SyncIconFromCDMFrame(sid)
+        end)
+    end
 
-    UpdateFromChild()
+    DynamicBuffTracker_SyncIconFromCDMFrame(spellID)
     C_Timer.After(1.0, function()
-        if DBT.currentSpecID == hookSpecID then UpdateFromChild() end
+        if DBT.hookedChildren[spellIDStr] == child then
+            DynamicBuffTracker_SyncIconFromCDMFrame(spellID)
+        end
     end)
 end
 

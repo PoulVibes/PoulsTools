@@ -3,7 +3,8 @@
 -- debuff is present. Nameplate tokens are resolved at query time to handle
 -- nameplate reassignment during combat.
 
-local instanceToSpell = {}   -- [instanceID] = spellID
+local unitInstanceMap = {}   -- [unit][instanceID] = spellID
+local ectOverrideIconRecheckPending = false  -- set on login; cleared after first exit-combat icon recheck
 
 local function IsOverlayEnabled()
     local specID = DynamicBuffTracker_GetCurrentSpecID and DynamicBuffTracker_GetCurrentSpecID() or 0
@@ -12,57 +13,32 @@ local function IsOverlayEnabled()
 end
 
 -- ---------------------------------------------------------------------------
--- Scan all visible nameplates for a given instanceID
--- ---------------------------------------------------------------------------
-
-local function FindUnitForInstance(instanceID)
-    local tracked = _G.ECT_TrackedUnits
-    if tracked then
-        for unit in pairs(tracked) do
-            local ok, ad = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID, unit, instanceID)
-            if ok and ad then
-                return unit
-            end
-        end
-    end
-    return nil
-end
-
--- ---------------------------------------------------------------------------
--- Snapshot DBT: register new instanceIDs
+-- Snapshot DBT: register new instanceIDs per unit
 -- ---------------------------------------------------------------------------
 
 local function SnapshotDBT()
     local DBT = _G.DynamicBuffTracker
     if not DBT or not DBT.cdmSpellToFrame then return end
+    local tracked = _G.ECT_TrackedUnits
+    if not tracked then return end
     -- Only register an instanceID if it is confirmed live on a nameplate unit.
-    -- This prevents stale IDs left on CDM frames from a previous target from
-    -- corrupting the map when tabbing between targets.
     for spellID, child in pairs(DBT.cdmSpellToFrame) do
         if child and child.auraInstanceID then
             local id = child.auraInstanceID
-            if FindUnitForInstance(id) then
-                instanceToSpell[id] = spellID
+            for unit in pairs(tracked) do
+                local ok, ad = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID, unit, id)
+                if ok and ad then
+                    unitInstanceMap[unit] = unitInstanceMap[unit] or {}
+                    unitInstanceMap[unit][id] = spellID
+                end
             end
         end
     end
 end
 
 -- ---------------------------------------------------------------------------
--- Prune: remove any instanceID not found on any visible nameplate
+-- Prune: remove expired instanceIDs per unit; clean up empty unit entries
 -- ---------------------------------------------------------------------------
-
-local function PruneExpired()
-    local dirty = false
-    for id in pairs(instanceToSpell) do
-        if not FindUnitForInstance(id) then
-            instanceToSpell[id] = nil
-            dirty = true
-        end
-    end
-    return dirty
-end
-
 -- ---------------------------------------------------------------------------
 -- Slot system: slot 1 renders on the frame itself; slot 2+ stack below.
 -- ---------------------------------------------------------------------------
@@ -210,27 +186,16 @@ local function RefreshDebuffStates()
                 if f.targetGlow then f.targetGlow:Hide() end
             else
                 local matches = {}
-                local seenSpell = {}  -- spellID -> index in matches
+                local seenSpell = {}  -- dedup: same spellID twice on one unit
+                local unitInstances = unitInstanceMap[f.unit] or {}
 
-                for id, spellID in pairs(instanceToSpell) do
+                for id, spellID in pairs(unitInstances) do
                     if not assignedST[spellID] then
                         local ok, ad = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID, f.unit, id)
                         if ok and ad then
-                            local existingIdx = seenSpell[spellID]
-                            if existingIdx then
-                                -- Duplicate spellID on this frame: rescan to find where the
-                                -- existing instanceID actually lives now.
-                                local existingID = matches[existingIdx].id
-                                local realUnit = FindUnitForInstance(existingID)
-                                if realUnit == nil or realUnit == f.unit then
-                                    -- Existing is expired or a stale copy: remove it.
-                                    instanceToSpell[existingID] = nil
-                                end
-                                -- Current 'id' is the live one for this unit; replace the slot.
-                                matches[existingIdx] = { id = id, spellID = spellID, ad = ad }
-                            else
+                            if not seenSpell[spellID] then
                                 matches[#matches + 1] = { id = id, spellID = spellID, ad = ad }
-                                seenSpell[spellID] = #matches
+                                seenSpell[spellID] = true
                             end
                         end
                     end
@@ -280,7 +245,7 @@ end
 
 function ECT_SetOverlayEnabled(enabled)
     if not enabled then
-        wipe(instanceToSpell)
+        wipe(unitInstanceMap)
         for i = 1, 40 do
             local f = _G["ECT_UnitFrame" .. i]
             if f then
@@ -372,13 +337,14 @@ end
 SLASH_ECTOVERLAY1 = "/ectd"
 SlashCmdList["ECTOVERLAY"] = function()
     print("=== ECT Overlay Dump ===")
-    local n = 0
-    for id, spellID in pairs(instanceToSpell) do
-        local unit = FindUnitForInstance(id)
-        print("  instanceID:", id, "spellID:", spellID, "unit:", unit or "not found")
-        n = n + 1
+    local total = 0
+    for unit, instances in pairs(unitInstanceMap) do
+        for id, spellID in pairs(instances) do
+            print("  unit:", unit, "instanceID:", id, "spellID:", spellID)
+            total = total + 1
+        end
     end
-    print("  total tracked:", n)
+    print("  total tracked:", total)
 end
 
 -- ---------------------------------------------------------------------------
@@ -406,17 +372,56 @@ targetFrame:SetScript("OnEvent", function()
 end)
 
 -- ---------------------------------------------------------------------------
--- UNIT_SPELLCAST_SUCCEEDED: prune stale instances and resync DBT after each cast
+-- Nameplate events: register per-nameplate UNIT_AURA and handle removals
+-- Only remove instanceIDs when the nameplate sends removed-instance info
+-- or when the nameplate is removed.
 -- ---------------------------------------------------------------------------
 
-local castFrame = CreateFrame("Frame")
-castFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
-castFrame:SetScript("OnEvent", function()
+local npEventFrame = CreateFrame("Frame")
+npEventFrame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
+npEventFrame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
+npEventFrame:SetScript("OnEvent", function(self, event, unit, ...)
     if not IsOverlayEnabled() then return end
-    PruneExpired()
-    SnapshotDBT()
-    RefreshDebuffStates()
+    if event == "NAME_PLATE_UNIT_ADDED" then
+        -- start listening for UNIT_AURA updates for this nameplate unit
+        pcall(function() self:RegisterUnitEvent("UNIT_AURA", unit) end)
+        -- ensure we have latest DBT snapshot for this unit
+        SnapshotDBT()
+        RefreshDebuffStates()
+
+    elseif event == "NAME_PLATE_UNIT_REMOVED" then
+        -- clear any tracked instances for this nameplate and stop listening
+        if unitInstanceMap[unit] then
+            unitInstanceMap[unit] = nil
+            RefreshDebuffStates()
+        end
+        pcall(function() self:UnregisterUnitEvent("UNIT_AURA", unit) end)
+
+    elseif event == "UNIT_AURA" then
+        -- Newer clients may pass an update-info table as first vararg with
+        -- a list `removedAuraInstanceIDs` describing removed instanceIDs.
+        local updateInfo = select(1, ...)
+        local removed = nil
+        if type(updateInfo) == "table" then
+            removed = updateInfo.removedAuraInstanceIDs or updateInfo.removedAuraInstanceIds or updateInfo.removedInstanceIDs
+        end
+        if removed and unitInstanceMap[unit] then
+            local changed = false
+            for _, id in ipairs(removed) do
+                if unitInstanceMap[unit][id] then
+                    unitInstanceMap[unit][id] = nil
+                    changed = true
+                end
+            end
+            if changed then
+                if next(unitInstanceMap[unit]) == nil then unitInstanceMap[unit] = nil end
+                RefreshDebuffStates()
+            end
+        end
+    end
 end)
+
+-- (Previously polled/actor-driven pruning removed; instance eviction is event-driven.)
 
 -- ---------------------------------------------------------------------------
 -- PLAYER_LOGIN: apply saved enable/disable state after SavedVariables load
@@ -433,6 +438,37 @@ loginFrame:SetScript("OnEvent", function()
         end
         if ECT_SetAnchorHidden then
             ECT_SetAnchorHidden(DynamicBuffTracker_GetSpecEctHideAnchor(specID))
+        end
+    end
+    -- Override icons from SavedVariables aren't applied to the CDM viewer until
+    -- DBT's first ScanAndSync completes (which only runs out of combat). Flag
+    -- that we need a one-shot icon recheck on the first PLAYER_REGEN_ENABLED.
+    ectOverrideIconRecheckPending = true
+end)
+
+-- ---------------------------------------------------------------------------
+-- PLAYER_REGEN_ENABLED: one-shot override icon recheck on first exit-combat
+-- ---------------------------------------------------------------------------
+
+local regenFrame = CreateFrame("Frame")
+regenFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+regenFrame:SetScript("OnEvent", function()
+    if not ectOverrideIconRecheckPending then return end
+    ectOverrideIconRecheckPending = false
+    local DBTmod = _G.DynamicBuffTracker
+    if not DBTmod then return end
+    local curSpec = DynamicBuffTracker_GetCurrentSpecID and DynamicBuffTracker_GetCurrentSpecID() or 0
+    if curSpec == 0 then return end
+    local buffDB = DynamicBuffTracker_GetSpecBuffDB and DynamicBuffTracker_GetSpecBuffDB(curSpec)
+    if not buffDB then return end
+    DBTmod.spellIconCache = DBTmod.spellIconCache or {}
+    for spellIDStr, entry in pairs(buffDB) do
+        local spellID = tonumber(spellIDStr)
+        if spellID and entry.override_icon then
+            DBTmod.spellIconCache[spellID] = entry.override_icon
+            if ECT_UpdateSlotTextures then
+                ECT_UpdateSlotTextures(spellID, entry.override_icon)
+            end
         end
     end
 end)
@@ -465,7 +501,7 @@ local lastTargetNP = 0  -- nameplate index last confirmed as target; 0 = none
 local worldFrame = CreateFrame("Frame")
 worldFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 worldFrame:SetScript("OnEvent", function()
-    wipe(instanceToSpell)
+    wipe(unitInstanceMap)
     lastTargetNP = 0
 end)
 
@@ -482,8 +518,58 @@ local function FindTargetNameplateIndex()
     return 0
 end
 
+-- Validate that DBT debuffs on the target nameplate match what the overlay is
+-- currently showing. Returns true if a mismatch was detected and corrected.
+local function ValidateTargetDebuffs()
+    local targetUnit = nil
+    for i = 1, 40 do
+        local u = "nameplate" .. i
+        if UnitIsUnit("target", u) then targetUnit = u; break end
+    end
+    if not targetUnit then return false end
+
+    -- Collect spellIDs DBT considers live on the target unit right now.
+    local DBTmod = _G.DynamicBuffTracker
+    local dbtSpells = {}
+    if DBTmod and DBTmod.cdmSpellToFrame then
+        for spellID, child in pairs(DBTmod.cdmSpellToFrame) do
+            if child and child.auraInstanceID then
+                local ok, ad = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID, targetUnit, child.auraInstanceID)
+                if ok and ad then
+                    dbtSpells[spellID] = true
+                end
+            end
+        end
+    end
+
+    -- Collect spellIDs the overlay is currently showing for the target unit.
+    local shownSpells = {}
+    local unitInstances = unitInstanceMap[targetUnit] or {}
+    for id, spellID in pairs(unitInstances) do
+        local ok, ad = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID, targetUnit, id)
+        if ok and ad then
+            shownSpells[spellID] = true
+        end
+    end
+
+    -- Compare: any set difference means a mismatch.
+    for sp in pairs(dbtSpells) do
+        if not shownSpells[sp] then
+            SnapshotDBT(); RefreshDebuffStates()
+            return true
+        end
+    end
+    for sp in pairs(shownSpells) do
+        if not dbtSpells[sp] then
+            SnapshotDBT(); RefreshDebuffStates()
+            return true
+        end
+    end
+    return false
+end
+
 local ticker = CreateFrame("Frame")
-local tSlow, tFast = 0, 0
+local tSlow, tFast, tValidate = 0, 0, 0
 ticker:SetScript("OnUpdate", function(_, dt)
     if not IsOverlayEnabled() then return end
     tFast = tFast + dt
@@ -499,6 +585,12 @@ ticker:SetScript("OnUpdate", function(_, dt)
         local npChanged = currentNP ~= lastTargetNP
         lastTargetNP = currentNP
         SnapshotDBT()
-        if npChanged or PruneExpired() then RefreshDebuffStates() end
+        if npChanged then RefreshDebuffStates() end
+    end
+
+    tValidate = tValidate + dt
+    if tValidate >= 1.0 then
+        tValidate = 0
+        ValidateTargetDebuffs()
     end
 end)
