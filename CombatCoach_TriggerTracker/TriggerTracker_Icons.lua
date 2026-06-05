@@ -145,8 +145,11 @@ function TriggerTracker_SpendStack(key, amount)
 end
 
 -- Starts a countdown timer; cancels any existing one for the same key.
+-- 0.5s is subtracted to compensate for UNIT_SPELLCAST_SUCCEEDED firing late.
+local CAST_EVENT_LAG = 0.0
 function TriggerTracker_StartTimer(key, duration)
     TriggerTracker_CancelTimer(key)
+    duration = math.max(duration - CAST_EVENT_LAG, 0)
     local endTime = GetTime() + duration
     TT.timerEnd[key] = endTime
     local start = GetTime()
@@ -177,6 +180,18 @@ function TriggerTracker_CancelTimer(key)
     if IsIconEnabled(key) then
         shmIcons:SetCooldownRaw(TT.ADDON_NAME, key, 0, 0)
     end
+end
+
+-- Extends a running buff timer by extendAmount, capped at maxDuration total remaining.
+-- Does nothing if the buff timer is not currently active.
+function TriggerTracker_ExtendTimer(key, extendAmount, maxDuration)
+    local remaining = TriggerTracker_GetTimerRemaining(key)
+    if remaining <= 0 then return end
+    local newRemaining = remaining + (tonumber(extendAmount) or 0)
+    if maxDuration and maxDuration > 0 then
+        newRemaining = math.min(newRemaining, maxDuration)
+    end
+    TriggerTracker_StartTimer(key, newRemaining)
 end
 
 -- Public accessor: returns current stack count for a trigger key (safe to call from generated Lua).

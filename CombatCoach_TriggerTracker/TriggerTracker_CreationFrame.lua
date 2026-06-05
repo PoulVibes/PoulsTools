@@ -10,7 +10,7 @@ local function EnsureCreationFrame()
     if creationFrame then return creationFrame end
 
     local f = CreateFrame("Frame", "TriggerTracker_CreationFrame", UIParent, "BackdropTemplate")
-    f:SetSize(720, 560)
+    f:SetSize(900, 560)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 40)
     f:SetFrameStrata("DIALOG")
     f:SetToplevel(true)
@@ -68,6 +68,14 @@ local function EnsureCreationFrame()
     timerBox:SetSize(52, 22); timerBox:SetPoint("LEFT", timerLbl, "RIGHT", 6, 0)
     timerBox:SetAutoFocus(false); timerBox:SetMaxLetters(6)
 
+    local maxDurLbl = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    maxDurLbl:SetPoint("LEFT", timerBox, "RIGHT", 18, 0)
+    maxDurLbl:SetText("Max Duration (s):"); maxDurLbl:SetTextColor(0.65, 0.78, 0.9, 1)
+
+    local maxDurBox = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
+    maxDurBox:SetSize(52, 22); maxDurBox:SetPoint("LEFT", maxDurLbl, "RIGHT", 6, 0)
+    maxDurBox:SetAutoFocus(false); maxDurBox:SetMaxLetters(6)
+
     -- ── Row 2: spend per cast ──────────────────────────────────────────────
     local SPEND_OPTS = {}
     for i = 1, 10 do SPEND_OPTS[i] = { l = tostring(i), v = i } end
@@ -91,14 +99,15 @@ local function EnsureCreationFrame()
     local COL0_X  = 14
     local COL1_X  = COL0_X + COL_W + COL_GAP
     local COL2_X  = COL1_X + COL_W + COL_GAP
-    local RIGHT_X = COL2_X + COL_W + COL_GAP
-    local FLY_W   = 720 - RIGHT_X - 14
+    local COL3_X  = COL2_X + COL_W + COL_GAP
+    local RIGHT_X = COL3_X + COL_W + COL_GAP
+    local FLY_W   = 900 - RIGHT_X - 14
 
     local activeTarget = "gen"
-    local targetBuffBtn, targetGenBtn, targetSpendBtn, targetReqBtn
+    local targetBuffBtn, targetGenBtn, targetSpendBtn, targetReqBtn, targetExtBtn
 
     local function UpdateTargetButtons()
-        local btns = { buff = targetBuffBtn, gen = targetGenBtn, spend = targetSpendBtn, req = targetReqBtn }
+        local btns = { buff = targetBuffBtn, gen = targetGenBtn, spend = targetSpendBtn, req = targetReqBtn, ext = targetExtBtn }
         for key, btn in pairs(btns) do
             if not btn then break end
             if key == activeTarget then
@@ -187,9 +196,20 @@ local function EnsureCreationFrame()
         function() end)
     spendPanel:SetPoint("TOPLEFT", f, "TOPLEFT", COL2_X, TOP_Y - TARGET_H - 4)
 
+    -- ── Extenders panel ───────────────────────────────────────────────────
+    targetExtBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    targetExtBtn:SetSize(COL_W, TARGET_H); targetExtBtn:SetPoint("TOPLEFT", f, "TOPLEFT", COL3_X, TOP_Y)
+    targetExtBtn:SetText("\226\150\182 Extenders")
+    targetExtBtn:SetScript("OnClick", function() activeTarget = "ext"; UpdateTargetButtons() end)
+
+    local extPanel = CF.CreateExtenderPanel(f, "Extenders (extend duration)", COL_W, PANEL_H,
+        "Spells that extend the buff timer when successfully cast.")
+    extPanel:SetPoint("TOPLEFT", f, "TOPLEFT", COL3_X, TOP_Y - TARGET_H - 4)
+
     CF.dropTargets.genPanel   = genPanel
     CF.dropTargets.spendPanel = spendPanel
     CF.dropTargets.buffSlot   = buffSlot
+    CF.dropTargets.extPanel   = extPanel
     CF.dropTargets.onBuffDrop = SetBuffSpell
     UpdateTargetButtons()
 
@@ -212,7 +232,8 @@ local function EnsureCreationFrame()
         if activeTarget == "gen"   then genPanel:AddSpell(spellID, name, iconID)
         elseif activeTarget == "spend" then spendPanel:AddSpell(spellID, name, iconID)
         elseif activeTarget == "buff"  then SetBuffSpell(spellID, name, iconID)
-        elseif activeTarget == "req"   then reqPanel:AddSpell(spellID, name, iconID) end
+        elseif activeTarget == "req"   then reqPanel:AddSpell(spellID, name, iconID)
+        elseif activeTarget == "ext"   then extPanel:AddSpell(spellID, name, iconID) end
     end
 
     local flyout = CF.CreateFlyoutColumn(f, RIGHT_X, TOP_Y, FLY_W, DispatchSpell)
@@ -222,22 +243,25 @@ local function EnsureCreationFrame()
     saveBtn:SetSize(160, 28); saveBtn:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 14, 12)
     saveBtn:SetText("Create / Save Trigger")
     saveBtn:SetScript("OnClick", function()
-        local name      = nameBox:GetText():match("^%s*(.-)%s*$")
-        local maxStacks = tonumber(maxBox:GetText()) or 5
-        local timer     = tonumber(timerBox:GetText()) or 0
+        local name        = nameBox:GetText():match("^%s*(.-)%s*$")
+        local maxStacks   = tonumber(maxBox:GetText()) or 5
+        local timer       = tonumber(timerBox:GetText()) or 0
+        local maxDuration = tonumber(maxDurBox:GetText()) or 0
         if name == "" then
             DEFAULT_CHAT_FRAME:AddMessage("|cFFFF4444TriggerTracker:|r Enter a trigger name.")
             return
         end
         local genEntries   = genPanel:GetEntries()
         local spendEntries = spendPanel:GetEntries()
-        if #genEntries == 0 and #spendEntries == 0 then
-            DEFAULT_CHAT_FRAME:AddMessage("|cFFFF4444TriggerTracker:|r Add at least one generator or spender spell.")
+        local extEntries   = extPanel:GetEntries()
+        if #genEntries == 0 and #spendEntries == 0 and #extEntries == 0 then
+            DEFAULT_CHAT_FRAME:AddMessage("|cFFFF4444TriggerTracker:|r Add at least one generator, spender, or extender spell.")
             return
         end
-        local generators, spenders = {}, {}
-        for _, e in ipairs(genEntries) do generators[e.spellID] = e.amount or 1 end
+        local generators, spenders, extenders = {}, {}, {}
+        for _, e in ipairs(genEntries)   do generators[e.spellID] = e.amount or 1 end
         for _, e in ipairs(spendEntries) do spenders[e.spellID] = true end
+        for _, e in ipairs(extEntries)   do extenders[e.spellID] = e.amount or 5 end
         local reqEntries = reqPanel:GetEntries()
         local requiredTalents = {}
         for _, e in ipairs(reqEntries) do requiredTalents[e.spellID] = true end
@@ -247,8 +271,10 @@ local function EnsureCreationFrame()
             buffSpellID      = selectedBuffSpellID,
             generators       = generators,
             spenders         = spenders,
+            extenders        = next(extenders) and extenders or nil,
             maxStacks        = maxStacks,
             timer            = timer,
+            maxDuration      = maxDuration > 0 and maxDuration or nil,
             spendPerCast     = spendDd.value,
             requiredTalents  = next(requiredTalents) and requiredTalents or nil,
             enabled          = true,
@@ -283,9 +309,9 @@ local function EnsureCreationFrame()
     function f:OpenForNew()
         f._editIdx = nil
         selectedBuffSpellID = nil; selectedBuffIconID = nil; selectedBuffName = nil
-        nameBox:SetText(""); maxBox:SetText("5"); timerBox:SetText("0")
+        nameBox:SetText(""); maxBox:SetText("5"); timerBox:SetText("0"); maxDurBox:SetText("0")
         buffIconTex:SetTexture(134400); buffNameLbl:SetText("|cff667788(none set)|r")
-        genPanel:Clear(); spendPanel:Clear(); reqPanel:Clear()
+        genPanel:Clear(); spendPanel:Clear(); reqPanel:Clear(); extPanel:Clear()
         flyout.ResetCache(); flyout.ResetToSpellTab()
         activeTarget = "gen"; spendDd:SetValue(1)
         UpdateTargetButtons(); flyout.Refresh()
@@ -299,9 +325,10 @@ local function EnsureCreationFrame()
         selectedBuffName    = entry.name
         nameBox:SetText(entry.name or ""); maxBox:SetText(tostring(entry.maxStacks or 5))
         timerBox:SetText(tostring(entry.timer or 0))
+        maxDurBox:SetText(tostring(entry.maxDuration or 0))
         buffIconTex:SetTexture(entry.iconID or 134400); buffNameLbl:SetText(entry.name or "(none set)")
         genPanel:LoadFromSet(entry.generators); spendPanel:LoadFromSet(entry.spenders)
-        reqPanel:LoadFromSet(entry.requiredTalents)
+        reqPanel:LoadFromSet(entry.requiredTalents); extPanel:LoadFromSet(entry.extenders)
         flyout.ResetCache(); flyout.ResetToSpellTab()
         activeTarget = "gen"; spendDd:SetValue(entry.spendPerCast or 1)
         UpdateTargetButtons(); flyout.Refresh()

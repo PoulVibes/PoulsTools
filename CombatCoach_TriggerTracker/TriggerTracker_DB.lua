@@ -118,6 +118,18 @@ function TriggerTracker_BuildSpellMap(specID)
                     })
                 end
             end
+            if entry.extenders then
+                for spellID, amt in pairs(entry.extenders) do
+                    local extAmt = (amt == true) and 5 or (tonumber(amt) or 5)
+                    map[spellID] = map[spellID] or {}
+                    table.insert(map[spellID], {
+                        mode         = "extend",
+                        key          = key,
+                        extendAmount = extAmt,
+                        maxDuration  = tonumber(entry.maxDuration) or 0,
+                    })
+                end
+            end
         end
     end
     return map

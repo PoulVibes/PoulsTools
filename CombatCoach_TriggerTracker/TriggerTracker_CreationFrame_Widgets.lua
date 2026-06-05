@@ -210,3 +210,137 @@ CF.CreateDropPanel = function(parent, label, w, h, tooltipText, onDrop, amountOp
 
     return panel
 end
+
+-- Extender drop-panel. Each spell row shows a small editbox for extend duration (seconds).
+-- entry.amount = extend duration in seconds (number).
+CF.CreateExtenderPanel = function(parent, label, w, h, tooltipText, onDrop)
+    local dt    = CF.dropTargets
+    local EndDrag = CF.EndDrag
+
+    local panel = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    panel:SetSize(w, h)
+    SetBD(panel, 0.04, 0.07, 0.14, 0.92, 0.22, 0.38, 0.58)
+    panel:EnableMouse(true)
+
+    panel:SetScript("OnMouseUp", function(self, btn)
+        if btn == "LeftButton" and CF.dragSpellID and onDrop then
+            onDrop(CF.dragSpellID, CF.dragSpellName, CF.dragSpellIcon)
+            EndDrag()
+        end
+    end)
+
+    local hdr = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    hdr:SetPoint("TOPLEFT", panel, "TOPLEFT", 6, -6)
+    hdr:SetText(label:upper())
+    hdr:SetFont("Fonts\\FRIZQT__.TTF", 9, "OUTLINE")
+    hdr:SetTextColor(0.4, 0.65, 0.85, 1)
+
+    local sf = CreateFrame("ScrollFrame", nil, panel)
+    sf:SetPoint("TOPLEFT", hdr, "BOTTOMLEFT", 0, -4)
+    sf:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -4, 4)
+    sf:EnableMouseWheel(true)
+    sf:SetScript("OnMouseWheel", function(self, d)
+        local v = self:GetVerticalScroll()
+        local m = self:GetVerticalScrollRange()
+        self:SetVerticalScroll(math.min(math.max(v - d * ROW_H, 0), m))
+    end)
+
+    local content = CreateFrame("Frame", nil, sf)
+    content:SetSize(w - 8, h - 30)
+    sf:SetScrollChild(content)
+
+    local entries    = {}
+    local entryRows  = {}
+
+    local function Refresh()
+        for _, r in ipairs(entryRows) do r:Hide() end
+        entryRows = {}
+        local y = 0
+        for i, e in ipairs(entries) do
+            local r = CreateFrame("Frame", nil, content)
+            r:SetSize(w - 12, ROW_H - 2)
+            r:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
+
+            local bg = r:CreateTexture(nil, "BACKGROUND")
+            bg:SetAllPoints(); bg:SetColorTexture(0.08, 0.12, 0.20, 0.4)
+
+            local iconTex = r:CreateTexture(nil, "ARTWORK")
+            iconTex:SetSize(ROW_H - 4, ROW_H - 4)
+            iconTex:SetPoint("LEFT", r, "LEFT", 2, 0)
+            iconTex:SetTexture(e.iconID or 134400)
+            iconTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+            local xBtn = CreateFrame("Button", nil, r, "UIPanelCloseButton")
+            xBtn:SetSize(16, 16); xBtn:SetPoint("RIGHT", r, "RIGHT", -2, 0)
+            local ci = i
+            xBtn:SetScript("OnClick", function() table.remove(entries, ci); Refresh() end)
+
+            -- Duration editbox (right of icon, left of ×btn)
+            local durBox = CreateFrame("EditBox", nil, r, "InputBoxTemplate")
+            durBox:SetSize(38, 16)
+            durBox:SetPoint("RIGHT", xBtn, "LEFT", -4, 0)
+            durBox:SetAutoFocus(false); durBox:SetMaxLetters(5); durBox:SetNumeric(true)
+            durBox:SetText(tostring(e.amount or 5))
+            local ei = i
+            durBox:SetScript("OnTextChanged", function(self)
+                local v = tonumber(self:GetText())
+                if v then entries[ei].amount = v end
+            end)
+
+            local durLbl = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            durLbl:SetPoint("RIGHT", durBox, "LEFT", -2, 0)
+            durLbl:SetText("+s:")
+
+            local lbl = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            lbl:SetPoint("LEFT", iconTex, "RIGHT", 4, 0)
+            lbl:SetPoint("RIGHT", durLbl, "LEFT", -2, 0)
+            lbl:SetJustifyH("LEFT"); lbl:SetText(e.name)
+
+            table.insert(entryRows, r)
+            y = y + ROW_H
+        end
+        content:SetHeight(math.max(h - 30, y))
+    end
+
+    function panel:AddSpell(spellID, name, iconID, defaultAmt)
+        for _, e in ipairs(entries) do
+            if e.spellID == spellID then return end
+        end
+        table.insert(entries, { spellID = spellID, name = name or "Unknown", iconID = iconID or 134400, amount = defaultAmt or 5 })
+        Refresh()
+    end
+
+    function panel:GetEntries() return entries end
+
+    function panel:Clear() entries = {}; Refresh() end
+
+    function panel:LoadFromSet(spellSet)
+        entries = {}
+        if not spellSet then Refresh() return end
+        for spellID, amt in pairs(spellSet) do
+            local si = C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(spellID)
+            if si then
+                table.insert(entries, {
+                    spellID = spellID,
+                    name    = si.name or tostring(spellID),
+                    iconID  = si.iconID or 134400,
+                    amount  = (amt == true) and 5 or (tonumber(amt) or 5),
+                })
+            end
+        end
+        table.sort(entries, function(a, b) return a.name < b.name end)
+        Refresh()
+    end
+
+    if tooltipText then
+        panel:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(label, 0.7, 0.9, 1)
+            GameTooltip:AddLine(tooltipText, 0.8, 0.8, 0.8, true)
+            GameTooltip:Show()
+        end)
+        panel:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    end
+
+    return panel
+end

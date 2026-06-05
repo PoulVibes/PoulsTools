@@ -15,10 +15,24 @@ local function OnSpellCastSucceeded(spellID)
     if not TT.spellMap then return end
     local actions = TT.spellMap[spellID]
     if not actions then return end
-    -- Generators run before spenders: a spell that both generates and
-    -- spends will add new stacks before consuming them.
+
+    -- Extenders run first. Track which keys were successfully extended.
+    -- Rule 6: if a spell is both a generator and an extender for the same key,
+    -- and the buff is currently active (timer running), use extend logic only.
+    local extendedKeys = {}
     for _, action in ipairs(actions) do
-        if action.mode == "generate" then
+        if action.mode == "extend" then
+            local remaining = TriggerTracker_GetTimerRemaining(action.key)
+            if remaining > 0 and action.maxDuration and action.maxDuration > 0 then
+                TriggerTracker_ExtendTimer(action.key, action.extendAmount, action.maxDuration)
+                extendedKeys[action.key] = true
+            end
+        end
+    end
+
+    -- Generators run before spenders; skip keys already handled by extend.
+    for _, action in ipairs(actions) do
+        if action.mode == "generate" and not extendedKeys[action.key] then
             TriggerTracker_AddStack(action.key, action.maxStacks, action.timer, action.perCast)
         end
     end
