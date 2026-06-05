@@ -420,7 +420,15 @@ local function OnBuildUI(parent)
                     if capturedSpellID5 then
                         local key5 = DynamicBuffTracker_MakeKey(capturedSpellID5)
                         local useIcon = val or capturedEntry5.iconID
+                        DBT.spellIconCache = DBT.spellIconCache or {}
+                        DBT.spellIconCache[capturedSpellID5] = useIcon
+                        if ECT_UpdateSlotTextures then ECT_UpdateSlotTextures(capturedSpellID5, useIcon) end
                         pcall(shmIcons.SetIcon, shmIcons, ADDON, key5, useIcon)
+                        local ok, si = pcall(C_Spell.GetSpellInfo, capturedSpellID5)
+                        if ok and si then ok, si = pcall(C_Spell.GetSpellInfo, si.name) end
+                        if ok and si and si.name then
+                            pcall(shmIcons.SetDisplayName, shmIcons, ADDON, key5, si.name)
+                        end
                     end
                 end
                 iconOvrBox:SetScript("OnEnterPressed", function(self)
@@ -486,6 +494,7 @@ local function OnBuildUI(parent)
     end
     canvasFrame:HookScript("OnShow", function()
         RefreshCDMEnableCheckbox()
+        if not InCombatLockdown() then DynamicBuffTracker_ScanAndSync() end
         RebuildList()
         if lockBtn and shmIcons and shmIcons.IsLocked then
             lockBtn:SetText(shmIcons:IsLocked() and "Unlock Icons" or "Lock Icons")

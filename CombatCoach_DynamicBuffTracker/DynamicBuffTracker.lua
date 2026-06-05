@@ -52,6 +52,18 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
         DynamicBuffTracker_ApplyCDMBarVisibility()
         DBT.currentSpecID = DynamicBuffTracker_GetCurrentSpecID()
         DynamicBuffTracker_LoadSpec(DBT.currentSpecID)
+        -- Safety fallback: re-scan after 20s in case spell data resolves late.
+        C_Timer.After(20, function()
+            if not InCombatLockdown() then DynamicBuffTracker_ScanAndSync() end
+        end)
+
+    elseif event == "SPELLS_CHANGED" then
+        -- Spell book (including talent overrides) is now available; re-scan.
+        if not InCombatLockdown() then
+            C_Timer.After(0.5, function()
+                if not InCombatLockdown() then DynamicBuffTracker_ScanAndSync() end
+            end)
+        end
 
     elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
         DynamicBuffTracker_LoadSpec(DynamicBuffTracker_GetCurrentSpecID())
@@ -69,6 +81,7 @@ eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 eventFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
+eventFrame:RegisterEvent("SPELLS_CHANGED")
 
 -- ============================================================
 -- Slash commands

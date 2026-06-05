@@ -72,6 +72,8 @@ function DynamicBuffTracker_ScanAndSync()
                 shmIcons:SetIcon(ADDON, DynamicBuffTracker_MakeKey(spellID), useIcon)
             end
             if spellInfo.name then
+                local e = buffDB[spellIDStr]
+                if e then e.label = spellInfo.name end
                 DynamicBuffTracker_RegisterSBASEntry(specID, spellID, spellInfo.name)
             end
         end
@@ -198,6 +200,8 @@ function DynamicBuffTracker_LoadSpec(specID)
                 shmIcons:SetIcon(ADDON, DynamicBuffTracker_MakeKey(spellID), useIcon)
             end
             if spellInfo.name then
+                local entry = buffDB[spellIDStr]
+                if entry then entry.label = spellInfo.name end
                 DynamicBuffTracker_RegisterSBASEntry(specID, spellID, spellInfo.name)
             end
         end

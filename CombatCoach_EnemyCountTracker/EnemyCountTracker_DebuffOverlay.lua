@@ -95,6 +95,7 @@ local function ActivateSlot(f, slot, spellID, ad, dur)
     slot.spellID = spellID
     -- Always clear first so reused slots never flash the previous spell's swipe.
     slot.cd:Clear()
+    slot.cd:SetCooldown(0, 0)
     -- dur is a non-secret DurationObject from GetAuraDuration (nil for infinite auras).
     -- We only check nil-vs-non-nil here; no arithmetic on secret values.
     if dur then
