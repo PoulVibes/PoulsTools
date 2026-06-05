@@ -453,6 +453,7 @@ end
 CombatCoach.Menu:RegisterAddon({
     id = "DynamicActivationTracker",
     name = "Dynamic Activation Tracker",
+    version   = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata("CombatCoach_DynamicActivationTracker", "Version")) or "1.0.5",
     icon = "Interface\\Icons\\spell_holy_layonhands",
     desc = "Data & Trackers based on Spell Glows.",
     OnBuildUI = OnBuildUI,

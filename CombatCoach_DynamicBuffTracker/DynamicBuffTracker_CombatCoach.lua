@@ -505,6 +505,7 @@ end
 CombatCoach.Menu:RegisterAddon({
     id        = "DynamicBuffTracker",
     name      = "Dynamic Buff Tracker",
+    version   = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata("CombatCoach_DynamicBuffTracker", "Version")) or "1.1.0",
     icon      = "Interface\\Icons\\inv_misc_eye_02",
     desc      = "Buffs mirroring Blizz cooldown manager.",
     OnBuildUI = OnBuildUI,

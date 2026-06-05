@@ -154,6 +154,8 @@ end
 CombatCoach.Menu:RegisterAddon({
     id        = "TriggerTracker",
     name      = "Trigger Tracker",
+    desc      = "Manually Configured Trackers for Rotation Assistant",
+    version   = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata("CombatCoach_TriggerTracker", "Version")) or "1.0.5",
     icon      = "Interface\\Icons\\inv_gizmo_goblingtonkcontroller",
     OnBuildUI = OnBuildUI,
 })
