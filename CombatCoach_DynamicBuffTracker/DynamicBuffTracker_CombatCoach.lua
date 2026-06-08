@@ -158,6 +158,26 @@ local function OnBuildUI(parent)
     anchor = ectHideAnchorChk
     y = -4
 
+    local nameplateChk = W:Checkbox(parent, anchor, y,
+        "Always Keep Nameplates Visible in Combat",
+        "Sets the 'nameplateShowEnemies' CVar so enemy nameplates stay on screen"
+            .. " during combat.\n|cFF00FF00Recommended|r when using the DoT Tracker"
+            .. " — prevents losing DoT information when targets leave your camera view.",
+        function()
+            local v = C_CVar and C_CVar.GetCVar and C_CVar.GetCVar("nameplateShowEnemies")
+            return v == "1"
+        end,
+        function(val)
+            local v = val and "1" or "0"
+            if C_CVar and C_CVar.SetCVar then
+                C_CVar.SetCVar("nameplateShowEnemies", v)
+            elseif SetCVar then
+                SetCVar("nameplateShowEnemies", v)
+            end
+        end)
+    anchor = nameplateChk
+    y = -4
+
     local note = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     note:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, y - 4)
     note:SetWidth(520)
