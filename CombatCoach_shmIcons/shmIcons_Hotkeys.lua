@@ -31,11 +31,17 @@ function ShortenHotkey(key)
     local hasCtrl  = key:find("CTRL-", 1, true)  ~= nil
     local hasAlt   = key:find("ALT-", 1, true)   ~= nil
     local hasShift = key:find("SHIFT-", 1, true) ~= nil
+
     local base = key
     base = replacePlain(base, "CTRL-", "")
     base = replacePlain(base, "ALT-", "")
     base = replacePlain(base, "SHIFT-", "")
     base = replacePlain(base, "BUTTON", "B")
+    base = replacePlain(base, "NUMPAD", "N")
+    base = replacePlain(base, "PLUS", "[+]")
+    base = replacePlain(base, "MINUS", "[-]")
+    base = replacePlain(base, "EQUAL", "[=]")
+
     local mods = (hasCtrl and "C+" or "") .. (hasAlt and "A+" or "") .. (hasShift and "S+" or "")
     return mods ~= "" and (mods .. base) or base
 end
