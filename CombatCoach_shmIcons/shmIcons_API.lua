@@ -50,22 +50,29 @@ end
 function shmIcons:SetIcon(addonName, id, textureID)
     local icon = icons[addonName .. ":" .. tostring(id)]
     if not icon then return end
-    icon.iconTex:SetTexture(textureID or 134400)
-    if icon.displayHotkey and icon.hotkeyLabel then
+    if textureID ~= icon.currentTextureID then
         icon.currentTextureID = textureID
+        icon.iconTex:SetTexture(textureID or 134400)
+    end
+    if icon.displayHotkey and icon.hotkeyLabel then
         if textureID then
             local key = nil
             if type(LookupHotkeyForTexture) == "function" then
                 key = LookupHotkeyForTexture(textureID)
             end
             if key then
-                icon.hotkeyLabel:SetText(key)
-                icon.hotkeyLabel:Show()
+                if key ~= icon.currentHotkey then
+                    icon.currentHotkey = key
+                    icon.hotkeyLabel:SetText(key)
+                    icon.hotkeyLabel:Show()
+                end
             else
+                icon.currentHotkey = nil
                 icon.hotkeyLabel:SetText("")
                 icon.hotkeyLabel:Hide()
             end
         else
+            icon.currentHotkey = nil
             icon.hotkeyLabel:SetText("")
             icon.hotkeyLabel:Hide()
         end
