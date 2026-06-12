@@ -15,7 +15,7 @@ function M.OpenGUIState(state, deps, specID, displayName)
     local guiFrame = deps.getGUIFrame()
     if not guiFrame then return end
 
-    guiFrame.title:SetText("SBA Override Builder — " .. (displayName or deps.getSpecName(state.editSpecID)))
+    guiFrame.title:SetText("Rotation Builder — " .. (displayName or deps.getSpecName(state.editSpecID)))
     guiFrame:Show()
     deps.refreshTabBar()
 

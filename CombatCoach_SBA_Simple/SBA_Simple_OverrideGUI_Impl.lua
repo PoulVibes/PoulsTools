@@ -111,7 +111,7 @@ local function OpenGUI(specID, displayName)
         if not guiFrame then CreateGUI() end
         if Core.PrepareOpenState then Core.PrepareOpenState(s, BuildOpenLoadDeps(), specID) end
         ApplyOpenLoadState(s)
-        guiFrame.title:SetText("SBA Override Builder — " .. (displayName or GetSpecName(editSpecID)))
+        guiFrame.title:SetText("Rotation Builder — " .. (displayName or GetSpecName(editSpecID)))
         guiFrame:Show(); RefreshTabBar(); if guiFrame._refreshSpellPanel then guiFrame._refreshSpellPanel() end; RefreshRuleList(); RefreshRightPanel()
     end
 end
