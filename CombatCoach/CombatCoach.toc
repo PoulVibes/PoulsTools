@@ -1,8 +1,8 @@
-## Interface: 120005
+## Interface: 120007
 ## Title: |cFF00CCFFCombat|r|cFFFFFFFFCoach|r
 ## Notes: Central addon management hub. Provides a Settings menu with submenus for your other addons.
 ## Author: Poul
-## Version: 1.4.2
+## Version: 1.4.3
 ## SavedVariables: CombatCoachDB
 ## IconTexture: Interface\Icons\ui_profession_inscription
 ## Category-enUS: CombatCoach
