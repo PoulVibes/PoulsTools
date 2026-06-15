@@ -1,8 +1,8 @@
-## Interface: 120005
+## Interface: 120007
 ## Title: CombatCoach_ComboTracker
 ## Notes: Displays the last used ability that triggers Mastery: Combo Strikes.
 ## Author: Poul
-## Version: 1.1.0
+## Version: 1.1.1
 ## IconTexture: Interface\Icons\ability_monk_palmstrike
 ## Category-enUS: CombatCoach
 ## Group: CombatCoach
