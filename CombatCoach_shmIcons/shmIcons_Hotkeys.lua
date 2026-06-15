@@ -56,6 +56,7 @@ hotkeyEventFrame:RegisterEvent("PLAYER_LOGIN")
 hotkeyEventFrame:RegisterEvent("PLAYER_LOGOUT")
 hotkeyEventFrame:RegisterEvent("UPDATE_BINDINGS")
 hotkeyEventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+hotkeyEventFrame:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
 hotkeyEventFrame:SetScript("OnEvent", function(_, event)
     if event == "PLAYER_LOGIN" then
         shmIconsDB = shmIconsDB or {}
@@ -67,6 +68,9 @@ hotkeyEventFrame:SetScript("OnEvent", function(_, event)
         shmIconsDB.hotkeyCache = hotkeyCache
     else
         hotkeyCache = {}
+        if shmIconsDB then
+            shmIconsDB.hotkeyCache = nil
+        end
     end
 end)
 
