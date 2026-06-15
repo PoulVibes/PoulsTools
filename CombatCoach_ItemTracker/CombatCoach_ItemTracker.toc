@@ -1,7 +1,7 @@
-## Interface: 120005
+## Interface: 120007
 ## Title: CombatCoach_ItemTracker
 ## Notes: Tracks inventory items by name — shows cooldown, stack count, and ready glow.
-## Version: 1.1.0
+## Version: 1.1.1
 ## Author: Poul
 ## SavedVariables: ItemTrackerDB
 ## IconTexture: Interface\Icons\inv_misc_bag_01
