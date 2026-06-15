@@ -1,7 +1,7 @@
-## Interface: 120005
+## Interface: 120007
 ## Title: CombatCoach_FocusGuesstimator
 ## Notes: Speculative focus tracking for BM Hunters.
-## Version: 1.0.0
+## Version: 1.0.1
 ## IconTexture: Interface\Icons\ability_hunter_beastmastery
 ## Category-enUS: CombatCoach
 ## Group: CombatCoach
