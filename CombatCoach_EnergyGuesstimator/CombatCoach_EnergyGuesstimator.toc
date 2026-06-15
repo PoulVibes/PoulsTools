@@ -1,8 +1,8 @@
-## Interface: 120005
+## Interface: 120007
 ## Title: CombatCoach_EnergyGuesstimator
 ## Notes: Speculative energy tracking for Monks.
 ## LoadOnDemand: 1
-## Version: 1.1.1
+## Version: 1.1.2
 ## IconTexture: Interface\Icons\ability_monk_ascension
 ## Category-enUS: CombatCoach
 ## Group: CombatCoach
